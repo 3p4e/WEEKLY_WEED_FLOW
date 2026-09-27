@@ -143,12 +143,16 @@ test('the plant roster is read-only: it lists ids and statuses, it does not move
     // Allowlisted rather than blocklisted: naming the handlers that must NOT
     // appear only catches the names guessed in advance, and any new per-plant
     // mutation would be spelled something else. So every handler the roster
-    // references has to be one of the read-only ones.
+    // references — inline, or through the board's data-cu-act listener — has
+    // to be one of the read-only ones.
     const READ_ONLY = ['GF.WWF.cultPlantList'];   // pagination, nothing else
     const handlers = [...new Set((body.match(/GF\.WWF\.[A-Za-z_]+/g) || []))];
     const unexpected = handlers.filter(fn => !READ_ONLY.includes(fn));
     assert.deepEqual(unexpected, [],
       'the roster may only page itself — any other handler is a per-plant mutation');
+    const acts = [...new Set([...body.matchAll(/data-cu-act="([^"]+)"/g)].map(m => m[1]))];
+    assert.deepEqual(acts.filter(a => a !== 'plants-page'), [],
+      'the only delegated action in the roster is its own paging');
     h.close();
   });
 });
@@ -161,7 +165,7 @@ test('a batch card offers "Batch tasks" regardless of plant fill', () => {
   // be gated on plants_materialised.
   const h = load('CU_MGR');
   const html = renderBatches(h, [BATCH({ plants_materialised: 0, plants_active: 0 })]);
-  assert.match(html, /cultTaskList\('b1','GP072501'\)/);
+  assert.match(html, /data-cu-act="tasks" data-id="b1" data-code="GP072501"/);
   h.close();
 });
 
@@ -329,7 +333,8 @@ test('a reader sees the record and none of the write actions', () => {
   const h = load('QC_MGR');
   const html = renderBatches(h, [BATCH({ plants_materialised: 10 })]);
   assert.match(html, /GP072501/, 'an elevated reader must see the batch');
-  assert.match(html, /cultPlantList/, 'and may open the roster');
+  assert.match(html, /data-cu-act="plants"/, 'and may open the roster');
+  assert.doesNotMatch(html, /data-cu-act="trichome/, 'a reader must not be offered a check or its correction');
   assert.doesNotMatch(html, /cultMoveForm/,   'a reader must not be offered a phase move');
   assert.doesNotMatch(html, /cultFillPlants/, 'a reader must not be offered id generation');
   assert.doesNotMatch(html, /cultBatchForm/,  'a reader must not be offered a new batch');
@@ -818,5 +823,171 @@ test('a reader calling a write handler directly is refused', async () => {
   assert.ok(!w.__modals.includes('cu-batch-modal'));
   w.GF.WWF.cultCultivarForm(null);
   assert.ok(!w.__modals.includes('cu-cv-modal'));
+  h.close();
+});
+
+/* ── the second review (2026-09-27): FE-04 data-attributes, CS2-05, FE-17 ── */
+
+test('a batch card carries its code as data, and a click reaches the roster with that exact code', () => {
+  // The code is constrained server-side to [A-Za-z0-9_-], so today no quote
+  // can reach a handler — but the rule (FE-04) is that record text never
+  // rides inside an inline handler's JS string, escaped or not. The hostile
+  // code below proves the button is inert data, not a script.
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  const hostile = "GP');window.__pwned='yes';('";
+  w.document.body.innerHTML = renderBatches(h, [BATCH({ code: hostile, phase: 'flower',
+    latest_trichome: { id: 'tc1', checked_on: '2026-07-28', verdict: 'ready', pct_amber: 20, instrument: 'digital' } })]);
+  const opened = [];
+  w.GF.WWF.cultPlantList = (id, code) => { opened.push(['plants', id, code]); };
+  w.GF.WWF.cultTaskList = (id, code) => { opened.push(['tasks', id, code]); };
+  w.GF.WWF.trichomeForm = (id, code) => { opened.push(['trichome', id, code]); };
+  w.GF.WWF.trichomeCorrectForm = (id, code) => { opened.push(['trichome-correct', id, code]); };
+  const btns = [...w.document.querySelectorAll('[data-cu-act]')];
+  assert.deepEqual(btns.map(b => b.dataset.cuAct), ['plants', 'tasks', 'trichome', 'trichome-correct']);
+  for (const b of btns) {
+    assert.equal(b.getAttribute('onclick'), null, 'no inline handler carries the record');
+    assert.equal(b.dataset.code, hostile, 'the code rides as a data- attribute, verbatim');
+    b.click();
+  }
+  assert.equal(w.__pwned, undefined, 'nothing executes');
+  assert.deepEqual(opened, [['plants', 'b1', hostile], ['tasks', 'b1', hostile],
+                            ['trichome', 'b1', hostile], ['trichome-correct', 'b1', hostile]]);
+  // Nothing in the card interpolates the code into a JS string literal.
+  assert.doesNotMatch(w.document.body.innerHTML, /onclick="[^"]*GP'\)/);
+  h.close();
+});
+
+test('the roster pages itself through its own state, never through the code in a handler', async () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  const asked = [];
+  w.GF.API.cultivationPlants = async (id, q) => { asked.push([id, q.offset]);
+    return { batch_id: id, total: 450, limit: 200, offset: q.offset, plants: [] }; };
+  await w.GF.WWF.cultPlantList('b1', 'GP072501', 200);
+  const body = w.document.getElementById('cu-plants-modal-body');
+  const pages = [...body.querySelectorAll('[data-cu-act="plants-page"]')].map(b => b.dataset.offset);
+  assert.deepEqual(pages, ['0', '400'], 'previous and next');
+  assert.doesNotMatch(body.innerHTML, /GP072501'/, 'the code is not in any handler text');
+  body.querySelector('[data-cu-act="plants-page"][data-offset="400"]').click();
+  await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(asked, [['b1', 200], ['b1', 400]]);
+  assert.equal(w.GF.WWF._cult.plants.code, 'GP072501', 'the roster still knows its code');
+  h.close();
+});
+
+test('the latest trichome check is offered for correction to a writer on an open batch only', () => {
+  const tc = { id: 'tc1', checked_on: '2026-07-28', verdict: 'ready', pct_amber: 20, instrument: 'digital' };
+  const h = load('CU_MGR');
+  assert.match(renderBatches(h, [BATCH({ phase: 'flower', latest_trichome: tc })]),
+    /data-cu-act="trichome-correct" data-id="b1"/);
+  assert.doesNotMatch(renderBatches(h, [BATCH({ phase: 'flower', latest_trichome: null })]),
+    /trichome-correct/, 'nothing to correct when no check was taken');
+  assert.doesNotMatch(renderBatches(h, [BATCH({ phase: 'harvested', is_active: false, latest_trichome: tc })]),
+    /trichome-correct/, 'a closed batch keeps its record as it stands');
+  h.close();
+  const q = load('QC_MGR');
+  assert.doesNotMatch(renderBatches(q, [BATCH({ phase: 'flower', latest_trichome: tc })]), /trichome-correct/);
+  q.close();
+});
+
+test('correcting a check pre-fills the row the board named and PATCHes it — no second row', async () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.GF.WWF._cult.batches = [BATCH({ phase: 'flower',
+    latest_trichome: { id: 'tc2', checked_on: '2026-07-28', verdict: 'ready', pct_amber: 20, instrument: 'stereo' } })];
+  const rows = [
+    // A newer-dated row exists (dated ahead, from before the date was bounded):
+    // the correction must open the row the board called latest, not the first row.
+    { id: 'tc9', batch_id: 'b1', checked_on: '2026-08-15', instrument: 'digital', verdict: 'immature',
+      pct_clear: null, pct_cloudy: null, pct_amber: null, magnification: null, sample_sites: null, image_ref: null, note: null },
+    { id: 'tc2', batch_id: 'b1', checked_on: '2026-07-28', instrument: 'stereo', verdict: 'ready',
+      pct_clear: 10, pct_cloudy: 70, pct_amber: 20, magnification: '60x', sample_sites: 5,
+      image_ref: 'img-7', note: 'lower canopy lagging' },
+  ];
+  const asked = [];
+  w.GF.API.trichomeChecks = async (q) => { asked.push(q); return { checks: rows }; };
+  const reqs = [];
+  w.GF.API._req = async (m, p, b) => { reqs.push([m, p, b]); return { id: 'tc2' }; };
+  w.GF.API.trichomeCheck = async () => { w.__posted = true; return { id: 'tc-new' }; };
+  w.GF.WWF.loadCultivation = async () => {};
+
+  await w.GF.WWF.trichomeCorrectForm('b1', 'GP072501');
+  assert.deepEqual(JSON.parse(JSON.stringify(asked)), [{ batch_id: 'b1', limit: 20 }]);
+  assert.ok(w.__modals.includes('tc-modal'));
+  assert.match(w.document.getElementById('tc-modal-title').textContent, /Correct trichome check — GP072501/);
+  const val = (id) => w.document.getElementById(id).value;
+  assert.equal(val('tc-date'), '2026-07-28', 'the row the board named, not the newest-dated one');
+  assert.equal(val('tc-amber'), '20'); assert.equal(val('tc-cloudy'), '70'); assert.equal(val('tc-clear'), '10');
+  assert.equal(val('tc-mag'), '60x'); assert.equal(val('tc-sites'), '5');
+  assert.equal(val('tc-image'), 'img-7'); assert.equal(val('tc-note'), 'lower canopy lagging');
+  assert.equal(w.__selCfg['tc-verdict'].value, 'ready');
+  assert.equal(w.__selCfg['tc-instrument'].value, 'stereo');
+  const save = w.document.getElementById('tc-save');
+  assert.equal(save.dataset.check, 'tc2');
+  assert.equal(save.getAttribute('onclick'), null);
+
+  // A split that is not one field of view is refused before the request.
+  w.document.getElementById('tc-amber').value = '60';
+  await w.GF.WWF.trichomeSave('b1', 'tc2');
+  assert.deepEqual(reqs, []);
+  assert.ok(w.__toasts.some(t => /add up to about 100/.test(t[0])));
+  // Corrected: the re-read slide, and a cleared image reference goes as null.
+  w.document.getElementById('tc-amber').value = '25';
+  w.document.getElementById('tc-cloudy').value = '65';
+  w.document.getElementById('tc-image').value = '';
+  w.document.getElementById('tc-date').value = '2026-07-29';
+  await w.GF.WWF.trichomeSave('b1', 'tc2');
+  assert.equal(reqs.length, 1);
+  const [method, path, body] = reqs[0];
+  assert.equal(method, 'PATCH');
+  assert.equal(path, '/cultivation/trichome-checks/tc2');
+  assert.deepEqual(JSON.parse(JSON.stringify(body)), {
+    checked_on: '2026-07-29', instrument: 'stereo', magnification: '60x', sample_sites: 5,
+    pct_clear: 10, pct_cloudy: 65, pct_amber: 25, verdict: 'ready', image_ref: null,
+    note: 'lower canopy lagging' });
+  assert.equal(w.__posted, undefined, 'a correction never posts a second check');
+  assert.ok(w.__closed.includes('tc-modal'));
+  assert.ok(w.__toasts.some(t => /corrected/i.test(t[0])));
+  // The save button's delegated action goes through the same path.
+  await w.GF.WWF.trichomeCorrectForm('b1', 'GP072501');
+  w.document.getElementById('tc-save').click();
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(reqs.length, 2);
+  assert.equal(reqs[1][1], '/cultivation/trichome-checks/tc2');
+  h.close();
+});
+
+test('a correction cannot clear the date, and a reader cannot open the form', async () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  const reqs = [];
+  w.GF.API._req = async (m, p, b) => { reqs.push([m, p, b]); return {}; };
+  w.GF.WWF.trichomeForm('b1', 'GP072501', { id: 'tc2', checked_on: '2026-07-28', instrument: 'digital', verdict: 'ready' });
+  w.document.getElementById('tc-date').value = '';
+  await w.GF.WWF.trichomeSave('b1', 'tc2');
+  assert.deepEqual(reqs, []);
+  assert.ok(w.__toasts.some(t => /keeps a date/.test(t[0])));
+  h.close();
+  const q = loadForms('QC_MGR');
+  q.window.GF.API.trichomeChecks = async () => { q.window.__asked = true; return { checks: [] }; };
+  await q.window.GF.WWF.trichomeCorrectForm('b1', 'GP072501');
+  assert.equal(q.window.__asked, undefined, 'the handler is the gate, not the hidden button');
+  assert.deepEqual(q.window.__modals, []);
+  q.close();
+});
+
+test('days in phase come from GF.daysSince, the one rule, not a local copy', () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  const asked = [];
+  w.GF.daysSince = (d) => { asked.push(d); return 7; };
+  const html = renderBatches(h, [BATCH({ phase_since: '2026-07-01' })]);
+  assert.match(html, /7 d in phase/, 'the card prints what GF.daysSince answers');
+  assert.ok(asked.includes('2026-07-01'));
+  // A batch with no phase date has no day count rather than "0 d".
+  asked.length = 0;
+  w.GF.daysSince = (d) => (d ? 7 : null);
+  assert.doesNotMatch(renderBatches(h, [BATCH({ phase_since: null })]), /d in phase/);
   h.close();
 });

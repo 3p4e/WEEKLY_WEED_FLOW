@@ -95,9 +95,12 @@
   // lot card and the yield table can never disagree about what 1250 means.
   const g = (n) => {
     if (n == null) return '—';
+    // Below 1 kg the number has no thousands group, so it needs no locale
+    // formatting — and a bare toLocaleString() is the retired way of printing
+    // an instant, which the timestamp guard now checks this file for.
     return n >= 1000
       ? (Math.round(n / 10) / 100).toLocaleString() + ' kg'
-      : (Math.round(n * 10) / 10).toLocaleString() + ' g';
+      : String(Math.round(n * 10) / 10) + ' g';
   };
   const pct = (n) => (n == null ? '—' : n.toFixed(1) + '%');
 
@@ -228,13 +231,19 @@
         ${GF.esc(lbl(CATEGORIES, a.category))}${a.method ? ' · ' + GF.esc(lbl(METHODS, a.method)) : ''}
         · ${GF.esc(a.batch_code || a.room_name || '—')}
         ${a.active_ingredient ? ' · ' + GF.esc(a.active_ingredient) : ''}</span>
+      ${/* The application day and the re-entry deadline are instants the
+           server serialises in UTC; printed through GF.fmtDate / fmtDateTime
+           they read on the FACILITY clock. Sliced as they came, a REI ending
+           at 14:00 in Skopje showed "no entry until … 12:00" — the one line
+           on this board a person acts on by walking into a room (review
+           FE-05 / R2-FE-02). */ ''}
       <span style="font-size:11px;min-width:110px;text-align:right;color:var(--ink-3)">${
-        GF.esc(String(a.applied_at || '').slice(0, 10))}</span>
+        GF.esc(GF.fmtDate(a.applied_at))}</span>
       <span style="font-size:11px;min-width:150px;text-align:right;color:${
         a.rei_active ? '#E5484D' : 'var(--ink-3)'}">${
         a.rei_hours == null ? AL('no REI stated', 'без REI')
-          : a.rei_active ? AL(`no entry until ${String(a.rei_until || '').slice(0, 16).replace('T', ' ')}`,
-                              `без влез до ${String(a.rei_until || '').slice(0, 16).replace('T', ' ')}`)
+          : a.rei_active ? AL(`no entry until ${GF.esc(GF.fmtDateTime(a.rei_until))}`,
+                              `без влез до ${GF.esc(GF.fmtDateTime(a.rei_until))}`)
             : AL(`REI ${a.rei_hours} h elapsed`, `REI ${a.rei_hours} ч. измина`)}</span>
       <span style="font-size:11px;min-width:130px;text-align:right">${
         a.phi_days == null ? `<span style="color:var(--ink-3)">${AL('no PHI stated', 'без PHI')}</span>`
@@ -430,7 +439,7 @@
       ? `<div style="color:#E0A73E;font-size:11px;margin-top:6px">${GF.icon('shield', 'icon', '#E0A73E')}${AL(
           'Re-entry restriction still active in this room — check before anyone goes in.',
           'Ограничување за влез сè уште е активно во оваа соба — проверете пред некој да влезе.')}
-        ${(c.rei_active || []).map(r => GF.esc(`${r.product} · ${String(r.rei_until || '').slice(0, 16).replace('T', ' ')}`)).join('<br>')}</div>`
+        ${(c.rei_active || []).map(r => GF.esc(`${r.product} · ${GF.fmtDateTime(r.rei_until)}`)).join('<br>')}</div>`
       : '';
     if (c.clear) {
       box.innerHTML = `<div style="color:#2BE8A0;font-size:11px">${GF.icon('check', 'icon', '#2BE8A0')}${AL(

@@ -429,3 +429,46 @@ test('the room card says why a GACP room has no grade, and shows a recorded grad
   assert.doesNotMatch(plain, /GACP defines/);
   h.close();
 });
+
+/* ── the second review (2026-09-27): R2-FE-15 grade chips as data, R2-FE-11 days in phase ── */
+
+test('a legend chip carries its grade as data, so a free-text grade QA typed cannot break or run a handler', () => {
+  const h = load('QA_MGR');
+  const w = h.window;
+  const hostile = "A');window.__pwned='yes';('";
+  const rooms = [
+    ROOM({ id: 'l1', code: 'C180', grade: null, regime: 'GACP' }),
+    ROOM({ id: 'l2', code: 'F104', grade: 'D', regime: 'GMP', zone: 'post_harvest', box_x: 0.5 }),
+    ROOM({ id: 'l3', code: 'E27', grade: hostile, regime: 'GMP', zone: 'production', box_x: 0.6 }),
+  ];
+  renderPlan(h, rooms);
+  w.GF.WWF.planColour('grade');
+  w.document.body.innerHTML = w.GF.views.facility();
+  const chips = [...w.document.querySelectorAll('[data-fp-grade]')];
+  assert.deepEqual(chips.map(c => c.dataset.fpGrade), ['D', 'GACP', hostile.toUpperCase()]);
+  for (const c of chips) assert.equal(c.getAttribute('onclick'), null, 'no inline handler carries the grade');
+  const picked = [];
+  w.GF.WWF.planGrade = (g) => { picked.push(g); };
+  chips[2].click();
+  assert.equal(w.__pwned, undefined, 'nothing executes');
+  assert.deepEqual(picked, [hostile.toUpperCase()], 'the filter receives the exact key that was printed');
+  h.close();
+});
+
+test('days in phase on the rooms board come from GF.daysSince, the one rule', () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  const asked = [];
+  w.GF.daysSince = (d) => { asked.push(d); return d ? 7 : null; };
+  w.GF.WWF._fac.tab = 'rooms';
+  w.GF.WWF._fac.data = { totals: { total: 10 }, rooms: [
+    { id: 'r1', name: 'Flowering 1.1', kind: 'flower', plant_total: 10, capacity: 2000, is_active: true,
+      batches: [{ id: 'b1', strain: 'Grape Pie', plant_count: 10, phase: 'flower', phase_since: '2026-07-01', note: null },
+                { id: 'b2', strain: 'Cap Junky', plant_count: 0, phase: 'veg', phase_since: null, note: null }] }] };
+  w.GF.state.view = 'facility';
+  const html = w.GF.views.facility();
+  assert.match(html, /Flowering · 7d/, 'the room card prints what GF.daysSince answers');
+  assert.match(html, /Vegetation · 0d/, 'no phase date reads as day 0, as before');
+  assert.ok(asked.includes('2026-07-01'));
+  h.close();
+});

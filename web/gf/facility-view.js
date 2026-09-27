@@ -64,9 +64,13 @@
   const canEditRoom = (r) => canWriteRooms() && (isExec() ||
     (myKinds().includes(r.kind) && (!r.department_id || myFamily().includes(String(r.department_id)))));
   const ROOM_CODE_RE = /^[a-z0-9_]{1,64}$/;   // mirrors RoomIn.code server-side pattern
+  // Through GF.daysSince — the ONE "days in phase" rule, on the facility's
+  // day. This board used to count from Date.now() and round, so a batch
+  // whose phase started today read "1 d" here after noon and "0 d" on the
+  // Cultivation board (review FE-17 / R2-FE-11). No date reads as 0, as before.
   const daysIn = (iso) => {
-    if (!iso) return 0;
-    return Math.max(0, Math.round((Date.now() - new Date(iso + 'T00:00:00')) / 864e5));
+    const d = GF.daysSince(iso);
+    return d == null ? 0 : Math.max(0, d);
   };
 
   GF.WWF.loadFacility = async () => {
@@ -225,6 +229,17 @@
 
   GF.WWF.planZone = (z) => { GF.WWF._plan.zone = GF.WWF._plan.zone === z ? '' : z; GF.render.all(); };
   GF.WWF.planGrade = (g) => { GF.WWF._plan.grade = GF.WWF._plan.grade === g ? '' : g; GF.render.all(); };
+  // The legend's grade chips carry their key as data (it may be free text
+  // QA typed); the board re-renders as a string, so one listener on the
+  // document, bound once, reads it back.
+  GF.WWF._planChipAct = (ev) => {
+    const el = ev.target && ev.target.closest ? ev.target.closest('[data-fp-grade]') : null;
+    if (el) GF.WWF.planGrade(el.dataset.fpGrade);
+  };
+  if (typeof document !== 'undefined' && !GF.WWF._planChipBound) {
+    document.addEventListener('click', GF.WWF._planChipAct);
+    GF.WWF._planChipBound = true;
+  }
   GF.WWF.planColour = (c) => { GF.WWF._plan.colour = c === 'grade' ? 'grade' : 'zone'; GF.render.all(); };
   GF.WWF.planZoom = (d) => {
     const p = GF.WWF._plan;
@@ -376,9 +391,12 @@
     });
     const gradeKeys = GRADE_ORDER.filter(k => byGrade[k])
       .concat(Object.keys(byGrade).filter(k => !GRADE_ORDER.includes(k)).sort());
+    // A grade key can be free text QA typed (LayoutPatch.grade), so it rides
+    // as a data- attribute read by one delegated listener, never inside an
+    // inline handler's JS string (review R2-FE-15 / FE-04).
     const gchip = (k) => {
       const t = byGrade[k];
-      return `<button class="fp-chip${p.grade === k ? ' on' : ''}" onclick="GF.WWF.planGrade('${GF.esc(k)}')"
+      return `<button class="fp-chip${p.grade === k ? ' on' : ''}" data-fp-grade="${GF.esc(k)}"
         style="--pin:${gCol(k)}"><span></span>${GF.esc(gLbl(k))}
         <b>${t.rooms}</b> · ${Math.round(t.area_m2)} m²</button>`;
     };

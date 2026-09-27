@@ -230,9 +230,17 @@ test('an implausible loss is shown as something to check, not as a failure', () 
 /* ── the plant-protection log ────────────────────────────────────────────── */
 
 test('an active re-entry restriction is called out and an elapsed one is not', () => {
+  // The deadline is an instant the server serialises in UTC; the line a
+  // person acts on by walking into a room must read on the FACILITY clock
+  // (review FE-05 / R2-FE-02): 20:00Z is 22:00 in Skopje. Until the second
+  // fix round this line printed the UTC string, two hours early.
   const h = load('CU_MGR');
-  const active = renderIpm(h, [IPM({ rei_active: true, rei_until: '2026-07-30T20:00:00Z' })]);
-  assert.match(active, /no entry until 2026-07-30 20:00/);
+  h.window.GF.API.user.facility_tz = 'Europe/Skopje';
+  const active = renderIpm(h, [IPM({ rei_active: true, rei_until: '2026-07-30T20:00:00Z',
+                                     applied_at: '2026-07-29T22:30:00Z' })]);
+  assert.match(active, /no entry until 2026-07-30 22:00/);
+  assert.doesNotMatch(active, /20:00/, 'never the UTC clock');
+  assert.match(active, /2026-07-30<\/span>/, 'the application day is the facility day (00:30 on the 30th), not the UTC day');
   const done = renderIpm(h, [IPM({ rei_active: false })]);
   assert.match(done, /REI 12 h elapsed/);
   h.close();
@@ -539,11 +547,13 @@ test('an active re-entry restriction is surfaced on the cut form even when the c
                    applied_at: '2026-07-30T08:00:00Z', rei_hours: 12,
                    rei_until: '2026-07-30T20:00:00Z' }],
   };
+  w.GF.API.user.facility_tz = 'Europe/Skopje';
   return w.GF.WWF.harvestForm().then(() => {
     const box = w.document.getElementById('hv-c-clearance').innerHTML;
     assert.match(box, /Clear to harvest/, 'REI does not block the cut');
     assert.match(box, /Re-entry restriction still active/,
       'but harvesting a room means entering it, so it belongs on this form');
+    assert.match(box, /Spinosad · 2026-07-30 22:00/, 'the deadline on the facility clock (R2-FE-02)');
     h.close();
   });
 });

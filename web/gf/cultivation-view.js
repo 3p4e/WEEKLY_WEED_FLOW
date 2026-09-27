@@ -127,14 +127,15 @@
   // Mirrors CultivarIn.code / BatchIn.code server-side, so a bad code is
   // rejected before a round trip rather than as a bare 422.
   const CODE_RE = /^[A-Za-z0-9_-]{1,64}$/;
-  // Elapsed days counted on the FACILITY's day, not the browser's: the board
-  // compares this with windows the server computed from its own clock, and two
-  // clocks disagreeing for an hour or two every night would show a wrong answer
-  // rather than an off-by-one nobody notices.
+  // Elapsed days counted on the FACILITY's day, not the browser's, through
+  // GF.daysSince — the ONE "days in phase" rule (core.js). The Facility and
+  // Cultivation boards each used to keep their own copy and showed "1 d" and
+  // "0 d" for the same batch after noon (review FE-17 / R2-FE-11). Null for a
+  // batch with no phase date; a future date (which the server refuses) reads
+  // as day 0 rather than a negative.
   const daysIn = (iso) => {
-    if (!iso) return null;
-    return Math.max(0, Math.round(
-      (new Date(GF.facilityToday() + 'T00:00:00') - new Date(iso + 'T00:00:00')) / 864e5));
+    const d = GF.daysSince(iso);
+    return d == null ? null : Math.max(0, d);
   };
   const dm = (iso) => (iso ? (GF.fmtDateHuman ? GF.fmtDateHuman(iso).slice(0, 5) : iso.slice(5)) : '');
   // FACILITY today, not UTC. This value is printed into every plant id in
@@ -195,20 +196,31 @@
           ? AL('Generating…', 'Генерирање…')
           : AL(`Generate ${planned - made} plant ids`, `Генерирај ${planned - made} ID`)}</button>`);
     }
+    // The batch CODE rides as a data- attribute and one delegated listener
+    // (below) reads it back — never inside an inline handler's JS string,
+    // where HTML escaping does not protect it (review FE-04; the pattern is
+    // the rule for every record field, not only the ones that can carry a
+    // quote today).
+    const act = (kind, label, icon) =>
+      `<button class="btn btn-sm" data-cu-act="${kind}" data-id="${GF.esc(b.id)}" data-code="${GF.esc(b.code || '')}">
+        ${GF.icon(icon, 'icon')}${label}</button>`;
     if (made) {
-      actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultPlantList('${b.id}','${GF.esc(b.code)}')">
-        ${GF.icon('file', 'icon')}${AL('Plant roster', 'Список на растенија')}</button>`);
+      actions.push(act('plants', AL('Plant roster', 'Список на растенија'), 'file'));
     }
     // Phase 3 (migration 0054): the tasks that reference this batch, whether
     // auto-generated on a phase move or hand-linked via the task form. Shown
     // regardless of plant fill — a task can carry batch_id before any plant
     // id exists.
-    actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultTaskList('${b.id}','${GF.esc(b.code)}')">
-      ${GF.icon('menu', 'icon')}${AL('Batch tasks', 'Задачи на батч')}</button>`);
+    actions.push(act('tasks', AL('Batch tasks', 'Задачи на батч'), 'menu'));
     // The documented record the owner's rule makes the decider of a cut.
     if (canWrite() && b.phase === 'flower') {
-      actions.push(`<button class="btn btn-sm" onclick="GF.WWF.trichomeForm('${b.id}','${GF.esc(b.code)}')">
-        ${GF.icon('eye', 'icon')}${AL('Trichome check', 'Проверка на трихоми')}</button>`);
+      actions.push(act('trichome', AL('Trichome check', 'Проверка на трихоми'), 'eye'));
+    }
+    // A mistyped reading or date is corrected in place (PATCH), not left as
+    // a second, contradicting row — the route exists for exactly that
+    // (trichome.py), and until now nothing on screen reached it (CS2-05).
+    if (canWrite() && !terminal && b.latest_trichome && b.latest_trichome.id) {
+      actions.push(act('trichome-correct', AL('Correct latest check', 'Поправи последна проверка'), 'wrench'));
     }
     if (canWrite() && !terminal) {
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultMoveForm('${b.id}')">
@@ -535,6 +547,29 @@
 
   const PAGE = 200;
 
+  // The one listener behind every data-cu-act button: the batch cards (the
+  // board re-renders as a string, so the listener sits on the document and
+  // is bound once) and the roster's paging. It reads ids and the code back
+  // from data- attributes, which stay HTML-escaped data whatever they hold.
+  GF.WWF._cultAct = (ev) => {
+    const el = ev.target && ev.target.closest ? ev.target.closest('[data-cu-act]') : null;
+    if (!el) return;
+    const kind = el.dataset.cuAct, id = el.dataset.id, code = el.dataset.code;
+    if (kind === 'plants') GF.WWF.cultPlantList(id, code);
+    else if (kind === 'tasks') GF.WWF.cultTaskList(id, code);
+    else if (kind === 'trichome') GF.WWF.trichomeForm(id, code);
+    else if (kind === 'trichome-correct') GF.WWF.trichomeCorrectForm(id, code);
+    else if (kind === 'trichome-save') GF.WWF.trichomeSave(id, el.dataset.check || null);
+    else if (kind === 'plants-page') {
+      const p = GF.WWF._cult.plants;
+      if (p) GF.WWF.cultPlantList(p.batchId, p.code, parseInt(el.dataset.offset, 10) || 0);
+    }
+  };
+  if (typeof document !== 'undefined' && !GF.WWF._cultActBound) {
+    document.addEventListener('click', GF.WWF._cultAct);
+    GF.WWF._cultActBound = true;
+  }
+
   GF.WWF.cultPlantList = async (batchId, code, offset = 0) => {
     let r;
     try { r = await GF.API.cultivationPlants(batchId, { limit: PAGE, offset }); }
@@ -562,12 +597,14 @@
         <span style="color:var(--ink-3);font-size:11px">${GF.esc(x.clone_date || '')}</span>
       </div>`;
     }).join('');
+    // Paging carries only the offset; the batch and its code are the
+    // roster's own state, so no record text goes through a handler.
     const nav = [];
     if (p.offset > 0) {
-      nav.push(`<button class="btn btn-sm" onclick="GF.WWF.cultPlantList('${p.batchId}','${GF.esc(p.code)}',${Math.max(0, p.offset - PAGE)})">${AL('Previous', 'Претходно')}</button>`);
+      nav.push(`<button class="btn btn-sm" data-cu-act="plants-page" data-offset="${Math.max(0, p.offset - PAGE)}">${AL('Previous', 'Претходно')}</button>`);
     }
     if (to < p.total) {
-      nav.push(`<button class="btn btn-sm" onclick="GF.WWF.cultPlantList('${p.batchId}','${GF.esc(p.code)}',${p.offset + PAGE})">${AL('Next', 'Следно')}</button>`);
+      nav.push(`<button class="btn btn-sm" data-cu-act="plants-page" data-offset="${p.offset + PAGE}">${AL('Next', 'Следно')}</button>`);
     }
     body.innerHTML = `<div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">
         ${from}–${to} ${AL('of', 'од')} ${p.total}</div>
@@ -1212,51 +1249,83 @@
     { v: 'overripe', en: 'Overripe', mk: 'Презрели', color: '#E0A73E' },
   ];
 
-  GF.WWF.trichomeForm = (batchId, code) => {
+  // One form for a new check and for a CORRECTION of the latest one: with
+  // `check` (the row as GET /trichome-checks returns it) every field is
+  // pre-filled and the save PATCHes that row instead of posting a second,
+  // contradicting one (CS2-05). A percentage left blank is "not counted",
+  // not zero, in both directions.
+  GF.WWF.trichomeForm = (batchId, code, check) => {
     if (!canWrite()) return;
+    const c = check || null;
+    const v = (k) => (c && c[k] != null ? String(c[k]) : '');
     GF.WWF._ensureModal('tc-modal', '460px');
-    GF.$('tc-modal-title').textContent = AL('Trichome check', 'Проверка на трихоми') + ' — ' + code;
+    GF.$('tc-modal-title').textContent = (c
+      ? AL('Correct trichome check', 'Поправи проверка на трихоми')
+      : AL('Trichome check', 'Проверка на трихоми')) + ' — ' + code;
     GF.$('tc-modal-body').innerHTML = `
+      ${c ? `<div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
+        `Correcting the check of ${GF.esc(c.checked_on)} in place — the record is put right, not duplicated.`,
+        `Се поправа проверката од ${GF.esc(c.checked_on)} на место — записот се исправа, не се дуплира.`)}</div>` : ''}
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1"><label>${AL('Checked on', 'Датум')}</label>
-          ${GF.dateField('tc-date', { value: today(), max: today(), clearable: false })}</div>
+          ${GF.dateField('tc-date', { value: c ? c.checked_on : today(), max: today(), clearable: false })}</div>
         <div class="field" style="flex:1"><label>${AL('Microscope', 'Микроскоп')}</label>
-          ${GF.selectField('tc-instrument', { value: 'digital', title: AL('Microscope', 'Микроскоп'),
+          ${GF.selectField('tc-instrument', { value: (c && c.instrument) || 'digital', title: AL('Microscope', 'Микроскоп'),
             options: [{ v: 'stereo', label: AL('Stereo', 'Стерео') },
                       { v: 'digital', label: AL('Digital', 'Дигитален') }] })}</div>
       </div>
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1"><label>${AL('Magnification', 'Зголемување')}</label>
-          <input id="tc-mag" maxlength="40" placeholder="60x"></div>
+          <input id="tc-mag" maxlength="40" placeholder="60x" value="${GF.esc(v('magnification'))}"></div>
         <div class="field" style="flex:1"><label>${AL('Sample sites', 'Мерни места')}</label>
-          <input id="tc-sites" type="number" min="1" max="1000" step="1"></div>
+          <input id="tc-sites" type="number" min="1" max="1000" step="1" value="${GF.esc(v('sample_sites'))}"></div>
       </div>
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1"><label>${AL('Clear %', 'Бистри %')}</label>
-          <input id="tc-clear" type="number" min="0" max="100" step="1" oninput="GF.WWF._tcSum()"></div>
+          <input id="tc-clear" type="number" min="0" max="100" step="1" oninput="GF.WWF._tcSum()" value="${GF.esc(v('pct_clear'))}"></div>
         <div class="field" style="flex:1"><label>${AL('Cloudy %', 'Матни %')}</label>
-          <input id="tc-cloudy" type="number" min="0" max="100" step="1" oninput="GF.WWF._tcSum()"></div>
+          <input id="tc-cloudy" type="number" min="0" max="100" step="1" oninput="GF.WWF._tcSum()" value="${GF.esc(v('pct_cloudy'))}"></div>
         <div class="field" style="flex:1"><label>${AL('Amber %', 'Килибарни %')}</label>
-          <input id="tc-amber" type="number" min="0" max="100" step="1" oninput="GF.WWF._tcSum()"></div>
+          <input id="tc-amber" type="number" min="0" max="100" step="1" oninput="GF.WWF._tcSum()" value="${GF.esc(v('pct_amber'))}"></div>
       </div>
       <div id="tc-sum" style="font-size:11px;color:var(--ink-3);margin-bottom:8px"></div>
       <div class="field"><label>${AL('Verdict', 'Оцена')}</label>
-        ${GF.selectField('tc-verdict', { value: 'approaching', title: AL('Verdict', 'Оцена'),
+        ${GF.selectField('tc-verdict', { value: (c && c.verdict) || 'approaching', title: AL('Verdict', 'Оцена'),
           options: TC_VERDICTS.map(x => ({ v: x.v, label: AL(x.en, x.mk), color: x.color })) })}</div>
       <div class="field"><label>${AL('Image reference (optional)', 'Слика (опционално)')}</label>
-        <input id="tc-image" maxlength="300"></div>
+        <input id="tc-image" maxlength="300" value="${GF.esc(v('image_ref'))}"></div>
       <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
-        <input id="tc-note" maxlength="1000"></div>
+        <input id="tc-note" maxlength="1000" value="${GF.esc(v('note'))}"></div>
       <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
         'The three states are one field of view, so if you give all three they must add up to about 100 %. Leave them blank for a qualitative check — blank means "not counted", not zero.',
         'Трите состојби се едно видно поле, па ако ги внесете сите три мора да збирот е околу 100 %. Оставете празно за квалитативна проверка — празно значи „не е броено“, не нула.')}</div>
       <div class="row" style="gap:10px">
         <div class="spacer"></div>
-        <button class="btn btn-primary" id="tc-save"
-          onclick="GF.WWF.trichomeSave('${batchId}')">${GF.t('save')}</button>
+        <button class="btn btn-primary" id="tc-save" data-cu-act="trichome-save"
+          data-id="${GF.esc(batchId)}" data-check="${GF.esc((c && c.id) || '')}">${GF.t('save')}</button>
       </div>`;
     GF.openModal('tc-modal');
     GF.WWF._tcSum();
+  };
+
+  // The board's "Correct latest check": the row the board named
+  // (latest_trichome.id) is read back in full — the board carries only its
+  // headline — and opened in the form above. The list wrapper is the only
+  // trichome read api.js offers; the correction itself goes through
+  // GF.API._req because api.js is not this view's to change.
+  GF.WWF.trichomeCorrectForm = async (batchId, code) => {
+    if (!canWrite()) return;
+    const b = (GF.WWF._cult.batches || []).find(x => x.id === batchId);
+    const wanted = b && b.latest_trichome ? b.latest_trichome.id : null;
+    let rows = [];
+    try { rows = (await GF.API.trichomeChecks({ batch_id: batchId, limit: 20 })).checks || []; }
+    catch (e) { GF.toast(e.message, 'error'); return; }
+    const check = rows.find(x => x.id === wanted) || rows[0];
+    if (!check) {
+      GF.toast(AL('No trichome check on record for this batch', 'Нема запишана проверка за овој батч'), 'error');
+      return;
+    }
+    GF.WWF.trichomeForm(batchId, code, check);
   };
 
   // Shows the running total while the three are typed, so a mistyped split is
@@ -1273,7 +1342,10 @@
     el.style.color = ok ? '#2BE8A0' : '#E0A73E';
   };
 
-  GF.WWF.trichomeSave = (batchId) => GF.once('tc-save', async () => {
+  // Saves a new check (POST) or, with `checkId`, the correction (PATCH). The
+  // patch sends every field the form shows, so a reading cleared in the form
+  // is cleared on the row (the server takes an explicit null as "clear").
+  GF.WWF.trichomeSave = (batchId, checkId) => GF.once('tc-save', async () => {
     const num = (id) => { const v = ((GF.$(id) || {}).value || '').trim(); return v === '' ? null : parseFloat(v); };
     const vals = [num('tc-clear'), num('tc-cloudy'), num('tc-amber')];
     if (vals.every(v => v != null)) {
@@ -1289,19 +1361,28 @@
       GF.toast(AL('A check cannot be dated in the future', 'Проверката не може да е со иден датум'), 'error');
       return;
     }
+    if (checkId && !checked) {
+      GF.toast(AL('A check keeps a date — correct it, do not clear it', 'Проверката мора да има датум — поправете го, не бришете го'), 'error');
+      return;
+    }
+    const body = {
+      checked_on: checked,
+      instrument: (GF.$('tc-instrument') || {}).value || 'digital',
+      magnification: ((GF.$('tc-mag') || {}).value || '').trim() || null,
+      sample_sites: num('tc-sites'),
+      pct_clear: vals[0], pct_cloudy: vals[1], pct_amber: vals[2],
+      verdict: (GF.$('tc-verdict') || {}).value || 'approaching',
+      image_ref: ((GF.$('tc-image') || {}).value || '').trim() || null,
+      note: ((GF.$('tc-note') || {}).value || '').trim() || null };
     try {
-      await GF.API.trichomeCheck({
-        batch_id: batchId,
-        checked_on: checked,
-        instrument: (GF.$('tc-instrument') || {}).value || 'digital',
-        magnification: ((GF.$('tc-mag') || {}).value || '').trim() || null,
-        sample_sites: num('tc-sites'),
-        pct_clear: vals[0], pct_cloudy: vals[1], pct_amber: vals[2],
-        verdict: (GF.$('tc-verdict') || {}).value || 'approaching',
-        image_ref: ((GF.$('tc-image') || {}).value || '').trim() || null,
-        note: ((GF.$('tc-note') || {}).value || '').trim() || null });
+      if (checkId) {
+        await GF.API._req('PATCH', '/cultivation/trichome-checks/' + encodeURIComponent(checkId), body);
+      } else {
+        await GF.API.trichomeCheck({ batch_id: batchId, ...body });
+      }
       GF.closeModal('tc-modal');
-      GF.toast(AL('Trichome check recorded', 'Проверката е запишана'), 'success');
+      GF.toast(checkId ? AL('Trichome check corrected', 'Проверката е поправена')
+                       : AL('Trichome check recorded', 'Проверката е запишана'), 'success');
       await GF.WWF.loadCultivation();
     } catch (e) { GF.toast(e.message, 'error'); }
   });

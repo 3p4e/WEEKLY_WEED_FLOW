@@ -296,12 +296,14 @@ test('the detail block names the next step, whose it is, and the clone run', () 
 
 test('a flowering batch offers the trichome check to a writer and nobody else', () => {
   const h = load('CU_MGR');
-  assert.match(render(h, [batch({ phase: 'flower' })]), /GF\.WWF\.trichomeForm\('b1'/);
-  assert.doesNotMatch(render(h, [batch({ phase: 'veg' })]), /trichomeForm/,
+  // The card's actions ride as data-cu-act buttons (FE-04), read by one
+  // delegated listener in cultivation-view.js.
+  assert.match(render(h, [batch({ phase: 'flower' })]), /data-cu-act="trichome" data-id="b1"/);
+  assert.doesNotMatch(render(h, [batch({ phase: 'veg' })]), /data-cu-act="trichome"/,
     'the check belongs to flowering, where the harvest date is decided');
   h.close();
   const q = load('QC_MGR');
-  assert.doesNotMatch(render(q, [batch({ phase: 'flower' })]), /trichomeForm/);
+  assert.doesNotMatch(render(q, [batch({ phase: 'flower' })]), /data-cu-act="trichome"/);
   q.close();
 });
 
@@ -424,9 +426,15 @@ test('a second-generation mother may name the plant it was cut from', async () =
   const h = load('CU_MGR');
   const w = h.window;
   w.GF.WWF._prop.mothers = [
-    { id: 'm1', code: 'GP26_S1M01-1_001', product_id: 'p1', generation: 1 },
-    { id: 'm2', code: 'GP26_S1M01-1_002', product_id: 'p1', generation: 1 },
-    { id: 'm3', code: 'GP18_S1M01-1_001', product_id: 'p2', generation: 1 },
+    { id: 'm1', code: 'GP26_S1M01-1_001', product_id: 'p1', product_code: 'GP_THC26:CBD1', generation: 1 },
+    { id: 'm2', code: 'GP26_S1M01-1_002', product_id: 'p1', product_code: 'GP_THC26:CBD1', generation: 1 },
+    { id: 'm3', code: 'GP18_S1M01-1_001', product_id: 'p2', product_code: 'GP_THC18:CBD1', generation: 1 },
+    // Registered against the v.03 page, which the fitted page (p1) has since
+    // superseded: a different ROW of the same CODE, still a GP26 mother
+    // (review CS2-01).
+    { id: 'm4', code: 'GP26_S1M02-1_001', product_id: 'p1-v03', product_code: 'GP_THC26:CBD1',
+      product_status: 'SUPERSEDED', generation: 1 },
+    { id: 'm5', code: 'GP26_S1M01-2_001', product_id: 'p1', product_code: 'GP_THC26:CBD1', generation: 2 },
   ];
   await w.GF.WWF.motherForm();
   assert.equal(w.document.getElementById('mb-parent-wrap').style.display, 'none');
@@ -434,8 +442,8 @@ test('a second-generation mother may name the plant it was cut from', async () =
   await w.GF.WWF._motherSync();
   assert.equal(w.document.getElementById('mb-parent-wrap').style.display, '');
   assert.deepEqual(Array.from(w.__selCfg['mb-parent'].options, o => o.label),
-    ['— not in the bank —', 'GP26_S1M01-1_001', 'GP26_S1M01-1_002'],
-    'only first-generation mothers of the same product');
+    ['— not in the bank —', 'GP26_S1M01-1_001', 'GP26_S1M01-1_002', 'GP26_S1M02-1_001'],
+    'first-generation mothers of the same product CODE, whichever version of its page they were registered against');
   h.close();
 });
 
@@ -524,12 +532,14 @@ test('the clone run form offers the strain\'s products, its active mothers and t
 
   w.document.getElementById('cr-count').value = '2000';
   w.document.getElementById('cr-product').value = 'p1';
+  w.document.getElementById('cr-date').value = '2026-07-29';   // the initiator sets it (AD-19)
   w.document.getElementById('cr-m-m1').checked = true;
   w.document.getElementById('cr-c-m1').value = '1200';
   w.document.getElementById('cr-m-m2').checked = true;
   await w.GF.WWF.cloneRunSave();
   const sent = JSON.parse(JSON.stringify(w.__runCreated));
   assert.equal(sent.product_id, 'p1');
+  assert.equal(sent.started_on, '2026-07-29');
   assert.deepEqual(sent.mothers, [{ mother_plant_id: 'm1', cuttings: 1200 },
                                   { mother_plant_id: 'm2', cuttings: null }]);
   h.close();
@@ -597,15 +607,25 @@ test('choosing a parent pre-fills and locks the campaign and mother number; the 
 });
 
 test('a clone run without a date of cloning initiation is refused before the request', async () => {
+  // Owner (2026-09-05): the initiator "has to set the date of cloning
+  // initiation". Until INS2-04 the field opened pre-filled with today, so a
+  // run saved without touching it carried a date nobody set. It now opens
+  // EMPTY — the picker highlights today without choosing it (datepicker.js)
+  // — and the save refuses until a date is chosen.
   const h = load('CU_MGR');
   const w = h.window;
   await w.GF.WWF.cloneRunForm();
-  assert.equal(w.document.getElementById('cr-date').value, '2026-07-30', 'the picker opens on today, as the owner asked');
+  assert.equal(w.document.getElementById('cr-date').value, '', 'the date is the initiator\'s to set — never pre-filled');
+  assert.match(w.document.getElementById('cr-date-btn').innerHTML, /dp-empty/, 'the field shows as unset');
   w.document.getElementById('cr-count').value = '100';
-  w.document.getElementById('cr-date').value = '';
   await w.GF.WWF.cloneRunSave();
   assert.equal(w.__runCreated, undefined, 'no date, no run');
   assert.ok(w.__toasts.some(t => /date of cloning initiation/i.test(t[0])));
+  // The picker still opens ON today, highlighted but not written.
+  w.GF.openDatePicker('cr-date', { stopPropagation() {}, preventDefault() {} });
+  const pop = w.document.querySelector('.dp-cell.dp-today');
+  assert.ok(pop && pop.dataset.v === '2026-07-30', 'today is highlighted in the grid');
+  assert.equal(w.document.getElementById('cr-date').value, '', 'highlighted is not chosen');
   w.document.getElementById('cr-date').value = '2026-07-29';
   await w.GF.WWF.cloneRunSave();
   assert.equal(w.__runCreated.started_on, '2026-07-29');

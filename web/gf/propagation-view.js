@@ -440,7 +440,12 @@
     const wrap = GF.$('mb-parent-wrap'), sel = GF.$('mb-parent-sel');
     if (wrap && sel) {
       if (gen > 1) {
-        const eligible = (ctx.mothers || []).filter(x => x.product_id === pid && x.generation === gen - 1);
+        // Eligible parents share the product CODE, not the product row: a
+        // mother registered against the v.03 page is still a GP_THC26:CBD1
+        // mother after the fitted page supersedes it (review CS2-01; the
+        // server compares the same way and re-points the line on save).
+        const eligible = (ctx.mothers || []).filter(x =>
+          x.product_code === prod.product_code && x.generation === gen - 1);
         wrap.style.display = '';
         const cur = ((GF.$('mb-parent') || {}).value || '');
         sel.innerHTML = GF.selectField('mb-parent', { value: cur, title: AL('Mother', 'Мајка'),
@@ -586,7 +591,13 @@
         <div id="cr-spec"></div></div>
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1"><label>${AL('Date of cloning initiation', 'Датум на почеток на клонирање')}</label>
-          ${GF.dateField('cr-date', { value: today(), clearable: false })}</div>
+          ${/* EMPTY on purpose: "they have to set the date of cloning
+               initiation" (owner, 2026-09-05). The picker opens on the
+               facility's today, highlighted but not chosen (datepicker.js),
+               and the save below refuses an empty date — a run saved without
+               ever touching this field must not silently carry today
+               (review INS2-04). */ ''}
+          ${GF.dateField('cr-date', { value: '', max: today(), clearable: false })}</div>
         <div class="field" style="flex:1"><label>${AL('Cuttings planned', 'Планирани резници')}</label>
           <input id="cr-count" type="number" min="0" max="100000" step="1" placeholder="2000"></div>
       </div>
