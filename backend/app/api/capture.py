@@ -116,7 +116,12 @@ async def _capture_actor(authorization: str | None) -> dict | None:
     equivalent import authority to anyone who can read the template (review
     2026-09-27, BC-11). config.py warns about it at startup."""
     token = capture_import_token(os.environ.get("CAPTURE_IMPORT_TOKEN", ""))
-    username = os.environ.get("CAPTURE_IMPORT_USER", "qcm.blani")
+    # The import acts as a NAMED account; the name is deployment
+    # configuration, never a real person's username baked into the code as a
+    # fallback (review 2026-09-27, DI-22). Unset means the token path is off.
+    username = os.environ.get("CAPTURE_IMPORT_USER", "").strip()
+    if not username:
+        return None
     # LOW (reviewed, Wave 3 item 4) — accepted as an operational concern, not
     # a code bug: this single static token grants full import authority as
     # whatever role CAPTURE_IMPORT_USER holds (an ADMIN-equivalent account in

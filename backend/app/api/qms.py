@@ -20,10 +20,10 @@ the document-authoring side. Nothing here writes into the ops zone; the two
 zones reference each other only by pointer (SOP code).
 """
 import httpx
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import Response
 
-from app import docengine
+from app import demo_org, docengine
 from app.deps import require_password_set
 from app.roles import ADMIN, ELEVATED_ROLES
 
@@ -49,10 +49,17 @@ _DE_UNAVAILABLE = docengine.DE_UNAVAILABLE
 _AUTHOR_ROLES = (ADMIN, "OWNER", "QP", "QA_MGR")
 
 
-def _require_author(user: dict = Depends(_require_elevated)) -> dict:
+async def _require_author(user: dict = Depends(_require_elevated)) -> dict:
     if user["role"] not in _AUTHOR_ROLES:
         raise HTTPException(status_code=403,
                             detail="Document authoring is limited to QA/QP/admin")
+    # The public demo's visitor token is the demo cast's ADMIN. Authoring a
+    # controlled document spends real Letta turns and writes a row into the
+    # facility's document registry, so the demo org may read the Studio but
+    # never author in it (review 2026-09-27, DI-13).
+    demo_id = await demo_org.get_demo_org_id()
+    if demo_id is not None and str(user["org_id"]) == str(demo_id):
+        raise HTTPException(status_code=403, detail="Document authoring is not available in the demo")
     return user
 
 
@@ -62,23 +69,28 @@ def _de_client(timeout: float = 20.0) -> httpx.AsyncClient:
 
 
 async def _de_forward(method: str, path: str, json_body: dict | None = None,
-                      timeout: float = 20.0) -> httpx.Response:
+                      timeout: float = 20.0, *, org_id: str | None = None,
+                      params: dict | None = None) -> httpx.Response:
     # Delegates to the shared client but keeps `_de_client` as the seam the
     # proxy tests monkeypatch (resolved at call time via the module global).
+    # DocEngine scopes jobs and the document registry by organisation and
+    # refuses a call that names none (review 2026-09-27, DI-13), so every
+    # route passes the signed-in user's org through here.
     return await docengine.de_forward(method, path, json_body, timeout,
-                                      client_factory=_de_client)
+                                      client_factory=_de_client, org_id=org_id,
+                                      params=params)
 
 
 @router.get("/studio/questionnaires")
 async def studio_questionnaires(user: dict = Depends(_require_elevated)):
-    return (await _de_forward("GET", "/questionnaires")).json()
+    return (await _de_forward("GET", "/questionnaires", org_id=user["org_id"])).json()
 
 
 @router.get("/studio/questionnaires/{key}")
 async def studio_questionnaire(key: str, user: dict = Depends(_require_elevated)):
     if len(key) > 64:
         raise HTTPException(status_code=422, detail="Key too long")
-    return (await _de_forward("GET", f"/questionnaires/{key}")).json()
+    return (await _de_forward("GET", f"/questionnaires/{key}", org_id=user["org_id"])).json()
 
 
 @router.post("/studio/workflows")
@@ -87,14 +99,14 @@ async def studio_start_workflow(body: dict = Body(...),
     if len(str(body)) > 65_536:
         raise HTTPException(status_code=422, detail="Payload too large")
     body["requested_by"] = user["username"]
-    return (await _de_forward("POST", "/workflows", body)).json()
+    return (await _de_forward("POST", "/workflows", body, org_id=user["org_id"])).json()
 
 
 @router.get("/studio/workflows/{jid}")
 async def studio_workflow(jid: str, user: dict = Depends(_require_author)):
     if len(jid) > 64:
         raise HTTPException(status_code=422, detail="Id too long")
-    return (await _de_forward("GET", f"/workflows/{jid}")).json()
+    return (await _de_forward("GET", f"/workflows/{jid}", org_id=user["org_id"])).json()
 
 
 @router.get("/studio/presets")
@@ -102,7 +114,7 @@ async def studio_presets(user: dict = Depends(_require_elevated)):
     """The direct-edit chat UI's one-click instructions. Read gate only —
     picking a preset does nothing by itself; sending it through /revise is
     what requires author role."""
-    return (await _de_forward("GET", "/presets")).json()
+    return (await _de_forward("GET", "/presets", org_id=user["org_id"])).json()
 
 
 @router.post("/studio/workflows/{jid}/chat")
@@ -116,7 +128,8 @@ async def studio_chat(jid: str, body: dict = Body(...),
         raise HTTPException(status_code=422, detail="Id too long")
     if len(str(body)) > 8_000:
         raise HTTPException(status_code=422, detail="Payload too large")
-    return (await _de_forward("POST", f"/workflows/{jid}/chat", body, timeout=150.0)).json()
+    return (await _de_forward("POST", f"/workflows/{jid}/chat", body,
+                              timeout=docengine.DE_CHAT_TIMEOUT_S, org_id=user["org_id"])).json()
 
 
 @router.post("/studio/workflows/{jid}/revise")
@@ -132,7 +145,7 @@ async def studio_revise(jid: str, body: dict = Body(...),
     if len(str(body)) > 8_000:
         raise HTTPException(status_code=422, detail="Payload too large")
     body["requested_by"] = user["username"]
-    return (await _de_forward("POST", f"/workflows/{jid}/revise", body)).json()
+    return (await _de_forward("POST", f"/workflows/{jid}/revise", body, org_id=user["org_id"])).json()
 
 
 @router.post("/studio/build")
@@ -143,23 +156,27 @@ async def studio_build(body: dict = Body(...),
     with the pp_verify report in the detail."""
     if len(str(body)) > 450_000:
         raise HTTPException(status_code=422, detail="Payload too large")
-    return (await _de_forward("POST", "/build", body, timeout=120.0)).json()
+    return (await _de_forward("POST", "/build", body, timeout=120.0, org_id=user["org_id"])).json()
 
 
 @router.get("/studio/documents")
-async def studio_documents(user: dict = Depends(_require_elevated)):
-    return (await _de_forward("GET", "/documents")).json()
+async def studio_documents(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0),
+                           user: dict = Depends(_require_elevated)):
+    """The organisation's document registry, paged (review 2026-09-27,
+    DI-21): DocEngine answers {documents, total, limit, offset}."""
+    return (await _de_forward("GET", "/documents", org_id=user["org_id"],
+                              params={"limit": limit, "offset": offset})).json()
 
 
 @router.get("/studio/documents/{did}")
 async def studio_document(did: str, user: dict = Depends(_require_elevated)):
     if len(did) > 64:
         raise HTTPException(status_code=422, detail="Id too long")
-    return (await _de_forward("GET", f"/documents/{did}")).json()
+    return (await _de_forward("GET", f"/documents/{did}", org_id=user["org_id"])).json()
 
 
-async def _de_stream(path: str, timeout: float = 120.0) -> Response:
-    r = await _de_forward("GET", path, timeout=timeout)
+async def _de_stream(path: str, org_id: str, timeout: float = 120.0) -> Response:
+    r = await _de_forward("GET", path, timeout=timeout, org_id=org_id)
     return Response(
         content=r.content,
         media_type=r.headers.get("content-type", "application/octet-stream"),
@@ -172,11 +189,11 @@ async def _de_stream(path: str, timeout: float = 120.0) -> Response:
 async def studio_download(did: str, user: dict = Depends(_require_elevated)):
     if len(did) > 64:
         raise HTTPException(status_code=422, detail="Id too long")
-    return await _de_stream(f"/documents/{did}/download")
+    return await _de_stream(f"/documents/{did}/download", user["org_id"])
 
 
 @router.get("/studio/documents/{did}/pdf")
 async def studio_pdf(did: str, user: dict = Depends(_require_elevated)):
     if len(did) > 64:
         raise HTTPException(status_code=422, detail="Id too long")
-    return await _de_stream(f"/documents/{did}/pdf")
+    return await _de_stream(f"/documents/{did}/pdf", user["org_id"])
