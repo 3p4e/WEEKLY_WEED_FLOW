@@ -31,6 +31,37 @@ test('the service worker installs the shell past the HTTP cache', () => {
     'addAll must fetch with cache: reload, or a fresh-but-old copy is stored under the new VERSION');
 });
 
+test('a changed shell file needs a VERSION bump, and a bump needs the fixture regenerated (FE-13 / R2-FE-17)', () => {
+  const shell = require('./helpers/shell-hash.js');
+  const now = shell.shellHash();
+  const fixture = shell.readFixture();
+  assert.ok(fixture, 'tests/frontend/fixtures/shell-hash.json is missing — run node tests/frontend/helpers/shell-hash.js --write');
+  assert.deepEqual(now.missing, [], 'every precached path exists on disk: ' + now.missing.join(', '));
+  if (now.hash !== fixture.hash) {
+    assert.notEqual(now.version, fixture.version,
+      `a precached shell file changed but web/sw.js VERSION is still ${now.version}: bump it, then run node tests/frontend/helpers/shell-hash.js --write`);
+    assert.fail(`web/sw.js VERSION was bumped to ${now.version}; record the new shell with node tests/frontend/helpers/shell-hash.js --write`);
+  }
+  assert.equal(now.version, fixture.version, 'VERSION changed without a shell change: run node tests/frontend/helpers/shell-hash.js --write');
+});
+
+test('the shell-hash guard itself trips on a changed file under an unchanged VERSION', () => {
+  const shell = require('./helpers/shell-hash.js');
+  const before = shell.shellHash();
+  const target = path.join(WEB, 'manifest.webmanifest');
+  const orig = fs.readFileSync(target);
+  try {
+    fs.writeFileSync(target, Buffer.concat([orig, Buffer.from('\n')]));
+    const after = shell.shellHash();
+    assert.notEqual(after.hash, before.hash, 'one changed precached file changes the fingerprint');
+    assert.equal(after.version, before.version);
+    assert.throws(() => shell.writeFixture(), /bump it first/, 'the fixture refuses to record a changed shell under the same VERSION');
+  } finally {
+    fs.writeFileSync(target, orig);
+  }
+  assert.equal(shell.shellHash().hash, before.hash, 'restored');
+});
+
 test('index.html scripts, the sw.js shell and the files on disk agree', () => {
   const sw = fs.readFileSync(path.join(WEB, 'sw.js'), 'utf8');
   const html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8');

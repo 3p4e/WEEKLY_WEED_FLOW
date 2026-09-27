@@ -4,8 +4,12 @@
    - API paths → network-first (never served stale; falls back to cache only
      if a response happened to be cached, which for API paths it never is);
    - everything else same-origin GET → network, best-effort cache fallback.
-   Bump VERSION whenever any shell file changes. */
-const VERSION = 'wwf-shell-v3.103.0';
+   Bump VERSION whenever any shell file changes — tests/frontend/
+   shell-and-gates.test.js compares the precached files' hash with
+   tests/frontend/fixtures/shell-hash.json and fails when the shell changed
+   under an unchanged VERSION (regenerate the fixture with
+   `node tests/frontend/helpers/shell-hash.js --write`). */
+const VERSION = 'wwf-shell-v3.104.0';
 
 const SHELL = [
   '/',
@@ -19,7 +23,7 @@ const SHELL = [
   '/gf/modules.js', '/gf/dept-templates.js', '/gf/depthome-view.js', '/gf/notifications-view.js', '/gf/facility-view.js', '/gf/cultivation-view.js', '/gf/propagation-view.js', '/gf/harvest-view.js', '/gf/irrigation-view.js', '/gf/decon-view.js', '/gf/waste-view.js', '/gf/approvals-view.js', '/gf/myday-view.js', '/gf/analytics-view.js', '/gf/auditprep-view.js', '/gf/qmsstudio-view.js', '/gf/qcspec-view.js', '/gf/qcpotency-view.js', '/gf/qclab-view.js', '/gf/qcregister-view.js', '/gf/qcgenealogy-view.js', '/gf/qcsample-view.js', '/gf/qccoa-view.js', '/gf/qcoos-view.js', '/gf/qcecoa-view.js', '/gf/qccustody-view.js', '/gf/qcleaves-view.js', '/gf/chooser.js', '/gf/datepicker.js', '/gf/codefield.js', '/gf/tweaks-vanilla.js',
   // 3D-leaf splash/login entry (self-hosted three.js + mesh)
   '/gf/vendor/three.min.js', '/gf/leaf3d.js', '/gf/entry.js', '/assets/pp-leaf-3d.obj',
-  '/assets/pp-leaf.png', '/assets/pp-logo.png', '/assets/pp-logo-white.png', '/assets/pp-wordmark.png',
+  '/assets/pp-leaf.png', '/assets/pp-logo-white.png', '/assets/pp-wordmark.png',
   '/assets/wwf-icon-192.png', '/assets/wwf-icon-512.png',
 ];
 

@@ -186,17 +186,32 @@ Groups only organize; they never override per‑role visibility. Order matters.
 - *Calendar* (`calendar`)
 
 **Management** (Менаџмент)
-- *Executive Overview* (`exec`) — executives/admin only
+- *Approvals* (`approvals`) — every role above `USER`; acknowledgments, team sign‑offs
+  and "Handoffs to your department" (a task‑module view since 2026‑09‑27, so every
+  department manager reaches it)
 - *Coordination* (`coord`) — badge = count of pending cross‑department handoffs this week
 - *Dashboard* (`dash`)
-- *Team* (`team`)
-- *Workload* (`workload`) — managers/execs only
+- *Team* (`team`) — ADMIN also sees each department's head here (Set head)
 
-**QMS Studio** (QMS Студио) — only for roles above `USER`
+**Floor** (Погон) — the cultivation module's anchor group
+- *Cultivation* (`cultivation`) · *Propagation* (`propagation`) · *Facility* (`facility`) ·
+  *Harvest* (`harvest`) · *Irrigation* (`irrigation`) · *Decontamination* (`decon`) ·
+  *Destruction* (`waste`) — each registers into this group when its module is active
+
+**Analytics** (Аналитика) — the analytics module
+- *Executive Overview* (`exec`) — executives/admin only
+- *Workload* (`workload`) — managers/execs only
+- *Analytics* (`analytics`) · *Executive Report* (`execreport`)
+
+**QMS Studio** (QMS Студио) — only for roles above `USER`, in the QC module
 - *Document Studio* (creation wizard)
-- *Registry* (document register)
-- *Knowledge* (knowledge search)
 - *(QC‑LIMS views register themselves into this zone — see §9.)*
+
+> The app is split into six **modules** (`web/gf/modules.js`: Task Management, QC & QMS,
+> Cultivation & Facility, Biosecurity & Waste, Audit & Compliance, Analytics & Executive),
+> chosen from the header's module button; the rail shows the active module's groups. A
+> role sees only the modules its backend routes admit (e.g. PR_MGR reaches Biosecurity &
+> Waste for the post‑harvest rooms it runs).
 
 **System** (Систем)
 - *Inbox / Notifications* (`inbox`) — badge = unread count
@@ -215,20 +230,39 @@ Design tokens for each are in §9. Grouped by zone:
 `depthome` (Department Home) · `mywork` (My Week) · `board` (Board) · `timeline`
 (Timeline) · `calendar` (Calendar) · `coord` (Coordination) · `dash` (Dashboard) ·
 `exec` (Executive Overview) · `team` (Team) · `workload` (Workload) · `myday` (My Day) ·
-`facility` (Facility board) · `approvals` (Approvals) · `analytics` (Analytics) ·
-`auditprep` (Audit Prep readiness) · `report` (Weekly Plan/Report document) · `execreport`
-(Executive report) · `intake` (AI Intake) · `import` (Bulk Import) · `inbox`
-(Notifications) · `audit` (Audit trail).
+`approvals` (Approvals) · `analytics` (Analytics) · `auditprep` (Audit Prep readiness) ·
+`report` (Weekly Plan/Report document) · `execreport` (Executive report) · `intake` (AI
+Intake) · `import` (Bulk Import) · `inbox` (Notifications) · `audit` (Audit trail).
+
+**Zone A′ — the floor (cultivation and biosecurity modules, added 2026‑08/09)**
+`facility` (Facility board + floor plan tab, room grades) · `cultivation` (coded batches,
+plants, phase moves, trichome checks with a documented history and corrections) ·
+`propagation` (mothers, selection campaigns, clone runs) · `harvest` (harvest lots, drying,
+IPM applications with PHI/REI) · `irrigation` (feeding log) · `decon` (room
+decontamination cycles, corridor cadence, biosecurity monitoring) · `waste` (destruction
+manifests and reconciliation).
 
 **Zone B — QMS Studio**
-`qmsstudio` (Document creation wizard) · `qmsregistry` (Document registry) · `qmsknow`
-(Knowledge search).
+`qmsstudio` (Document creation wizard). The former `qmsregistry` (Document registry) and
+`qmsknow` (Knowledge search) stubs were deleted on 2026‑09‑27 (DECISIONS E‑3); the
+registry service they fronted is retired.
 
 **Zone C — QC LIMS**
-`qcspec` (Specifications) · `qclab` (Lab dashboard) · `qcregister` (Certificate register) ·
-`qcsample` (Samples) · `qcgenealogy` (Batch genealogy) · `qccoa` (Certificates / CoA) ·
-`qcecoa` (eCoA intake) · `qcoos` (OOS / CAPA) · `qccustody` (Sampling requests / field
-records / chain of custody) · `qcleaves` (Water · Stability · Transport).
+`qcspec` (Specifications) · `qcpotency` (Product catalogue: the official products with
+their potency windows, ImB pages / fitted specifications import, conformance, the A4
+page) · `qclab` (Lab dashboard) · `qcregister` (Certificate register) · `qcsample`
+(Samples) · `qcgenealogy` (Batch genealogy) · `qccoa` (Certificates / CoA and the
+Certificate of Quality) · `qcecoa` (eCoA intake) · `qcoos` (OOS / CAPA) · `qccustody`
+(Sampling requests / field records / chain of custody) · `qcleaves` (Water · Stability ·
+Transport).
+
+**API‑only routes (no screen; a designer should not look for one)** — the commercial
+identities (`/qc/commercial-identities`: list, import, PUT/DELETE per batch code), the
+decon side logs (`/decon/bleach-log`, `/decon/tool-log`, `/decon/positive-controls`,
+`GET /decon/cycles/{id}`, `GET /decon/corridors/{room}/cleanings`), the single‑parameter
+internal CoA page (`/qc/certificates/{id}/icoa-html`), `GET /qc/coa-documents/{id}/originals`,
+`PATCH /qc/potency-specs/{id}`, `GET /tasks/tree` and `GET /auth/users` (script client
+only). Inventory as of 2026‑09‑27 — see `docs/REVIEW-2026-09-27.md`.
 
 **Global**
 Settings modal · Command palette (⌘K) · Login/splash entry · Demo mode.
@@ -592,8 +626,10 @@ error / permission‑denied variants you must design (see also §11).
 ### 9.13 Approvals (`approvals`) — Zone A/B bridge
 
 - **Purpose.** A unified queue of things awaiting the current user's sign‑off (task
-  sign‑offs, document approvals, QC review/approve/release items surfaced here).
-- **Personas.** Managers, QP, QA, execs.
+  sign‑offs, document approvals, QC review/approve/release items surfaced here), plus
+  "Handoffs to your department" — the cross‑department proposals addressed to the
+  user's department, with Accept / Reject.
+- **Personas.** Every department manager (it is a task‑module view), QP, QA, execs.
 - **Layout.** A prioritized approval inbox: each row = what, who submitted, when, the
   action (approve/reject/release), and a link to the record. Second‑person and QP gates
   apply (§8). Known slow fetch — design a robust loading state.
@@ -694,16 +730,27 @@ error / permission‑denied variants you must design (see also §11).
 - **States.** Each wizard step has queued/running/done/failed; the reg‑check step shows
   "no citation found" honestly; DocEngine unreachable → clean 503 degrade.
 
-### 9.22 QMS Registry (`qmsregistry`) & Knowledge (`qmsknow`) — Zone B
+### 9.22 (deleted) QMS Registry & Knowledge
 
-- **Registry.** The controlled‑document register: list of issued documents with number,
-  title, version/revision, status, effective date, department, links to DOCX/PDF. Read‑only
-  history; supersession chains.
-- **Knowledge.** Grounded search over the real regulatory + document knowledge sources —
-  returns **cited** passages, never invented answers. A search box → ranked cited results
-  with source labels.
-- **States.** If the legacy registry service is retired/unavailable, show an honest panel
-  ("retired — use Document Studio"), not a broken screen.
+The `qmsregistry` and `qmsknow` views were stubs over a retired registry service and were
+removed on 2026‑09‑27 (DECISIONS E‑3). Do not design them. The controlled‑document
+register lives in Document Studio (§9.21b); the knowledge bases the owner wants "available
+to the app and Letta agents" remain unbuilt (DECISIONS §4).
+
+### 9.22b The floor views (`cultivation`, `propagation`, `harvest`, `irrigation`, `decon`, `waste`) — Zone A′
+
+- **Purpose.** The cultivation and biosecurity records the floor crews keep: coded batches
+  (`<cultivar><MMYY><nn>`, GP072501) with plants and phase moves; mothers, selection
+  campaigns and clone runs; harvest lots, drying and IPM applications with their PHI / REI
+  windows; the feeding log; room decontamination cycles (the five signed steps, swabs,
+  release), the corridor cadence and biosecurity monitoring; destruction manifests with
+  the two‑person seal / witness / dispose ladder.
+- **Personas.** CU_MGR, PR_MGR (harvest onward, and the `dry` rooms' decon / waste /
+  gowning — DECISIONS A‑2), IR_MGR (irrigation), QA_MGR (swabs, release, witness), execs.
+- **Layout.** Board + modal forms, the same chrome as the QC views; every date is the
+  facility's day (`GF.facilityToday`), every duration `GF.daysSince`.
+- **States.** Empty rooms; a production manager sees only the actions the server accepts
+  for the room kind (never a button that 403s).
 
 ---
 
@@ -1055,6 +1102,25 @@ Rules the code now enforces in `tests/frontend/`; a new view is held to them.
   anything that touches a record (due dates, overdue markers, pre-filled dates,
   the calendar's month, the current week). `GF.todayDay` is a live getter on the
   facility day. `GF.daysSince(day)` is the one "days in phase" rule.
+- **A shell file change bumps `VERSION` in `web/sw.js`.** The service worker is
+  cache-first on the precached shell; `tests/frontend/shell-and-gates.test.js`
+  hashes every precached file against `tests/frontend/fixtures/shell-hash.json`
+  and fails when the shell changed under an unchanged VERSION. After a bump, run
+  `node tests/frontend/helpers/shell-hash.js --write` (it refuses to record a
+  changed shell under the same VERSION).
+- **A paged list follows the server's cursor.** `GF.API._reqFull` returns
+  `{ data, headers, status }`; the audit trail pages with `X-Next-Cursor`
+  (`GF.API.auditPage` → `{ rows, next }`), never with a bare timestamp.
+- **A role sees the buttons its backend routes accept, and no more.** The view's
+  role list mirrors the route's `require_role` tuple (waste/decon/biosecurity name
+  the tuple they mirror), and a per-record rule the server applies (PR_MGR → `dry`
+  rooms) is applied to the room pickers and record actions too — failing OPEN when
+  the client cannot know (the server's 403 is the gate), never hiding what the
+  server allows.
+- **Every backend verb has an inbox sentence.** `tests/frontend/notif-verbs.test.js`
+  scans `backend/app` for `verb="…"` and fails on a verb without a `case` in
+  `notifications-view.js`, and on a shadowed case label. Sentences read structured
+  params and fall back rather than print `undefined`.
 - **The date picker highlights, it does not choose.** Arrow keys move a cursor;
   only Enter or a click writes the input and fires `onPick` (FE-08).
 - **A structured code field pre-fills its constant head** (`GF.codeField`), and a
