@@ -1,5 +1,8 @@
 # WEEKLY_WEED_FLOW — operating notes for Claude
 
+**Starting a new session? Read `docs/HANDOFF.md` next** — open PRs, what is
+running in production, and the decisions still waiting on the owner.
+
 ## GitHub access in this remote environment (learned 2026-08-07)
 
 GitHub is mediated by the agent proxy + the **Claude GitHub App**, which has
