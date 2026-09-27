@@ -742,14 +742,13 @@ async def _direct_edit_sections(
     never-invent instruction, the same marker protocol so a reply can only
     ever replace the sections it names.
 
-    Unlike _repair_sections there is no reviewer verdict downstream — the
-    caller (run_revision) asked for this change directly, and whatever comes
-    back that parses is rebuilt and re-verified immediately. What this
-    function still guards: an unparseable reply changes nothing; an invented
-    fact is refused by the same rule that refuses one for an auditor's issue;
-    and when the caller scoped the request to one section, a reply that also
-    touches another is rejected rather than silently widened past what was
-    asked."""
+    The reply is not the last word: run_revision then runs the structural
+    gates, the canon D5 content floor and the full §6A audit loop on it
+    before anything is built. What this function itself guards: an
+    unparseable reply changes nothing; an invented fact is refused by the
+    same rule that refuses one for an auditor's issue; and when the caller
+    scoped the request to one section, a reply that also touches another is
+    rejected rather than silently widened past what was asked."""
     from .fleet import spawn_ephemeral
 
     scope_line = (
@@ -1282,15 +1281,15 @@ async def run_revision(job_id: str, client: LettaClient | None = None) -> None:
     re-parsing rendered Markdown.
 
     Runs _direct_edit_sections (the same repair-clone machinery the §6A audit
-    loop uses) then rebuilds and re-verifies exactly as run_workflow does.
-    There is deliberately no accept/reject step in between: the request was
-    for a direct edit, so a parseable, non-fabricating reply plus the hard
-    pp_verify PASS gate together ARE the new document. What is not
-    deliberate — every revision becomes a NEW row in db.documents, never an
-    edit of the one it started from. That costs nothing to keep and it means
-    the source document, the instruction that was given, and the document it
-    produced all stay on the record, whether or not anyone downstream ever
-    adds a review step of their own."""
+    loop uses), then the same gates a first draft clears — bilingual and
+    grid structure, the canon D5 content floor against the version being
+    revised, the §6A audit with its repair loop — and only then rebuilds and
+    re-verifies exactly as run_workflow does. There is no HUMAN accept/reject
+    step between the edit and the registry row (the canvas design is where
+    that belongs), which is why the row it registers is a NEW document that
+    supersedes the source at the next version, never an edit of the one it
+    started from: the source document, the instruction that was given, and
+    the document it produced all stay on the record."""
     client = client or LettaClient()
     sections: list[dict] = []
     markdown = ""

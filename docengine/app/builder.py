@@ -166,9 +166,10 @@ def build(markdown: str, out_dir: Path, out_name: str = "document") -> BuildResu
     # H13 — the output path used to be safe_name(out_name) + ".docx", derived
     # from the document CODE alone. Two concurrent builds of the same code
     # therefore wrote the same file: they interleaved, and the FAIL path below
-    # (out.unlink) could delete the OTHER worker's *passing* document. The
-    # in-process _BUILD_LOCK cannot help — the service runs multiple uvicorn
-    # workers, i.e. separate processes.
+    # (out.unlink) could delete the OTHER build's *passing* document. The
+    # service runs ONE uvicorn worker today (Dockerfile, 2026-09-07), so the
+    # in-process _BUILD_LOCK does serialise builds — but a unique path per
+    # build is what makes that safe whatever the worker count.
     # Each build now owns a unique path. It is written under a dot-prefixed
     # `.partial` name and only os.replace()d into place once it has PASSED, so
     # a reader can never observe a half-written or unverified document, and the

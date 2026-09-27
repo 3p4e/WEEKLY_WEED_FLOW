@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.needs import INSTRUCTION, extract_needs, needs_summary  # noqa: E402
+from app.needs import INSTRUCTION, extract_needs  # noqa: E402
 
 
 def _sec(num, content):
@@ -78,14 +78,6 @@ def test_a_malformed_marker_does_not_swallow_the_rest_of_the_line():
         "[NEEDS INPUT: unclosed and then a lot of ordinary procedure text follows "
         "for the rest of this line, which must not be captured as an item")])
     assert out == []
-
-
-def test_summary_names_the_first_few_and_counts_the_rest():
-    needs = [{"section": str(i), "item": f"item {i}"} for i in range(1, 8)]
-    s = needs_summary(needs)
-    assert s.startswith("7 open question(s):")
-    assert "1 item 1" in s and "(+2 more)" in s
-    assert needs_summary([]) == ""
 
 
 def test_the_instruction_keeps_execution_time_blanks_out_of_scope():

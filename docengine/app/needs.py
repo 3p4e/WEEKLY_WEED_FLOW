@@ -78,12 +78,3 @@ def extract_needs(sections: list[dict]) -> list[dict]:
             seen.add(key)
             out.append({"section": s.get("num", "?"), "item": item})
     return out
-
-
-def needs_summary(needs: list[dict]) -> str:
-    """One-line log/error summary — '3 open question(s): 4.0 room code; …'."""
-    if not needs:
-        return ""
-    head = "; ".join(f"{n['section']} {n['item']}" for n in needs[:5])
-    more = f" (+{len(needs) - 5} more)" if len(needs) > 5 else ""
-    return f"{len(needs)} open question(s): {head}{more}"

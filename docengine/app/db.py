@@ -258,7 +258,7 @@ async def documents_list(org_id: str, limit: int = 100, offset: int = 0) -> dict
     limit = max(1, min(int(limit), 500))
     offset = max(0, int(offset))
     rows = await pool().fetch(
-        f"SELECT {_DOC_LIST_COLS} FROM docengine.documents"  # nosec B608 — code-controlled column list
+        f"SELECT {_DOC_LIST_COLS} FROM docengine.documents"  # nosec B608
         " WHERE org_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         org_id, limit, offset,
     )

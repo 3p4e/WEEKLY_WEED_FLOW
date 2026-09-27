@@ -129,12 +129,14 @@ Gotchas that cost time:
   `.github/workflows/deploy.yml` (and `migration-rehearsal.yml`); copy it rather
   than guessing. `/shell` runs **as root inside the `kvm4-runner` container**
   with the docker socket, so `docker …` reaches the whole host.
-- **Neither `curl` NOR `wget` is installed in the kvm4-runner container**
-  (corrected 2026-09-06 — the earlier note here said to use `wget`, and that is
-  wrong). The container is `python:3.12-slim`, so `python3 -c` with `urllib` is
-  the shortest HTTP probe: no image pull, and no `not found` (rc=127)
-  masquerading as a dead site. `docker run --rm --network host curlimages/curl`
-  also works but costs a pull.
+- **Which HTTP tool the kvm4-runner container has depends on the VM** (corrected
+  again 2026-09-27). The pre-migration container was `python:3.12-slim` with
+  neither `curl` nor `wget`; the container on the new VM (since the 2026-09-19
+  migration) is Alpine with busybox `wget` and still no `curl`. Do not plan on
+  either: `python3 -c` with `urllib` is present in both and is the probe
+  `deploy.yml` and `ops/watchdog.sh` use — no image pull, and no `not found`
+  (rc=127) masquerading as a dead site. Check with `command -v` before relying
+  on anything else.
 - Long builds: launch with `nohup setsid ... &` writing to a status file and poll,
   so an HTTP/tool timeout never orphans the deploy. **Foreground `sleep` is
   blocked in this harness** — poll by running the wait loop *on the box* inside a
@@ -167,11 +169,13 @@ Still verify the *substantive* checks yourself before shipping (the CI run, and
 the rehearsal's own restore-and-upgrade-on-real-data step). A green rollup is not
 the same claim as "this migration survives production data".
 
-**Disk:** `/opt` on kvm4 has hit 100% (2026-08-08); 80% / 40 GB free (2026-08-31);
-**93% / ~14 GB free after the v92 + v133 builds (2026-09-06)** — the trend is one
-way, so check before you build rather than after. Two image builds cost roughly a
-point. `docker system df` first; reclaim from images/build cache, and **never
-prune volumes** — they are production data even when the names suggest otherwise,
+**Disk:** the figures that used to sit here (100 % on 2026-08-08, 93 % / ~14 GB
+free on 2026-09-06) describe the **old VM**; the host was migrated on
+2026-09-19 and nobody has recorded the new box's usage in this file. Read it
+off the host (`df -h /opt` and `docker system df`) before you build, not out of
+a document — the trend on the old box was one way, and two image builds cost
+roughly a point there. Reclaim from images/build cache, and **never prune
+volumes** — they are production data even when the names suggest otherwise,
 and old image tags are the rollback path. Do not read `docker system df`'s
 "RECLAIMABLE" as free space: on 2026-09-06 it offered 23.87 GB from images (all
 42 of which were ACTIVE) and 29.43 GB from volumes (which include the live Letta

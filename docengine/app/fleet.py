@@ -871,10 +871,12 @@ async def _sweep_orphans(client: LettaClient, existing: list[dict], report: Flee
     was false. A clone orphaned by a killed worker or a failed DELETE kept the
     RAGflow key and a live allowlist in its sandbox indefinitely.
 
-    Age-gated, because two uvicorn workers share the server: a clone younger
-    than the longest exchange a job can legally be inside (three sequential
-    Letta reads at the configured timeout) may belong to a job on the other
-    worker. Anything older belongs to no one."""
+    Age-gated: a clone younger than the longest exchange a job can legally be
+    inside (three sequential Letta reads at the configured timeout) may
+    belong to a job still running in this process — the sweep runs at the
+    START of a job, while others may be mid-document. Anything older belongs
+    to no one. (The service runs one uvicorn worker; the gate does not depend
+    on that.)"""
     limit = 3 * float(settings.letta_read_timeout)
     now = datetime.now(timezone.utc)
     kept: list[dict] = []
