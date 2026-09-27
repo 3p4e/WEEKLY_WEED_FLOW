@@ -77,6 +77,29 @@ test('dash() renders an alert row (no task_id) without adding a stray onclick', 
   h.close();
 });
 
+test('dash() batch alerts read the contract keys with the old shape as fallback, never "undefined" (R2-FE-04)', () => {
+  const h = loadViews();
+  const { GF } = h;
+  GF.WWF = {
+    _notif: {
+      loaded: true, unread: 0,
+      items: [
+        { id: 'n1', verb: 'batch_added', params: { code: 'GP072501', strain: 'Gorilla Punch', room: 'Flowering 1.1', plant_count: 2000, phase: 'clone' }, created_at: new Date().toISOString() },
+        { id: 'n2', verb: 'batch_moved', params: { code: 'GP072501', strain: 'Gorilla Punch', room: 'Flowering 1.2', plant_count: 2000, phase: 'veg', old_room: 'Flowering 1.1', old_phase: 'clone' }, created_at: new Date().toISOString() },
+        { id: 'n3', verb: 'batch_added', params: { code: 'GP072501', cultivar: 'GP', plant_count: 2000, phase: 'clone' }, created_at: new Date().toISOString() },
+        { id: 'n4', verb: 'batch_moved', params: { code: 'GP072501', old_phase: 'clone', phase: 'veg', room_change: false }, created_at: new Date().toISOString() },
+      ],
+    },
+  };
+  const html = GF.views.dash();
+  assert.doesNotMatch(html, /undefined/);
+  assert.match(html, /GP072501 · 2000× Gorilla Punch → Flowering 1\.1/);
+  assert.match(html, /Gorilla Punch: Flowering 1\.1 → Flowering 1\.2/);
+  assert.match(html, /GP072501 · 2000× GP/);
+  assert.match(html, /: clone → veg/);
+  h.close();
+});
+
 test('exec() excludes archived tasks from the KPI/blocked/overdue counts', () => {
   const h = loadViews();
   const { GF } = h;

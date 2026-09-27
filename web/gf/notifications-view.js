@@ -47,6 +47,15 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     cancelled: { en: 'cancelled', mk: 'откажа' },
   };
 
+  // The pieces every batch sentence shares, each tolerant of an absent key.
+  const batchBits = (p) => ({
+    code: p.code ? `${p.code} — ` : '',
+    count: p.plant_count != null ? String(p.plant_count) : '?',
+    strain: p.strain || p.cultivar || p.product_code || AL('batch', 'серија'),
+    room: p.room || p.room_name || '',
+    phase: p.phase ? ` (${p.phase})` : '',
+  });
+
   // verb + params → sentence, per current language. Structured params only.
   // Every verb the backend emits (grep 'verb="' over backend/app) has a
   // sentence here; anything new falls to the generic line, which still
@@ -80,10 +89,6 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
                                        `${p.ppm} ppm под спецификација во ${p.room}`);
       case 'biosecurity_logged': return AL(`Biosecurity ${p.kind}: ${p.result}${p.room_name ? ' — ' + p.room_name : ''}`,
                                            `Биобезбедност ${p.kind}: ${p.result}${p.room_name ? ' — ' + p.room_name : ''}`);
-      case 'product_created':  return AL(`${a} created product ${p.product_code} (${p.cultivar})`,
-                                         `${a} креираше производ ${p.product_code} (${p.cultivar})`);
-      case 'product_approved': return AL(`${a} approved product ${p.product_code}`,
-                                         `${a} одобри производ ${p.product_code}`);
       case 'mother_registered': return AL(`${a} registered mother ${p.code} (${p.product_code})`,
                                           `${a} регистрираше мајка ${p.code} (${p.product_code})`);
       case 'campaign_started': return AL(`${a} started selection campaign S${p.seq} (${p.material})`,
@@ -147,12 +152,28 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       case 'unassigned':     return AL(`${a} unassigned you from: ${t}`, `${a} ве отстрани од: ${t}`);
       case 'due_soon':       return AL(`Due today: ${t}`, `Рок денес: ${t}`);
       case 'overdue':        return AL(`Overdue (${p.due}): ${t}`, `Задоцнето (${p.due}): ${t}`);
-      case 'batch_added':    return AL(`${a} added ${p.plant_count} × ${p.strain} to ${p.room} (${p.phase})`,
-                                       `${a} додаде ${p.plant_count} × ${p.strain} во ${p.room} (${p.phase})`);
+      // Batch registration / phase move (cultivation.py). The contract is
+      // `code`, `strain` (cultivar NAME), `room` (room NAME), `plant_count`,
+      // `phase`, and `old_room` / `old_phase` on a move; older events carry
+      // `cultivar` and no room, so every key falls back and nothing prints
+      // "undefined" (review 2026-09-27, R2-FE-04 / INV-02).
+      case 'batch_added': {
+        const b = batchBits(p);
+        return AL(`${a} registered ${b.code}${b.count} × ${b.strain}${b.room ? ' in ' + b.room : ''}${b.phase}`,
+                  `${a} регистрираше ${b.code}${b.count} × ${b.strain}${b.room ? ' во ' + b.room : ''}${b.phase}`);
+      }
       case 'clone_run_started': return AL(`${a} started a clone run: ${p.cultivar} · ${p.planned_count} cuttings from ${p.mothers} mothers (${p.started_on})`,
                                           `${a} започна клонирање: ${p.cultivar} · ${p.planned_count} резници од ${p.mothers} мајки (${p.started_on})`);
-      case 'batch_moved':    return AL(`${a} moved ${p.plant_count} × ${p.strain}: ${p.old_room} (${p.old_phase}) → ${p.room} (${p.phase})`,
-                                       `${a} премести ${p.plant_count} × ${p.strain}: ${p.old_room} (${p.old_phase}) → ${p.room} (${p.phase})`);
+      case 'batch_moved': {
+        const b = batchBits(p);
+        // "old room (old phase) → room (phase)"; whichever side has no room
+        // prints its phase alone, and a phase-only move prints "clone → veg".
+        const side = (room, phase) => room && phase ? `${room} (${phase})` : (room || phase || '');
+        const from = side(p.old_room, p.old_phase), to = side(p.room, p.phase);
+        const hop = from || to ? `: ${from || '?'} → ${to || '?'}` : '';
+        return AL(`${a} moved ${b.code}${b.count} × ${b.strain}${hop}`,
+                  `${a} премести ${b.code}${b.count} × ${b.strain}${hop}`);
+      }
       // The product catalogue (qc/products.py) and the owner's out-of-grade
       // rule of 2026-09-06: a Total Δ9-THC outside the certified product's
       // window is handed to Cultivation and Production as a deviation.
@@ -174,6 +195,19 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
                                                    `${a} ги внесе ImB страниците ${p.doc_code} ${p.doc_version}: ${p.created} внесени, ${p.skipped} прескокнати, ${p.conflicts} конфликти`);
       case 'fitted_catalogue_imported':  return AL(`${a} imported the fitted specifications ${p.doc_code} ${p.doc_version}: ${p.created} created, ${p.skipped} skipped, ${p.conflicts} conflicts`,
                                                    `${a} ги внесе фитуваните спецификации ${p.doc_code} ${p.doc_version}: ${p.created} внесени, ${p.skipped} прескокнати, ${p.conflicts} конфликти`);
+      // The five emitters that still fell to the generic line (review
+      // 2026-09-27, INV-03): the CoQ e-signature (signatures.py), the
+      // commercial identities (commercial.py), the ladder import
+      // (potency_import.py) and the facility layout import (facility_layout.py).
+      case 'coq_signed':         return AL(`${a} signed a certificate of quality (${p.meaning})`, `${a} потпиша сертификат за квалитет (${p.meaning})`);
+      case 'commercial_identity_upserted': return AL(`${a} set the commercial identity of ${p.batch_code}${p.neu_name ? ': ' + p.neu_name : ''}`,
+                                                     `${a} го постави комерцијалниот идентитет на ${p.batch_code}${p.neu_name ? ': ' + p.neu_name : ''}`);
+      case 'portfolio_master_imported': return AL(`${a} imported the portfolio master: ${p.imported} commercial identities`,
+                                                  `${a} го внесе портфолио регистарот: ${p.imported} комерцијални идентитети`);
+      case 'potency_catalogue_imported': return AL(`${a} imported the ${p.family} potency ladders v${p.version}: ${p.created} created, ${p.skipped} skipped, ${p.conflicts} conflicts`,
+                                                   `${a} ги внесе скалите на потентност ${p.family} v${p.version}: ${p.created} внесени, ${p.skipped} прескокнати, ${p.conflicts} конфликти`);
+      case 'facility_layout_imported': return AL(`${a} imported the facility layout${p.source ? ' from ' + p.source : ''}: ${p.created} rooms created, ${p.updated} updated`,
+                                                 `${a} го внесе распоредот на објектот${p.source ? ' од ' + p.source : ''}: ${p.created} соби креирани, ${p.updated} ажурирани`);
       default: {
         // Generic, still bilingual by structure: actor · object · action.
         // The verb is a machine word; it is printed as words, never invented.
@@ -220,6 +254,11 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     harvest_recorded: { en: 'Harvests', mk: 'Жетви' },
     trichome_checked: { en: 'Trichome checks', mk: 'Проверки на трихоми' },
     trichome_corrected: { en: 'Trichome checks corrected', mk: 'Поправени проверки на трихоми' },
+    coq_signed: { en: 'CoQs signed', mk: 'Потпишани CoQ' },
+    commercial_identity_upserted: { en: 'Commercial identities set', mk: 'Поставени комерцијални идентитети' },
+    portfolio_master_imported: { en: 'Portfolio masters imported', mk: 'Внесени портфолио регистри' },
+    potency_catalogue_imported: { en: 'Potency ladders imported', mk: 'Внесени скали на потентност' },
+    facility_layout_imported: { en: 'Facility layouts imported', mk: 'Внесени распореди на објектот' },
   };
   // No backend code emits batch_closed (review 2026-09-27, FE-18) — the case
   // that handled it was dead and has been dropped; an unknown verb prints as
@@ -251,7 +290,9 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
   // Timeline dot colour by verb class (mockup .mw-feed): completions and
   // locks read "ok", stuck-ish state changes "warn", everything else accent.
-  const dotKind = (e) => e.verb === 'report_locked' || e.verb === 'acknowledged' ? 'ok'
+  // The acknowledgement verb is `ack` (collab.py), not 'acknowledged' — the
+  // green dot never lit for one (review 2026-09-27, INV-04).
+  const dotKind = (e) => e.verb === 'report_locked' || e.verb === 'ack' ? 'ok'
     : e.verb === 'overdue' || e.verb === 'due_soon' ? 'warn'
     : e.verb === 'status_changed' ? ((e.params || {}).new === 'completed' ? 'ok' : 'warn') : '';
 

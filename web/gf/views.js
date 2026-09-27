@@ -204,9 +204,11 @@ GF.views = {
         case 'created':        return AL(`New: ${t}`, `Ново: ${t}`);
         case 'ack':            return p.accepted ? AL(`Accepted: ${t}`, `Прифатено: ${t}`) : AL(`Declined: ${t}`, `Одбиено: ${t}`);
         case 'report_locked':  return AL(`Weekly ${p.kind||''} locked`, `Заклучен неделен запис`) + (p.week_start ? ` (${p.week_start})` : '');
-        case 'batch_added':    return `${p.plant_count||''}× ${p.strain||''} → ${p.room||''}`;
+        // Batch events: `strain`/`room` per the cultivation.py contract, with
+        // the older `cultivar` / no-room shape as fallback (R2-FE-04).
+        case 'batch_added':    return `${p.code ? p.code + ' · ' : ''}${p.plant_count ?? '?'}× ${p.strain || p.cultivar || ''}${p.room || p.room_name ? ' → ' + (p.room || p.room_name) : ''}`;
         case 'clone_run_started': return `${p.cultivar||''} · ${p.planned_count||''} cuttings`;
-        case 'batch_moved':    return `${p.strain||''}: ${p.old_room||''} → ${p.room||''}`;
+        case 'batch_moved':    return `${p.code ? p.code + ' · ' : ''}${p.strain || p.cultivar || ''}: ${p.old_room || p.old_phase || '?'} → ${p.room || p.phase || '?'}`;
         case 'handoff':        return AL(`Handoff to ${p.to_dept||''}: ${t}`, `Префрлање до ${p.to_dept||''}: ${t}`);
         case 'handoff_resolved': return AL(`Handoff ${p.status||''}: ${t}`, `Префрлање ${({accepted:'прифатено',rejected:'одбиено',cancelled:'откажано'})[p.status] || p.status || ''}: ${t}`);
         case 'oos_opened':     return `${p.oos_number||''} · ${p.batch_id||''}`;
