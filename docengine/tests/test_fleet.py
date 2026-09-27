@@ -364,11 +364,18 @@ def test_the_authors_are_told_their_reply_is_used_verbatim():
 
 
 def test_the_auditor_is_warned_off_the_both_tokens_verdict():
-    """_qa_audit_passed fails a reply containing BOTH PASS and FIX, so a
-    well-meant 'Verdict: PASS, no fixes needed' kills the document."""
+    """_qa_audit_passed accepts exactly ONE line that is nothing but the
+    verdict, and fails a PASS verdict that has a FIX token anywhere else.
+    The persona has to describe THAT parser, not a looser one: 'Verdict:
+    PASS, no fixes needed' fails because the line carries extra text, and the
+    persona must say so for that reason (the earlier text blamed 'both
+    tokens', which was not what the code checked — review 2026-09-27, DI-15).
+    """
     persona = next(a for a in load_fleet()["agents"] if a["name"] == "gf_qa_auditor")["persona"]
     assert "Verdict: PASS" in persona
-    assert "NEVER write both tokens" in persona
+    assert "Nothing else on that line" in persona
+    assert "NOT a verdict line and FAILS the document" in persona
+    assert "NEVER write the token FIX anywhere in a passing reply" in persona
 
 
 # ── Scope block ─────────────────────────────────────────────────────────────

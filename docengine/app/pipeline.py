@@ -14,7 +14,7 @@ import re
 from . import builder, db, needs
 from .config import settings
 from .letta import LettaClient, LettaError
-from .questionnaires import QUESTIONNAIRES, apply_defaults
+from .questionnaires import QUESTIONNAIRES, apply_defaults, question_keys
 
 log = logging.getLogger("docengine.pipeline")
 
@@ -288,9 +288,23 @@ def _bilingual_gaps(sections: list[dict]) -> list[str]:
 # announces it as "**Verdict: PASS**" after a line of preamble. Matching only a
 # reply that STARTS with PASS therefore rejected genuinely passing audits: seen
 # live, an audit that cleared all six checks was recorded as
-# "§6A audit did not pass" and the document was never built. Allowing a bare
-# leading PASS as well keeps the simple form (and the existing fakes) working.
-_QA_VERDICT = re.compile(r"\bverdict\b\W{0,12}?(PASS|FIX)\b", re.I)
+# "§6A audit did not pass" and the document was never built.
+#
+# The verdict is a LINE, and nothing else may be on it: optional markdown
+# emphasis or a list bullet around it, the word "verdict", a separator, the
+# token, optional trailing emphasis or punctuation. The earlier pattern
+# (`\bverdict\b\W{0,12}?(PASS|FIX)`) matched anywhere in a sentence, so
+# "I cannot give a verdict: PASS would be wrong here. FIX section 6." and
+# "Verdict — PASS with the following blocking issue: FIX 3.0" both PASSED the
+# gate (review 2026-09-27, DI-15). Line-anchored, they do not.
+_QA_VERDICT_LINE = re.compile(
+    r"^\s*[-*>#\s]*[*_]*\s*verdict\s*[*_]*\s*[:—–-]?\s*[*_]*\s*(PASS|FIX)\s*[*_]*[.!]?\s*$",
+    re.I | re.M,
+)
+# A stray machine token outside the verdict line. Case-sensitive on purpose:
+# the persona's token is uppercase, and lower-case prose ("the author should
+# fix the spacing") is not a verdict.
+_QA_FIX_TOKEN = re.compile(r"\bFIX\b")
 
 
 def _norm_head(s: str) -> str:
@@ -354,17 +368,29 @@ def _reg_findings_context(reg_findings: list[str]) -> str:
 def _qa_audit_passed(verdict: str) -> bool:
     """True only on an unambiguous PASS.
 
-    Fail-closed on purpose, in three ways: an empty reply fails, a reply with no
-    recognisable verdict fails, and a reply carrying BOTH tokens fails. This gate
-    is what stands between a draft and a formatted controlled document, so
-    "probably fine" has to count as not passing."""
+    Fail-closed on purpose, in four ways: an empty reply fails; a reply with no
+    verdict LINE fails (a verdict buried in a sentence is not a verdict); a
+    reply with more than one verdict line fails; and a PASS verdict with a FIX
+    token anywhere else in the reply fails. The one concession is a reply that
+    is nothing but the single line "PASS" (or "PASS — …") — the simplest
+    honest answer, and what the offline fakes send. A multi-line reply that
+    merely STARTS with PASS ("PASS\\nBlocking issues: …") is not that and is
+    refused. This gate is what stands between a draft and a formatted
+    controlled document, so "probably fine" has to count as not passing."""
     t = (verdict or "").strip()
     if not t:
         return False
-    found = {m.group(1).upper() for m in _QA_VERDICT.finditer(t)}
-    if found:
-        return found == {"PASS"}
-    return t.upper().startswith("PASS")
+    lines = [m.group(1).upper() for m in _QA_VERDICT_LINE.finditer(t)]
+    if len(lines) != 1:
+        if not lines and "\n" not in t and t.upper().startswith("PASS") \
+                and not _QA_FIX_TOKEN.search(t):
+            return True
+        return False
+    if lines[0] != "PASS":
+        return False
+    # A PASS verdict beside a FIX token is a contradiction, not a pass.
+    rest = _QA_VERDICT_LINE.sub("", t)
+    return not _QA_FIX_TOKEN.search(rest)
 
 
 def _strip_fences(text: str) -> str:
@@ -442,7 +468,15 @@ def _brief(questionnaire_key: str, answers: dict, meta: dict | None = None) -> s
             f"- code: {meta.get('code', '')}",
             f"- version: {meta.get('version', '1.0')}",
         ]
-    for k, v in answers.items():
+    # Only the questionnaire's OWN questions are rendered, in its order. The
+    # validator already refuses unknown keys at the API; iterating the
+    # declaration rather than the caller's dict is the second lock on the
+    # same door — a key that is not a question can never become a line in a
+    # prompt, whatever path put it in `answers`.
+    for k in question_keys(questionnaire_key):
+        if k not in answers or answers[k] in (None, "", []):
+            continue
+        v = answers[k]
         lines.append(f"- {k}: {', '.join(v) if isinstance(v, list) else v}")
     lines.append(
         "NOTE: a number in parentheses after a field name is the EU GMP clause "

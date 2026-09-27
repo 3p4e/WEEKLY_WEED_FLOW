@@ -228,7 +228,7 @@ async def start_workflow(body: WorkflowIn):
     try:
         validate_answers(body.questionnaire, body.answers)
     except InvalidAnswer as e:
-        raise HTTPException(422, f"invalid answer for '{e.qkey}': not a defined option") from e
+        raise HTTPException(422, f"invalid answer for '{e.qkey}': {e.reason}") from e
     if not db.ready():
         raise HTTPException(503, "DocEngine storage unavailable")
     if not LettaClient().configured:

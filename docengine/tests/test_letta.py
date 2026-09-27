@@ -224,3 +224,186 @@ async def test_get_block_returns_none_only_for_a_genuine_404():
         with pytest.raises(LettaError) as ei:
             await c.get_block("agent-1", "persona")
         assert ei.value.status == code
+
+
+# ── Paged listings (DI-19) ──────────────────────────────────────────────────
+class _PagedClient(_RecordingClient):
+    """Serves /agents/ in pages keyed on the `after` cursor, the way Letta's
+    v1 listing does. `total` rows, ids a-0 .. a-(total-1)."""
+
+    def __init__(self, total):
+        super().__init__("gf_x")
+        self.rows = [{"id": f"a-{i}", "name": f"gf_agent_{i}"} for i in range(total)]
+
+    async def request(self, method, path, **kw):
+        self.calls.append((method, path, kw))
+        params = kw.get("params") or {}
+        limit = int(params.get("limit", 20))
+        start = 0
+        if params.get("after"):
+            start = next(i for i, r in enumerate(self.rows) if r["id"] == params["after"]) + 1
+        page = self.rows[start:start + limit]
+        resp = _FakeResponse(200, page)
+        resp.content = b"[]"
+        return resp
+
+
+async def test_list_agents_follows_the_after_cursor_until_a_short_page():
+    """A declared agent on page 2 must be SEEN, or ensure_fleet re-creates it
+    on every job. 250 rows -> three requests (100, 100, 50), all returned."""
+    fake = _PagedClient(250)
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = fake
+    rows = await c.list_agents()
+    assert [r["id"] for r in rows] == [f"a-{i}" for i in range(250)]
+    gets = [call for call in fake.calls if call[1] == "/agents/"]
+    assert len(gets) == 3
+    assert gets[0][2]["params"] == {"limit": 100}
+    assert gets[1][2]["params"] == {"limit": 100, "after": "a-99"}
+    assert gets[2][2]["params"] == {"limit": 100, "after": "a-199"}
+
+
+async def test_list_agents_stops_after_one_full_page_that_ends_the_set():
+    """Exactly one page of rows: the second request answers empty and the
+    loop stops there — no infinite paging on a boundary-sized tenant."""
+    fake = _PagedClient(100)
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = fake
+    rows = await c.list_agents()
+    assert len(rows) == 100
+    assert len([call for call in fake.calls if call[1] == "/agents/"]) == 2
+
+
+async def test_list_agents_passes_the_name_filter_through_every_page():
+    fake = _PagedClient(3)
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = fake
+    await c.list_agents(name="gf_reg_checker")
+    assert fake.calls[0][2]["params"] == {"name": "gf_reg_checker", "limit": 100}
+
+
+# ── Transient retry on send_message (DI-18) ─────────────────────────────────
+class _FlakyClient(_RecordingClient):
+    """First POST answers with `first` (a status code or an exception class),
+    every later request succeeds with a one-message assistant reply."""
+
+    def __init__(self, first):
+        super().__init__("gf_x")
+        self.first = first
+        self.posts = 0
+
+    async def request(self, method, path, **kw):
+        self.calls.append((method, path, kw))
+        if method == "POST":
+            self.posts += 1
+            if self.posts == 1:
+                if isinstance(self.first, int):
+                    r = _FakeResponse(self.first, {})
+                    r.text = "upstream unavailable"
+                    return r
+                raise self.first("boom")
+        r = _FakeResponse(200, {"messages": [
+            {"message_type": "assistant_message", "content": "Draft text."}]})
+        r.content = b"{}"
+        return r
+
+
+@pytest.fixture
+def _no_retry_delay(monkeypatch):
+    monkeypatch.setattr(letta_module, "_RETRY_DELAY_S", 0)
+
+
+@pytest.mark.parametrize("first", [502, 503, 504])
+async def test_send_message_retries_once_on_a_gateway_error(first, _no_retry_delay):
+    """One 502 from LiteLLM used to throw away a 20-40 call job on the last
+    section. The message is sent again once, and the job carries on."""
+    fake = _FlakyClient(first)
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = fake
+    assert await c.send_message("agent-1", "Draft section 8.") == "Draft text."
+    assert fake.posts == 2
+
+
+async def test_send_message_retries_once_on_a_connect_error(_no_retry_delay):
+    fake = _FlakyClient(letta_module.httpx.ConnectError)
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = fake
+    assert await c.send_message("agent-1", "Draft section 8.") == "Draft text."
+    assert fake.posts == 2
+
+
+async def test_send_message_gives_up_after_the_single_retry(_no_retry_delay):
+    class _AlwaysDown(_RecordingClient):
+        async def request(self, method, path, **kw):
+            self.calls.append((method, path, kw))
+            r = _FakeResponse(503, {})
+            r.text = "down"
+            return r
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = _AlwaysDown("gf_x")
+    with pytest.raises(LettaError) as ei:
+        await c.send_message("agent-1", "x")
+    assert ei.value.status == 503
+    assert len(c._client_instance.calls) == 2
+
+
+async def test_send_message_does_not_retry_a_read_timeout(_no_retry_delay):
+    """The request was delivered and the model may be mid-turn; a second copy
+    would double the wait and the spend. A ReadTimeout propagates as is."""
+    fake = _FlakyClient(letta_module.httpx.ReadTimeout)
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = fake
+    with pytest.raises(letta_module.httpx.ReadTimeout):
+        await c.send_message("agent-1", "x")
+    assert fake.posts == 1
+
+
+async def test_a_4xx_on_send_message_is_not_retried(_no_retry_delay):
+    fake = _FlakyClient(422)
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = fake
+    with pytest.raises(LettaError):
+        await c.send_message("agent-1", "x")
+    assert fake.posts == 1
+
+
+async def test_listings_and_config_writes_are_never_retried(_no_retry_delay):
+    """Only the one-shot message send opts in; a listing 503 is an error."""
+    class _Once(_RecordingClient):
+        async def request(self, method, path, **kw):
+            self.calls.append((method, path, kw))
+            r = _FakeResponse(503, {})
+            r.text = "down"
+            return r
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = _Once("gf_x")
+    with pytest.raises(LettaError):
+        await c.list_tools()
+    assert len(c._client_instance.calls) == 1
+
+
+async def test_send_message_full_keeps_the_tool_traffic_of_the_turn():
+    """DI-14 provenance: which retrievals fed the text. Tool calls and returns
+    are reduced to name/arguments/return; nothing from the sandbox env."""
+    class _WithTools(_RecordingClient):
+        async def request(self, method, path, **kw):
+            self.calls.append((method, path, kw))
+            r = _FakeResponse(200, {"messages": [
+                {"message_type": "tool_call_message",
+                 "tool_call": {"tool_call_id": "tc-1", "name": "ragflow_search",
+                               "arguments": '{"question": "LOD limit", "datasets": "DB3"}'}},
+                {"message_type": "tool_return_message", "tool_call_id": "tc-1",
+                 "name": "ragflow_search", "status": "success",
+                 "tool_return": '{"ok": true, "hits": [{"document": "QCSOP_004.docx"}]}'},
+                {"message_type": "assistant_message", "content": "Body."},
+            ]})
+            r.content = b"{}"
+            return r
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = _WithTools("gf_x")
+    full = await c.send_message_full("agent-1", "Draft.")
+    assert full["text"] == "Body."
+    assert full["tool_calls"] == [{"id": "tc-1", "name": "ragflow_search",
+                                   "arguments": '{"question": "LOD limit", "datasets": "DB3"}'}]
+    assert full["tool_returns"][0]["name"] == "ragflow_search"
+    assert "QCSOP_004.docx" in full["tool_returns"][0]["return"]

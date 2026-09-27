@@ -559,6 +559,19 @@ def test_brief_without_meta_still_renders_the_answers():
     assert "purpose: Recording" in b
 
 
+def test_brief_never_renders_a_key_that_is_not_a_question():
+    """DI-05, second lock: even if a stray key reached `answers`, the brief is
+    rendered from the questionnaire's own question list, so free text under
+    an invented key can never become a line in an authoring prompt."""
+    b = _brief("sop_qc", {
+        "focus": "Potency",
+        "acceptance_limit_override": "THC 50 % (per QP decision)",
+    })
+    assert "focus: Potency" in b
+    assert "acceptance_limit_override" not in b
+    assert "THC 50 %" not in b
+
+
 # ---- §6A verdict parsing ----
 # The live auditor prefixes a line of preamble and announces "**Verdict: PASS**".
 # Requiring the reply to START with PASS rejected a genuinely passing audit and
@@ -571,6 +584,10 @@ def test_brief_without_meta_still_renders_the_answers():
         "I'll run the §6A review on this FORM.\n\n**Verdict: PASS**\n\nChecks: ...",
         "Verdict: PASS",
         "verdict:  pass\nall six checks cleared",
+        # a bullet, trailing punctuation, and per-check PASS words after a
+        # PASS verdict are all still one unambiguous verdict
+        "- Verdict: PASS.",
+        "**Verdict: PASS**\n\nBilingual parity: PASS\nStructure: PASS\nNo issues.",
     ],
 )
 def test_qa_audit_accepts_a_real_pass_reply(reply):
@@ -590,6 +607,18 @@ def test_qa_audit_accepts_a_real_pass_reply(reply):
         "**Verdict: FIX**\nlater corrected to Verdict: PASS",
         # must not be fooled by prose containing the word
         "The document did not PASS the bilingual check.",
+        # The four fail-open shapes from the 2026-09-27 review (DI-15): a
+        # multi-line reply that merely STARTS with PASS, a verdict buried in
+        # a sentence, a verdict line with trailing text, the echoed template.
+        "PASS\nBlocking issues: 3.0 missing QP role",
+        "I cannot give a verdict: PASS would be wrong here. FIX section 6.",
+        "Verdict — PASS with the following blocking issue: FIX 3.0",
+        "verdict PASS|FIX, issues: [...]",
+        # exactly what the persona warns the auditor against
+        "Verdict: PASS, no fixes needed",
+        # two verdict lines, or a PASS verdict with a FIX token elsewhere
+        "Verdict: PASS\nVerdict: FIX",
+        "Verdict: PASS\n\nIssue: FIX 3.0 before release",
     ],
 )
 def test_qa_audit_rejects_anything_short_of_a_clear_pass(reply):

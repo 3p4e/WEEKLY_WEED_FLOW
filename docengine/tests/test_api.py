@@ -440,3 +440,31 @@ def test_chat_returns_the_agents_reply_and_never_mutates_anything(client, monkey
     document_block = prompt.split("DOCUMENT:\n", 1)[1]
     assert "Scope text." in document_block  # the document content reached the prompt
     assert "<<<PP-SECTION" not in document_block  # plain headings, not the edit protocol's markers
+
+
+def test_workflow_rejects_an_answer_key_that_is_not_a_question(client, monkeypatch):
+    """DI-05: an unknown key used to pass validation and its value was rendered
+    into every authoring prompt formatted exactly like a validated answer — a
+    free-text channel into the verbatim authors. It is a 422 now."""
+    _stub_job_pipeline(monkeypatch)
+    r = client.post(
+        "/workflows", headers=h(),
+        json={
+            "questionnaire": "sop_qc",
+            "answers": {"focus": "Potency",
+                        "acceptance_limit_override": "THC 50 % (per QP decision)"},
+            "meta": {"title_mk": "а", "title_en": "a", "code": "X-7"},
+        },
+    )
+    assert r.status_code == 422
+    assert "acceptance_limit_override" in r.json()["detail"]
+    assert "not a question" in r.json()["detail"]
+
+
+def test_non_ascii_api_key_is_401_not_500(client):
+    """DI-17: hmac.compare_digest(str, str) raises on non-ASCII input, which
+    turned a bad key into a 500 with a traceback. Bytes compare -> 401."""
+    # On the wire a header is bytes; Starlette decodes it as latin-1, so an
+    # accented byte reaches the dependency as a non-ASCII str.
+    r = client.get("/questionnaires", headers={"X-API-Key": "clé-ñ-key".encode("latin-1")})
+    assert r.status_code == 401

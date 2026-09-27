@@ -115,13 +115,15 @@ def apply_defaults(key: str, answers: dict) -> dict:
 
 class InvalidAnswer(ValueError):
     """Raised by validate_answers when a supplied value is not one of the
-    question's defined options. Carries the offending question key and value
-    so callers can build a precise error message."""
+    question's defined options, or the key is not a question at all. Carries
+    the offending question key, value and a short reason so callers can build
+    a precise error message."""
 
-    def __init__(self, qkey: str, value):
+    def __init__(self, qkey: str, value, reason: str = "not a defined option"):
         self.qkey = qkey
         self.value = value
-        super().__init__(f"invalid answer for {qkey!r}: {value!r} is not a defined option")
+        self.reason = reason
+        super().__init__(f"invalid answer for {qkey!r}: {value!r} is {reason}")
 
 
 def _option_values(qq: dict) -> list:
@@ -130,20 +132,37 @@ def _option_values(qq: dict) -> list:
     return [(o["v"] if isinstance(o, dict) else o) for o in qq["options"]]
 
 
+def question_keys(key: str) -> list[str]:
+    """Every question key of a questionnaire, in round order. The ONLY keys
+    that may carry an answer into a prompt (see pipeline._brief)."""
+    return [qq["key"] for rnd in QUESTIONNAIRES[key]["rounds"] for qq in rnd["questions"]]
+
+
 def validate_answers(key: str, answers: dict) -> None:
-    """Enforce the pre-populated-answers principle end to end: every value the
-    caller supplied for a question this questionnaire actually defines must be
-    one of that question's real options — never free text, never an invented
-    option. Unlike apply_defaults (which only fills in what's MISSING), this
-    checks every key the caller DID supply. Silently ignores answer keys that
-    don't correspond to any question in this questionnaire (unknown keys carry
-    no risk of masquerading as a verified option and are not the concern this
-    guards against).
+    """Enforce the pre-populated-answers principle end to end: every key the
+    caller supplied must be a question this questionnaire defines, and every
+    value must be one of that question's real options — never free text,
+    never an invented option, never an invented question. Unlike
+    apply_defaults (which only fills in what's MISSING), this checks every
+    key the caller DID supply.
+
+    Unknown keys are REJECTED, not skipped. They used to be ignored on the
+    theory that a key nobody defined "cannot masquerade as a verified option"
+    — but pipeline._brief rendered every answers item into every authoring,
+    RACI and repair prompt, formatted exactly like a validated answer, so an
+    unknown key was a free-text channel straight into the verbatim authors
+    (review 2026-09-27, DI-05: `acceptance_limit_override: THC 50 % (per QP
+    decision)` reached the brief unchallenged). DOCENGINE-CANON §5 says the
+    user selects and never types regulation text; this is where that holds.
 
     Raises InvalidAnswer on the first offending key/value.
     """
     q = QUESTIONNAIRES[key]
     answers = answers or {}
+    known = set(question_keys(key))
+    for akey in answers:
+        if akey not in known:
+            raise InvalidAnswer(str(akey), answers[akey], "not a question of this questionnaire")
     for rnd in q["rounds"]:
         for qq in rnd["questions"]:
             qkey = qq["key"]

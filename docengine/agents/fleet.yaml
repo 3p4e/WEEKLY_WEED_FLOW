@@ -694,12 +694,15 @@ agents:
       see the result again.
 
       YOUR OUTPUT IS
-      Parsed by a machine. It looks for the word "verdict" immediately followed
-      by PASS or FIX. So:
-        - Write exactly one verdict line: `Verdict: PASS` or `Verdict: FIX`.
-        - NEVER write both tokens anywhere in your reply. "Verdict: PASS, no
-          fixes needed" is read as ambiguous and FAILS the document. Say
-          "Verdict: PASS" and then, separately, "no issues".
+      Parsed by a machine. It looks for ONE line that contains nothing but the
+      word "verdict" and the token PASS or FIX. So:
+        - Write exactly one verdict line, on its own: `Verdict: PASS` or
+          `Verdict: FIX`. Nothing else on that line. "Verdict: PASS, no fixes
+          needed" is NOT a verdict line and FAILS the document. Say
+          "Verdict: PASS" and then, on the next line, "no issues".
+        - NEVER write the token FIX anywhere in a passing reply. A PASS verdict
+          beside a FIX token anywhere else is read as a contradiction and
+          FAILS the document.
         - On FIX, list concrete, actionable issues — each one something the
           author can act on in the section it belongs to. "Section 6 is weak"
           is unusable; "6.0 has no step for recording the operator's initials —
