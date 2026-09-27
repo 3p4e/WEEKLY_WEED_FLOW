@@ -14,9 +14,9 @@ from pydantic import BaseModel, Field
 
 from app.api.tasks import _assert_scope_visible
 from app.db import rls, rls_users
-from app.deps import dept_family, dept_scope, require_password_set, uuid_or_404
-from app.roles import ELEVATED_ROLES
-from app.notify import participants, safe_emit
+from app.deps import dept_family, dept_lineage, dept_scope, require_password_set, uuid_or_404
+from app.roles import DEPT_SCOPED_ROLES, ELEVATED_ROLES
+from app.notify import participants, safe_emit, savepointed
 from app.roster import display_name, roster
 
 # @username mentions in comments — usernames are the login handles
@@ -109,13 +109,14 @@ async def add_comment(task_id: str, body: CommentReq, user: dict = Depends(requi
             "INSERT INTO task_comments(org_id, task_id, user_id, content) "
             "VALUES ($1,$2,$3,$4) RETURNING id, created_at",
             user["org_id"], task_id, user["id"], content)
+
         # Notify everyone with a participation stake (creator/owner/assignees/
         # prior commenters), never the author (emit guards that). @username
         # mentions (usernames are unique, so plain @token resolves exactly)
         # are listed FIRST so emit's first-reason-wins dedupe labels a
         # mentioned participant as `mentioned`, not `comment` — mentions are
         # the strongest signal in every vendor default.
-        try:
+        async def _emit_comment():
             t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
             mentioned = []
             handles = {h.lower() for h in _MENTION_RE.findall(content)}
@@ -123,30 +124,31 @@ async def add_comment(task_id: str, body: CommentReq, user: dict = Depends(requi
             if handles:
                 async with rls_users(user) as uc:
                     rows = await uc.fetch(
-                        "SELECT id, role, department_id FROM profiles"
+                        "SELECT id, role FROM profiles"
                         " WHERE org_id=$1 AND is_deleted=false"
                         " AND lower(username) = ANY($2::text[])",
                         user["org_id"], sorted(handles)[:16])
                 # A mention notification carries the task title + a comment
                 # preview — deliver it only to people who can actually see the
-                # task (elevated roles, same-department staff, or existing
-                # participants). Otherwise "@operator see <detail>" on an
-                # elevated-only task leaks its title+content into the inbox of
-                # someone who gets 404 on the task itself.
-                task_dept = str(t["department_id"]) if t and t["department_id"] else None
+                # task: elevated roles (org-wide task read under RLS) and the
+                # task's own participants. A base USER reads only tasks they
+                # own or are assigned to (tasks_read), and those people ARE
+                # participants — so "same department" was never a visibility
+                # test for a USER, and a department colleague who was merely
+                # @mentioned received the title and an 80-character preview of
+                # a task that answers 404 to them (review 2026-09-27, BC-17).
                 who_set = {str(w) for w in who}
                 mentioned = [str(r["id"]) for r in rows
-                             if r["role"] != "USER"
-                             or (task_dept and str(r["department_id"] or "") == task_dept)
-                             or str(r["id"]) in who_set]
+                             if r["role"] != "USER" or str(r["id"]) in who_set]
             await safe_emit(c, user, verb="commented", object_type="task", object_id=task_id,
-                       recipients=[(u, "mentioned") for u in mentioned]
-                                  + [(u, "comment") for u in who],
-                       task_id=task_id,
-                       department_id=t["department_id"] if t else None,
-                       params={"title": (t["title"] if t else ""), "preview": content[:80]})
-        except Exception:
-            pass
+                            recipients=[(u, "mentioned") for u in mentioned]
+                                       + [(u, "comment") for u in who],
+                            task_id=task_id,
+                            department_id=t["department_id"] if t else None,
+                            params={"title": (t["title"] if t else ""), "preview": content[:80]})
+        # Savepointed: a failed lookup costs the notification, never the
+        # comment just inserted (BC-13).
+        await savepointed(c, "comment", task_id, _emit_comment)
     return {"id": str(r["id"]), "user_id": str(user["id"]),
             "author": user["full_name"] or user["username"], "content": content,
             "created_at": r["created_at"].isoformat()}
@@ -201,14 +203,13 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
             task_id, body.user_id, user["org_id"], body.role or "assignee", user["id"])
         # Awareness (best-effort): the assignee gets an inbox notification;
         # the event also feeds the shared activity stream.
-        try:
+        async def _emit_assigned():
             t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
             await safe_emit(c, user, verb="assigned", object_type="task", object_id=task_id,
-                       recipients=[(body.user_id, "assigned")], task_id=task_id,
-                       department_id=t["department_id"] if t else None,
-                       params={"title": (t["title"] if t else "")})
-        except Exception:
-            pass
+                            recipients=[(body.user_id, "assigned")], task_id=task_id,
+                            department_id=t["department_id"] if t else None,
+                            params={"title": (t["title"] if t else "")})
+        await savepointed(c, "assignment", task_id, _emit_assigned)
     return {"ok": True}
 
 
@@ -223,14 +224,13 @@ async def unassign(task_id: str, assignee_id: str, user: dict = Depends(require_
         res = await c.execute("DELETE FROM task_assignees WHERE task_id=$1 AND user_id=$2", task_id, assignee_id)
         # Research matrix: assigned AND unassigned notify the (ex-)assignee.
         if res.split()[-1] != "0":
-            try:
+            async def _emit_unassigned():
                 t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
                 await safe_emit(c, user, verb="unassigned", object_type="task", object_id=task_id,
-                           recipients=[(assignee_id, "assigned")], task_id=task_id,
-                           department_id=t["department_id"] if t else None,
-                           params={"title": (t["title"] if t else "")})
-            except Exception:
-                pass
+                                recipients=[(assignee_id, "assigned")], task_id=task_id,
+                                department_id=t["department_id"] if t else None,
+                                params={"title": (t["title"] if t else "")})
+            await savepointed(c, "unassignment", task_id, _emit_unassigned)
     return {"ok": True}
 
 
@@ -253,23 +253,25 @@ async def acknowledge(task_id: str, body: AckReq, user: dict = Depends(require_p
             "INSERT INTO task_comments(org_id, task_id, user_id, content) VALUES ($1,$2,$3,$4)",
             user["org_id"], task_id, user["id"], note)
         # The assigner/owner learns the assignment was accepted or declined.
-        try:
+        async def _emit_ack():
             t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
             who = await participants(c, task_id)
             await safe_emit(c, user, verb="ack", object_type="task", object_id=task_id,
-                       recipients=[(u, "status") for u in who], task_id=task_id,
-                       department_id=t["department_id"] if t else None,
-                       params={"title": (t["title"] if t else ""), "accepted": body.accepted})
-        except Exception:
-            pass
+                            recipients=[(u, "status") for u in who], task_id=task_id,
+                            department_id=t["department_id"] if t else None,
+                            params={"title": (t["title"] if t else ""), "accepted": body.accepted})
+        await savepointed(c, "acknowledgment", task_id, _emit_ack)
     return {"ok": True, "accepted": body.accepted}
 
 
 # ── Cross-department handoffs ───────────────────────────────────────────────
 # The handoffs table has always existed (schema.tasks.sql, 4-state lifecycle);
-# T1 surfaces it. Proposing a handoff pings the TARGET department's head so the
-# receiving side actually learns about it; accepting it re-homes the task into
-# that department (which also makes it visible to that department's board).
+# T1 surfaces it. Proposing a handoff pings the RECEIVING side — the target
+# department's head and the managers of the target department and of every
+# department above it (Cultivation's manager receives a handoff addressed to
+# Cloning) — so that side actually learns about it, and tasks._assert_scope_
+# visible opens the task to them while the proposal is pending (review
+# 2026-09-27, BC-04). Accepting re-homes the task into that department.
 class HandoffIn(BaseModel):
     to_dept_id: UUID
     note: str | None = Field(default=None, max_length=2000)
@@ -301,17 +303,39 @@ async def propose_handoff(task_id: str, body: HandoffIn, user: dict = Depends(re
         await c.execute(
             "INSERT INTO task_comments(org_id, task_id, user_id, content) VALUES ($1,$2,$3,$4)",
             user["org_id"], task_id, user["id"], f"↪ Handoff proposed to {dst['name']}")
-        # Ping the receiving department's head + the task's own participants.
-        try:
-            recips = [(u, "status") for u in await participants(c, task_id)]
+
+        # Ping the receiving side FIRST (emit's first-reason-wins dedupe), then
+        # the task's own participants. The receiving side is the department's
+        # head plus the scoped managers of the target department and of every
+        # department above it — head_user_id alone was never written by
+        # anything, so the one person the proposal exists to reach heard
+        # nothing (BC-04).
+        async def _emit_handoff():
+            # `status` is the reason the notifications CHECK admits for this
+            # (see _REASONS in notifications.py / migration 0016) — the verb
+            # `handoff` on the event is what tells the inbox what happened.
+            recips = []
             if dst["head_user_id"]:
                 recips.append((dst["head_user_id"], "status"))
+            recips += [(m, "status") for m in await _receiving_managers(c, user, body.to_dept_id)]
+            recips += [(u, "status") for u in await participants(c, task_id)]
             await safe_emit(c, user, verb="handoff", object_type="task", object_id=task_id,
-                       recipients=recips, task_id=task_id, department_id=body.to_dept_id,
-                       params={"title": t["title"], "to_dept": dst["name"]})
-        except Exception:
-            pass
+                            recipients=recips, task_id=task_id, department_id=body.to_dept_id,
+                            params={"title": t["title"], "to_dept": dst["name"]})
+        await savepointed(c, "handoff", task_id, _emit_handoff)
     return dict(row)
+
+
+async def _receiving_managers(c, user: dict, to_dept_id) -> list[str]:
+    """The department-scoped managers who answer for `to_dept_id`: those
+    assigned to it or to any department above it (deps.dept_lineage)."""
+    lineage = await dept_lineage(c, to_dept_id)
+    async with rls_users(user) as uc:
+        rows = await uc.fetch(
+            "SELECT id FROM profiles WHERE org_id=$1 AND department_id = ANY($2::uuid[])"
+            " AND is_deleted=false AND is_active AND role = ANY($3::text[])",
+            user["org_id"], lineage, DEPT_SCOPED_ROLES)
+    return [str(r["id"]) for r in rows]
 
 
 @router.get("/tasks/{task_id}/handoffs")
@@ -405,13 +429,13 @@ async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = De
         await ac.execute(
             "INSERT INTO task_comments(org_id, task_id, user_id, content) VALUES ($1,$2,$3,$4)",
             user["org_id"], h["task_id"], user["id"], verb_txt)
-        try:
+
+        async def _emit_resolved():
             recips = [(u, "status") for u in await participants(ac, str(h["task_id"]))]
             recips.append((h["requested_by"], "status"))
-            await safe_emit(ac, user, verb="handoff_resolved", object_type="task", object_id=str(h["task_id"]),
-                       recipients=recips, task_id=h["task_id"],
-                       department_id=t["department_id"] if t else None,
-                       params={"title": (t["title"] if t else ""), "status": body.status})
-        except Exception:
-            pass
+            await safe_emit(ac, user, verb="handoff_resolved", object_type="task",
+                            object_id=str(h["task_id"]), recipients=recips, task_id=h["task_id"],
+                            department_id=t["department_id"] if t else None,
+                            params={"title": (t["title"] if t else ""), "status": body.status})
+        await savepointed(ac, "handoff resolution", h["task_id"], _emit_resolved)
     return {"ok": True, "status": body.status}

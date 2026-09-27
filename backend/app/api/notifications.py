@@ -10,8 +10,10 @@ Design per docs/RESEARCH-NOTIFICATIONS-2026-07.md:
   • POST /notifications/{id}/done      → soft-archive (lifecycle beyond read)
   • GET  /activity                     → the shared append-only feed. Org-wide
                                          for elevated non-dept-scoped roles;
-                                         department-scoped users see their
-                                         department's events plus their own.
+                                         department-scoped managers see their
+                                         department's events plus their own;
+                                         a USER sees their own, and those of
+                                         tasks they can open (_feed_scope).
 
 RLS already confines notification rows to their recipient (notif_select), so
 the inbox endpoints add no extra scoping. The feed's department filter is
@@ -122,6 +124,36 @@ async def mark_done(nid: str, user: dict = Depends(require_password_set)):
     return {"ok": True}
 
 
+def _feed_scope(user: dict, clauses: list, args: list) -> None:
+    """The one visibility predicate /activity and /digest share, over the
+    `events` table. Appends its bind params to `args`.
+
+    A dept-scoped manager sees their department tree's events plus their own
+    actions (a manager with no department assigned falls back to org-wide —
+    the anti-"OWNER-sees-nothing" rule dept_scope() documents). A USER sees
+    their own actions, the events of tasks they can OPEN — tasks_read under
+    RLS on the app_user pool, i.e. tasks they own or are assigned to — and
+    their department's task-less events (a room released, a manifest sealed).
+    Every department event used to be shown to a department's USERs, comment
+    previews and workflow remarks included, for tasks that answer 404 to
+    them (review 2026-09-27, BC-17)."""
+    if user["role"] == "USER":
+        args.append(str(user["id"])); u = len(args)
+        clause = (f"(actor_id=${u}::uuid"
+                  f" OR (task_id IS NOT NULL AND EXISTS (SELECT 1 FROM tasks t WHERE t.id = events.task_id))")
+        if user["department_id"]:
+            args.append(str(user["department_id"])); d = len(args)
+            clause += f" OR (task_id IS NULL AND department_id = ${d}::uuid)"
+        clauses.append(clause + ")")
+        return
+    dept = dept_scope(user) if is_dept_scoped_role(user) else None
+    if dept is None:
+        return  # org-wide
+    args.append(dept); d = len(args)
+    args.append(str(user["id"])); u = len(args)
+    clauses.append(f"(department_id = ANY(app.dept_family(${d}::uuid)) OR actor_id=${u}::uuid)")
+
+
 @router.get("/activity")
 async def activity(
     limit: int = Query(50, ge=1, le=200),
@@ -129,21 +161,12 @@ async def activity(
     user: dict = Depends(require_password_set),
 ):
     """The shared feed. Department-scoped visibility mirrors the task board:
-    dept-scoped managers and USERs see their department's events + their own
-    actions; org-wide roles (execs, QP, ADMIN) see everything."""
+    dept-scoped managers see their department's events + their own actions;
+    a USER sees their own actions and the events of tasks THEY can open (plus
+    their department's task-less events); org-wide roles (execs, QP, ADMIN)
+    see everything."""
     clauses, args = ["true"], []
-    dept = dept_scope(user) if is_dept_scoped_role(user) else (
-        str(user["department_id"]) if user["role"] == "USER" and user["department_id"] else None)
-    # A dept-scoped manager with no department assigned yet must fall back to
-    # org-wide (same anti-"OWNER-sees-nothing" rule dept_scope() itself
-    # documents) — checking only the ROLE here, without also checking whether
-    # dept_scope() actually resolved a department, narrowed such a manager to
-    # "my own actions only" instead.
-    org_wide = user["role"] != "USER" and (not is_dept_scoped_role(user) or dept is None)
-    if not org_wide:
-        args.append(dept)
-        args.append(str(user["id"]))
-        clauses.append(f"(department_id = ANY(app.dept_family(${len(args)-1}::uuid)) OR actor_id=${len(args)}::uuid)")
+    _feed_scope(user, clauses, args)
     if before:
         try:
             args.append(datetime.fromisoformat(before))
@@ -179,17 +202,7 @@ async def digest(
     building either now would be unenforceable dead code."""
     since = datetime.now(timezone.utc) - (timedelta(days=1) if window == "daily" else timedelta(days=7))
     clauses, args = ["created_at >= $1"], [since]
-    dept = dept_scope(user) if is_dept_scoped_role(user) else (
-        str(user["department_id"]) if user["role"] == "USER" and user["department_id"] else None)
-    # A dept-scoped manager with no department assigned yet must fall back to
-    # org-wide (same anti-"OWNER-sees-nothing" rule dept_scope() itself
-    # documents) — checking only the ROLE here, without also checking whether
-    # dept_scope() actually resolved a department, narrowed such a manager to
-    # "my own actions only" instead.
-    org_wide = user["role"] != "USER" and (not is_dept_scoped_role(user) or dept is None)
-    if not org_wide:
-        args.append(dept); args.append(str(user["id"]))
-        clauses.append(f"(department_id = ANY(app.dept_family(${len(args)-1}::uuid)) OR actor_id=${len(args)}::uuid)")
+    _feed_scope(user, clauses, args)
     where = " AND ".join(clauses)
     async with rls(user) as c:
         by_verb = await c.fetch(

@@ -23,13 +23,19 @@ def test_every_task_id_route_calls_the_scope_guard():
     which is exactly how it reopened for 11+ endpoints before. If a new such
     route legitimately needs no guard, add it to _EXEMPT with a reason."""
     from app.main import app
+    from tests.conftest import iter_routes
 
     # Routes that take a task id but genuinely don't need the guard, with why.
     _EXEMPT: dict[str, str] = {}  # none today: every {task_id} route is by-id task access
 
     offenders = []
-    for route in app.routes:
+    seen = 0
+    # iter_routes, not app.routes: the newer FastAPI nests included routers,
+    # and a walk over app.routes found no {task_id} route and passed without
+    # checking anything — the structural guard had gone vacuous.
+    for route in iter_routes(app):
         path = getattr(route, "path", "")
+        seen += "{task_id}" in path
         endpoint = getattr(route, "endpoint", None)
         if endpoint is None:
             continue
@@ -40,6 +46,7 @@ def test_every_task_id_route_calls_the_scope_guard():
         if "_assert_scope_visible" not in src:
             methods = ",".join(sorted(getattr(route, "methods", []) or []))
             offenders.append(f"{methods} {path} ({endpoint.__name__})")
+    assert seen >= 10, f"only {seen} {{task_id}} routes found — the route walk is not seeing the app"
     assert not offenders, (
         "these task-id routes don't call _assert_scope_visible — a dept-scoped "
         "manager could reach a foreign task through them:\n  " + "\n  ".join(offenders))
@@ -463,6 +470,34 @@ async def test_a_parent_manager_files_work_directly_into_a_sub_department(client
     # …and still not into an unrelated department
     assert (await client.post("/tasks", json={"title": "x", "department_id": d2},
                               headers=mgr)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_parent_manager_moves_work_between_their_department_and_a_sub_department(client, admin_headers, org):
+    """Review 2026-09-27, BC-03: create_task admitted the family, update_task
+    compared against the bare scope — so a cultivation manager re-filing a
+    task from Cultivation to Cloning (their own task included) got 403, and
+    moving a Cloning task back needed them to own it."""
+    d1, d2 = await _two_departments(org)
+    child = await _child_department(org, d1)
+    _, mgr = await _manager(client, admin_headers, d1)
+    # a task in the parent department, owned by someone else (the admin)
+    t = await _mk_task(client, admin_headers, "move: parent -> child", d1)
+    r = await client.patch(f"/tasks/{t['id']}", json={"department_id": child}, headers=mgr)
+    assert r.status_code == 200, r.text
+    assert str(r.json()["department_id"]) == child
+    # and back up: a sub-department task the manager does not own
+    in_child = await _mk_task(client, admin_headers, "move: child -> parent", child)
+    r = await client.patch(f"/tasks/{in_child['id']}", json={"department_id": d1}, headers=mgr)
+    assert r.status_code == 200, r.text
+    assert str(r.json()["department_id"]) == d1
+    # a subtask under a parent that lives in the SUB-department is delegable too
+    sub = await _mk_task(client, mgr, "move: subtask under child", child, parent_id=in_child["id"])
+    r = await client.patch(f"/tasks/{sub['id']}", json={"department_id": d2}, headers=mgr)
+    assert r.status_code == 200, r.text
+    # …and the family still ends at the tree: out to an unrelated department stays 403
+    r = await client.patch(f"/tasks/{t['id']}", json={"department_id": d2}, headers=mgr)
+    assert r.status_code == 403, r.text
 
 
 @pytest.mark.asyncio

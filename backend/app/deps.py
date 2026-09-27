@@ -99,6 +99,29 @@ async def dept_family(c, root) -> list[str]:
     return [str(x) for x in (arr or [root])]
 
 
+async def dept_lineage(c, dept_id) -> list[str]:
+    """A department and every department ABOVE it — the inverse of
+    dept_family — as str uuids, nearest first.
+
+    Scope flows down the tree, so the managers responsible for a department
+    are those assigned to it OR to any of its ancestors: the cultivation
+    manager answers for Cloning's overdue task and receives a handoff
+    addressed to Nursery. Every exact-match lookup of "this department's
+    manager" silently found nobody for a sub-department (review 2026-09-27,
+    BC-04 / BC-05); this is the one walk they share. Same depth cap as
+    app.dept_family so a cyclic parent_id terminates. `c` must be a TASKS-
+    database connection; under RLS a foreign org's rows are invisible and an
+    unknown id comes back as [dept_id]."""
+    rows = await c.fetch(
+        "WITH RECURSIVE up(id, parent_id, depth) AS ("
+        "  SELECT d.id, d.parent_id, 0 FROM departments d WHERE d.id = $1::uuid"
+        "  UNION ALL"
+        "  SELECT d.id, d.parent_id, up.depth + 1 FROM departments d"
+        "  JOIN up ON d.id = up.parent_id WHERE up.depth < 8"
+        ") SELECT id FROM up ORDER BY depth", str(dept_id))
+    return [str(r["id"]) for r in rows] or [str(dept_id)]
+
+
 def uuid_or_404(value, detail: str = "Not found") -> None:
     """A malformed (non-uuid) path/body id must be a clean 404, not a 500 from
     asyncpg trying to cast it inside the lookup query."""

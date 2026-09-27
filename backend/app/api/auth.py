@@ -11,9 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
-from app.db import rls_users, tasks_admin_pool, users_admin_pool
+from app.db import rls, rls_users, tasks_admin_pool, users_admin_pool
 from app.deps import get_current_user, require_password_set, require_role, uuid_or_404
-from app.roles import ADMIN, CREATABLE_ROLES, ELEVATED_ROLES, MANAGER_ROLES
+from app.roles import ADMIN, CREATABLE_ROLES, DEPT_SCOPED_ROLES, ELEVATED_ROLES, MANAGER_ROLES
 from app.security import BCRYPT_MAX_BYTES, create_access_token, hash_password, verify_password
 from app.worktime import facility_today
 
@@ -356,6 +356,42 @@ def _require_uuid(value) -> None:
     uuid_or_404(value, "User not found")
 
 
+async def _sync_department_head(actor: dict, user_id, role: str | None, department_id,
+                                previous_department_id=None) -> None:
+    """Keep departments.head_user_id in step with the staff roster.
+
+    A department's head is who a cross-department handoff pings and who may
+    resolve it (collab.py). The column existed since the baseline, and no
+    write path ever set it — so no handoff ever reached its receiver (review
+    2026-09-27, BC-04). ADMIN can set it explicitly (PATCH /departments/{id});
+    this keeps the common case self-maintaining: a department-scoped manager
+    provisioned into (or moved into) a department that has no head becomes
+    its head, and a head who is moved out, demoted or deleted stops being
+    one — the head is never left pointing at someone who no longer runs the
+    place. An existing head is never displaced automatically: a second
+    manager in the same department does not take over.
+
+    Cross-database (profiles live in the users DB, departments in the tasks
+    DB), so this runs on the tasks admin pool under the actor's GUCs — the
+    audit_departments trigger attributes the change to the administrator or
+    manager whose roster action caused it."""
+    uid = str(user_id)
+    is_head_role = role in DEPT_SCOPED_ROLES
+    async with rls(actor, admin=True) as c:
+        # Anywhere this person is still recorded as head but no longer
+        # belongs: a different department now, or no longer a manager.
+        await c.execute(
+            "UPDATE departments SET head_user_id=NULL, updated_at=now()"
+            " WHERE org_id=$1 AND head_user_id=$2::uuid"
+            "   AND (NOT $3::boolean OR id IS DISTINCT FROM $4::uuid)",
+            actor["org_id"], uid, is_head_role, str(department_id) if department_id else None)
+        if is_head_role and department_id:
+            await c.execute(
+                "UPDATE departments SET head_user_id=$2::uuid, updated_at=now()"
+                " WHERE org_id=$1 AND id=$3::uuid AND head_user_id IS NULL",
+                actor["org_id"], uid, str(department_id))
+
+
 async def _validate_department(org_id, department_id) -> None:
     """profiles.department_id is a bare uuid — departments live in the tasks DB
     with no cross-database FK, so validate app-side that it names a real
@@ -402,6 +438,7 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
         # looked to the operator (and to the logs) like "pick another
         # username". Anything not a genuine conflict now surfaces as a 500 and
         # is logged by the request middleware, which is how it gets found.
+    await _sync_department_head(actor, row["id"], body.role, body.department_id)
     # OTP is shown on the creator's screen (email delivery is best-effort, added later).
     return {"user": _public(row), "otp": otp}
 
@@ -522,6 +559,8 @@ async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *M
             " username=username || '__deleted_' || replace(id::text,'-',''), updated_at=now()"
             " WHERE id=$1 AND org_id=$2",
             user_id, actor["org_id"])
+    # A deleted account heads nothing (role=None: no department qualifies).
+    await _sync_department_head(actor, user_id, None, None)
     return {"ok": True}
 
 
@@ -620,4 +659,6 @@ async def update_user(user_id: str, body: UpdateUserReq,
         row = await conn.fetchrow(
             f"UPDATE profiles SET {', '.join(sets)}, updated_at=now()"
             f" WHERE id=${len(args)-1} AND org_id=${len(args)} RETURNING *", *args)
+    if "role" in fields or "department_id" in fields:
+        await _sync_department_head(actor, user_id, row["role"], row["department_id"])
     return _public(row)
