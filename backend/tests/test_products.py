@@ -668,6 +668,9 @@ async def test_certificate_level_history_is_derived_by_the_batch_code_head(clien
                                    a_val=1.0, b_val=20.0)
     await _release_with_components(client, admin_headers, qp, spec, pa, pb, "L-NOHEAD",
                                    a_val=1.0, b_val=22.0)
+    # owner 2026-09-16: an experiment (＊) lot is not used — it certifies nothing here
+    await _release_with_components(client, admin_headers, qp, spec, pa, pb, "GP092602＊",
+                                   a_val=3.0, b_val=25.06)
     hist = (await client.get(f"/qc/products/{prod['id']}/potency-history", headers=admin_headers)).json()
     lvl = hist["certificate_level"]
     assert lvl["n"] == 1 and round(lvl["avg"], 2) == 23.98, lvl
@@ -676,3 +679,4 @@ async def test_certificate_level_history_is_derived_by_the_batch_code_head(clien
     # other code), so the exact plant_batches match serves legacy rows only;
     # a head-less lot is never attributed by guesswork.
     assert "L-NOHEAD" not in {v["lot_code"] for v in lvl["values"]}
+    assert not [v for v in lvl["values"] if "＊" in (v["lot_code"] or "")], "an experiment lot is not evidence"

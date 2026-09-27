@@ -468,6 +468,11 @@ async def _potency_history(c, product) -> dict:
         "   AND parameter_id=sp.component_b_id AND result_numeric IS NOT NULL"
         "   ORDER BY result_date DESC NULLS LAST, created_at DESC LIMIT 1) rb ON true"
         " WHERE ct.status = ANY(ARRAY['APPROVED','RELEASED'])"
+        # Owner 2026-09-16: results of an experiment batch (the ＊ mark, e.g.
+        # JD112501＊) are not used unless that batch is the certifying one —
+        # this source certifies nothing, so a marked lot never counts here.
+        "   AND strpos(coalesce(ct.batch_id,'') || coalesce(ct.cultivation_batch,''), '＊') = 0"
+        "   AND strpos(coalesce(ct.batch_id,'') || coalesce(ct.cultivation_batch,''), '*') = 0"
         "   AND (($2::text IS NOT NULL AND (upper(ct.batch_id) ~ $2::text"
         "                                   OR upper(ct.cultivation_batch) ~ $2::text))"
         "     OR upper(ct.batch_id) IN (SELECT upper(code) FROM plant_batches"

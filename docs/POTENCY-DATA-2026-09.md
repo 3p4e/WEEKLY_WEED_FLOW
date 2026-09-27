@@ -136,12 +136,26 @@ for the fuller parameter set; this note covers only the Total Δ⁹-THC column o
 - **The out-of-grade rule is built** (`PRODUCT-CATALOGUE-2026-09.md`, "The
   out-of-grade rule as built"): a CoQ's Total Δ9-THC outside its product's
   window falls to the product whose window holds it (`regrade_to`), is flagged
-  on the CoQ and printed as REGRADED on the document, sends a
-  `potency_deviation` to the Cultivation and Production managers, and needs a
-  formal OOS naming Total Δ9-THC on the batch before the HoQC can approve. A
-  value in a dead band — Orange Punch Mimosa's 14.16 and 15.38 under the v.03
-  pages — is flagged with no regrade target; under the fitted OPM ladder
-  (8/10/14/17/20) both fall inside a grade.
+  on the CoQ and printed as REGRADED on the document, and sends a
+  `potency_deviation` to the Cultivation and Production managers. The formal
+  OOS on the batch disposition is a **tracked follow-up, not a gate** (owner
+  2026-09-06, "NO for now"; review INS2-01): the CoQ is approved and issued
+  without it, carries `regrade_oos_pending` until one exists, and
+  `GET /qc/coq?regrade_oos_pending=true` lists those still owing one; the
+  document prints the OOS number or "NOT YET OPENED". A value in a dead band —
+  Orange Punch Mimosa's 14.16 and 15.38 under the v.03 pages — is flagged with
+  no regrade target; under the fitted OPM ladder (8/10/14/17/20) both fall
+  inside a grade.
+- **Experiment batches (owner, 2026-09-16 05:46):** results of a `＊`
+  (hand-trim experiment) batch are not used unless that batch is the
+  certifying one. The extraction above predates the rule — it included
+  `JD112501＊`'s credited result (13.93 %, de-duplicated with the entry under
+  `JD112501`) and every "on file, not credited" result — so the Jelly Donuts
+  figures and the counts are as of v10 under the old rule; a re-run should
+  drop `＊` rows that are not the certifying batch. In the app, the
+  certificate-level "tested so far" source skips any certificate whose batch
+  code carries `＊` or `*` (it certifies nothing); a CoQ compiled for such a
+  batch is the certifying record and still counts.
 
 ## Open
 
@@ -150,9 +164,12 @@ for the fuller parameter set; this note covers only the Total Δ⁹-THC column o
   service, and the owner has to state the document version the fitted
   specification was issued under.
 - Strain spellings: PURE MICHIGEN and CLEMOSA A BUD are applied; the four
-  disputed names remain with the owner — see `PRODUCT-CATALOGUE-2026-09.md`.
-  Names here follow the merged master; the import treats each disputed pair as
-  one strain.
-- Whether the regrade rule's details (OOS required at approval rather than
-  opened by the system; deviation at compile; lower nominal on a tie) match
-  the owner's intent — listed as decisions to confirm.
+  disputed names (Jelly Donutz/Donuts, Graps & Crème/Grapes And Cream, Sleepy
+  Joe/Joy, Wedding Crasher/Crusher) remain with the owner — see
+  `PRODUCT-CATALOGUE-2026-09.md`. Names here follow the merged master; both
+  importers treat each disputed pair as one strain (SJ's "Sleepy Joy" through
+  the catalogue's `disputed_spellings`).
+- Whether the regrade rule's details (the formal OOS as a tracked follow-up
+  opened by a person rather than by the system; which OOS counts; deviation
+  at compile; lower nominal on a tie) match the owner's intent — listed as
+  decisions to confirm.
