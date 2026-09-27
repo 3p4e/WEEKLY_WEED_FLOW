@@ -137,6 +137,8 @@ actor's own department. Executives, QP and ADMIN are org-wide as before.
 | Record the harvest **cut** | ✅ | ✅ | ✅ | — | — | ✅ (PHI release) | — |
 | Record **dry weights**, **close** the lot | ✅ | ✅ | — | ✅ | — | — | — |
 | Record irrigation / feed | ✅ | ✅ | — | — | ✅ | — | — |
+| Draft / seal / dispose a **waste manifest** (2026-09-27, A-2) | ✅ | ✅ | ✅ | ✅ (every type) | — | witness | — |
+| Run a **decon cycle**, log gowning / biosecurity (2026-09-27, A-2) | ✅ | ✅ | ✅ | ✅ (`dry` rooms only) | — | swabs, release | — |
 | Open / edit a room | any | any | own kinds, own dept + sub-depts | `dry`, own dept | — | — | — |
 | See harvest view | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | WH/MU read |
 | See a sub-department's tasks | ✅ | ✅ | ✅ (own tree) | — | — | — | — |
@@ -161,8 +163,11 @@ actor's own department. Executives, QP and ADMIN are org-wide as before.
 ## Still open (not decided here)
 
 - **Security manager** has the biosecurity module but no write role in
-  `decon.py` or `waste.py` — read-only by accident. Grant writes, or drop the
-  module: the owner's call.
+  `decon.py` or `waste.py`. The 2026-09-27 fixes left this so deliberately:
+  the writes production needs from the harvest cut onward went to `PR_MGR`
+  (waste manifests for every type; decon, gowning and biosecurity for `dry`
+  rooms only — DECISIONS §2b A-2), and nothing was granted to `SE_MGR`. Grant
+  writes, or drop the module: the owner's call.
 - **Post-harvest beyond the close** (curing, trimming, packaging) is not
   modelled; `production`'s task template lists those steps as attributes only.
 - **Room ↔ phase coupling.** Closed for flowering on 2026-09-27: a batch

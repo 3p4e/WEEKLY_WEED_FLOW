@@ -23,8 +23,8 @@ system" is therefore **no longer a description of what the software does**.
 What it still is, is a statement of validation status: no validation lifecycle
 has been run for these modules, and the §7 gap analysis in
 `ARCHITECTURE-REVIEW-2026-07.md` remains the checklist. The decision that is
-still the owner's to make — and is recorded as open in
-`DECISIONS-2026-09.md` — is whether these modules are operated as controlled
+still the owner's to make — recorded as an open question in
+`DECISIONS-2026-09.md` §2 — is whether these modules are operated as controlled
 electronic records (which requires closing that gap) or as a draft/working
 system whose outputs are transcribed into the paper/QMS record. Until that
 decision, every QC output should be treated as the latter. `README.md` and

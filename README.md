@@ -132,24 +132,26 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 | `backup-offsite` | `rclone/rclone:1`            | Encrypted push of those dumps to Google Drive (rclone crypt) |
 | `capture-mcp`    | `wwf-capture-mcp`            | MCP connector for task capture (`connector/`) |
 
-This table listed three services long after the stack grew to eight — the
-single `db` in particular predates the users/tasks database split. It is what
-`docker-compose.yml` defines as of the 2026-07 review. A ninth service,
-`docengine`, runs on the deployed stacks but is **not** in this compose file;
-its service block is given in [`docs/DEPLOY.md`](docs/DEPLOY.md) and applied
-there.
+This table is what `docker-compose.yml` defines at HEAD, including the
+`docengine` service and the `ai-net` network the host runs it on (added to the
+compose file on 2026-09-27; before that the service block lived only in
+[`docs/DEPLOY.md`](docs/DEPLOY.md)).
 
 The always-on **Letta** agent layer runs in its own pre-existing stack and is
-reached over `host.docker.internal`. Production was provisioned out-of-band, so
-the SSH-based [`deploy.yml`](.github/workflows/deploy.yml) is **manual-dispatch
-only**. Full guide incl. the one-time role bootstrap: [`docs/DEPLOY.md`](docs/DEPLOY.md).
+reached over `host.docker.internal`. Production was provisioned out-of-band;
+[`deploy.yml`](.github/workflows/deploy.yml) is **manual-dispatch only** and
+drives the deploy through the host's kvm4-runner `/shell` API (no SSH), one
+service scope at a time. Full guide incl. the one-time role bootstrap:
+[`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Status & roadmap
 
-This repo is a working task‑tracker prototype + AI gateway + deployable stack.
-The full production target (React/TS, async FastAPI over the Letta Postgres,
-RLS/JWT, Qdrant RAG) is captured in [`docs/SPEC.md`](docs/SPEC.md); what's done
-vs. remaining is in [`docs/STATUS.md`](docs/STATUS.md).
+What the application contains, with dates and provenance, is
+[`docs/review-2026-09-27/inventory.md`](docs/review-2026-09-27/inventory.md);
+its validation status and the open operating-mode decision are in
+[`docs/SCOPE.md`](docs/SCOPE.md); the decisions still waiting on the owner are
+in [`docs/DECISIONS-2026-09.md`](docs/DECISIONS-2026-09.md). `docs/SPEC.md` is
+the original July target and is kept as history.
 
 ## Keyboard shortcuts
 
@@ -157,8 +159,8 @@ vs. remaining is in [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Provenance
 
-Isolated from the multi‑module GrowFlow "Cloud Design" source (Production task
-manager **+** QC‑LIMS). Only the production task‑tracking modules (`gf/*`) and
-the task‑relevant gateway endpoints are included here; the QC‑laboratory, CoA,
-stability and OOS modules are intentionally excluded. See
-[`docs/PROVENANCE.md`](docs/PROVENANCE.md).
+Isolated in July 2026 from the multi‑module GrowFlow "Cloud Design" source
+(Production task manager **+** QC‑LIMS) as the task‑tracking modules only. Since
+August the QC / LIMS, cultivation and DocEngine modules have been built into this
+same application (see the first paragraph and the inventory); the July exclusion
+no longer describes the code. History: [`docs/PROVENANCE.md`](docs/PROVENANCE.md).

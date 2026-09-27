@@ -17,8 +17,8 @@ recorded here.
 | 2026-09-05 | QA may move batches through their phases and edit the cultivar master and the mother bank. |
 | 2026-09-05 | The journey shows every open batch at once. Mothers show the potency tested so far for their strain (average and individual Total THC values). |
 | 2026-09-05 | Batch number = strain abbreviation + mmyy (the cloning month) + nn. Mother ID `GP26_S1M03-2_nnn` (product, facility-wide selection campaign, mother number of that campaign, the mother's own generation, stock number 001–999). Clone ID `<mother>-xx.nnn`, xx = consecutive cutting 00–99, nnn = clone within the cutting 001–999. |
-| 2026-09-05 | Phase durations: cloning 7–14 d (imported clones may stay some days more for quarantine); vegetation 14–17 d; flowering 6–9 weeks in one of six flowering rooms; harvest date from documented trichome-maturation records; harvest/cure/defoliation = end of GACP → start of GMP. |
-| 2026-09-06 | Out-of-grade rule: a batch whose Total THC falls outside its product window drops to the next grade, is flagged visually, gets a formal OOS on disposition, and a deviation goes to Cultivation and Production. An out-of-window CoQ is not blocked from issuance. |
+| 2026-09-05 | Phase durations: cloning 7–14 d (imported clones may stay some days more for quarantine); vegetation 14–17 d; flowering 6–9 weeks in one of six flowering rooms; harvest date from documented trichome-maturation records; "harvest, course and defoliating" (his words) = end of GACP → start of GMP — read as "harvest · coarse trim · defoliation" (D-6, unconfirmed). |
+| 2026-09-06 | Out-of-grade rule: a batch whose Total THC falls outside its product window drops to the next grade, is flagged visually, gets a formal OOS on the batch disposition, and a deviation goes to Cultivation and Production. **"NO for now": an out-of-window CoQ is not blocked from issuance** (16:29 and 18:02) — the OOS is opened alongside, not before. |
 | 2026-09-06 | Strain names as printed in the specifications are canonical (e.g. "Pure Michigen", "Clemosa A Bud"). |
 | 2026-09-06 | Cleanliness grades per area type as the owner listed them; trimming/drying treated as Grade D; the plan coloured by grade. |
 | 2026-09-18 | The flat ±10 % rule is not the grading method; the fitted (data-derived) tolerances apply everywhere; a strain with sparse data gets the full tolerance. The finished specs in the Potency Spec Service are the controlled state. |
@@ -38,7 +38,7 @@ From `docs/review-2026-09-27/instructions.md` §3. Each is in the code today.
 | AD-5 | Clone numbers `.nnn` restart per cutting, not per mother. | wording ambiguous |
 | AD-6 | Caps: generation ≤ 9, mother number ≤ 99, ≤ 999 clones per cutting. | — |
 | AD-7 | (Corrected 2026-09-27: batch-code month is now the cloning month.) | mmyy = cloning month |
-| AD-8 | Journey step label wording for the GACP→GMP step. | "harvest, cure and defoliation" |
+| AD-8 | Journey step label wording for the GACP→GMP step (now "Harvest · coarse trim · defoliation", D-6). | "harvest, course and defoliating" |
 | AD-9 | The production manager may open only `dry` rooms; no room kinds for trimming, curing, packaging. (2026-09-27: production also records waste, decon and gowning for `dry` rooms — §2b A-2.) | — |
 | AD-10 | Trichome verdict vocabulary (immature / approaching / ready / overripe); clear+cloudy+amber must sum to 98–102; never a gate. | "documented records" |
 | AD-11 | Harvest moisture-loss plausibility band 60–92 %, reported not refused. | — |
@@ -61,6 +61,7 @@ Open questions the code already answers, unanswered by the owner:
 | May QC compile a CoQ against a product other than the batch's target? | allowed, unenforced (the compile form offers every APPROVED product of the strain) |
 | Where does the CoQ workbook sync land, with which credential, how is stability handled? | nothing built |
 | Which document code / version are the fitted specifications issued under? | `POST /qc/products/import-fitted` refuses to run without one |
+| Are the QC/LIMS, cultivation and DocEngine records operated as **controlled electronic records**, or as a working system whose outputs are transcribed into the paper QMS? (`SCOPE.md`; the owner's 2026-09-24 09:41 question about a validated, self-updating issuance tracker is the same question) | The code behaves as the former: e-signatures with a role of record, CoQ issuance, DocEngine registration with provenance; `SCOPE.md` still says the latter |
 
 ## 2b. Decisions made by the 2026-09-27 fix workstreams — need the owner's yes or a correction
 
@@ -70,7 +71,7 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 
 | # | What the code does now | Findings |
 | --- | --- | --- |
-| C-1 | Out-of-grade rule as built: the regrade target is the product whose window holds the value (none in a dead band); a deviation notification goes to every CU_MGR and PR_MGR at compile; approval is refused (409) until a formal OOS naming Total Δ9-THC exists on the batch, then the existing §6.4.1 gate holds until it is CLOSED; issuance is not blocked. | QC-04, INS-01, INS-04 |
+| C-1 | Out-of-grade rule as built (corrected in fix round 2 to the owner's "NO for now"): the regrade target is the product whose window holds the value (none in a dead band); a deviation notification goes to every CU_MGR and PR_MGR at compile; the CoQ carries a visible `regrade_oos_pending` flag until a formal OOS naming Total Δ9-THC exists on the batch, and the document prints the regrade and the OOS state; neither approval nor rendering is blocked by the regrade, and the regrade's own open OOS does not trigger the §6.4.1 open-OOS gate (other open OOS still do). | QC-04, INS-01, INS-04, INS2-01 |
 | C-2 | `nearest` tie-break: the lower nominal wins (never over-label); outside every window, the nearest edge, lower nominal on a tie. | AD-12 |
 | C-3 | Version-level supersession: approving the first product of a new `doc_version` retires the strain's products of the old version — a strain's fitted set should be approved in one sitting. | INS-03 |
 | C-4 | The ±10 % ceiling applies to fitted products too: refused, not flagged. | INS-13 |
@@ -82,7 +83,7 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | D-2 | Backward phase moves are a correction right of ADMIN, the executives and QA_MGR, with a reason (the task said "ADMIN/QA"). | CS-06 |
 | D-3 | Forward moves are strictly one stop at a time; nursery and drying are the only skippable stops; clone→flower is refused. | CS-06 |
 | D-4 | PHI is evaluated on `harvested_on` (which must be ≤ today), not on max(cut, today); a backdated cut is judged on its own day. | CS-01 |
-| D-5 | Grades: cultivation rooms stay ungraded (GACP has no class); F-wing IPC labs, sampling rooms, wardrobes and corridors stay null because the owner's rule did not name them; trimming/drying recorded as D with the "officially CNC" note. | INS-07 |
+| D-5 | Grades: cultivation rooms stay ungraded (GACP has no class); F-wing IPC labs, sampling rooms, wardrobes and corridors stay null because the owner's rule did not name them; trimming/drying recorded as D with the "officially CNC" note, and de-bucking C153 / E80 / E81 graded D by analogy (the owner named trimming and drying) — confirm. The E-wing rooms the owner's "E = Grade D" covers are graded in fix round 2 (CS2-06). | INS-07 |
 | D-6 | Journey step reads "Harvest · coarse trim · defoliation" (owner wrote "course"). | INS-11 |
 | D-7 | Closing a batch as harvested settles the manifest's destroyed plant count off the END of the batch (the manifest names no plants); the reason text says so. | CS-07 |
 | B-1 | Only an OOS whose Phase I `invalidated=true` licenses a re-test; a CLOSED OOS with disposition REJECT blocks any CoQ for the batch. | QC-01 |
@@ -112,7 +113,7 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | A-12 | The production password floor is 12; `PASSWORD_POLICY_OVERRIDE=true` lowers it deliberately and is warned at startup. | BC-23 |
 | A-13 | A work session is at most 24 h (422 on entry; the capture importer skips a longer one with a reason). Snapshot labels and pin titles are Monday-based from now on — a one-time visible change. | BC-24, BC-16 |
 | E-1 | QC batch-id fields carry the cultivar code as their constant head (as on the cultivation form). | INS-12 |
-| E-2 | The custody form sends `from_user_id` = previous recipient, so a QC writer can log a hop on the custodian's behalf. | FE-02 |
+| E-2 | WITHDRAWN (fix round 2): it contradicted B-12 — the recorder of a custody hop must be the giver or the receiver, and the form now offers only what the server accepts. | FE-02, QC-29 |
 | E-3 | The SOP Registry / Knowledge stub views (which only printed "retired") are deleted from the shell. | FE-21 |
 | E-4 | The biosecurity board loads the 200 most recent events unfiltered (a backend `pending_only` filter would be cleaner). | FE-10 |
 | E-5 | The "handoffs to your department" list is derived from notifications (a backend `GET /handoffs?to_dept=mine` would be cleaner). | FE-06 |
@@ -133,6 +134,8 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | 2026-09-04 | Accounts renamed by a direct database write, outside the provisioning script. | `backend/scripts/provision_test_accounts.py` still creates `tt.*` names. | Align the script or record the scheme as the standard. |
 | 2026-09-25 | The self-hosted CI runner lives on the production host with the docker socket. | `ops/gh-runner/` | When a separate runner host exists (review DI-02). |
 | 2026-09-26 | `wwf-backup-offsite` was not recreated on the new VM; offsite backups are not running. | `docs/BACKUP.md` | As soon as the rotated Drive credential exists. |
+| 2026-09-14 | The `admin` account carries the trivial password the owner set "just for a short while" (10:09). | Production users database. | The owner said he would change it; no record that he did — the BC-23 floor (12) does not touch existing hashes. |
+| 2026-09-04 | The trial `qc_mgr` account exists "for the trial period" and "will be deleted by an admin" (14:32). | Production users database. | End of the trial period; soft-delete through the app so the audit trail keeps it. |
 
 ## 4. Owner requests with no code yet
 

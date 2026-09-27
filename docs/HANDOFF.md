@@ -29,7 +29,7 @@ the host before acting on it.
 | --- | --- | --- | --- |
 | **#52** | `claude/weekly-read-flow-setup-yft7if` | Carries the whole September work plus the review fixes. Check the head's CI before trusting it: the single runner takes ~30 min per run and a push cancels the previous run. | **Owner merges it**, then deploys per the rollout below. |
 | #55 | `claude/audit-fixes-2026-09` @ `e18acd2` | 8/9 green | Only *Security scan* fails: `weasyprint==69.0` inherited from `main`; #52 bumps it. After #52 merges: **Update branch**. |
-| #53 | `claude/sync-potency-spec-service` @ `63474db` | 8/9 green | Same single failure, same fix. |
+| #53 | `claude/sync-potency-spec-service` @ `63474db` | 8/9 green — **and stale**: the branch holds builder `2026.09.16-27`, production runs `-28` (the owner's two-per-page PDF export of 2026-09-16 exists only in the deployed image). | Same single failure, same fix; before merging, copy `web/index.html` off the running container into the branch (the owner, or an agent he authorises — agents must not push to it otherwise). |
 
 Agents must not push to the #53/#55 branches; one explanatory comment is
 already on each. The repo's **default branch is still
@@ -72,12 +72,17 @@ fail-closed, so backend and docengine must ship in the same window:
    longer falls back to a named account; empty switches the token path off).
 5. Build backend / frontend / docengine from the merge commit, swap one service
    at a time, smoke `/health/ready`.
-6. Product catalogue: `POST /qc/products/import` (dry run, then real) as a QC
-   manager; approve each strain's products as a different QC person or the QP;
-   the fitted specifications are loaded with `POST /qc/products/import-fitted`
-   from the running Potency Spec Service's `GET /api/specs?status=finished`
-   export — the owner has to supply the document code/version they are issued
-   under.
+6. Product catalogue, in this order (owner 2026-09-18: the fitted tolerances
+   are the specification; the flat ±10 % pages are retired): run
+   `POST /qc/products/import` (dry run, then real) **only for the strain
+   renames it carries — do not approve those v.03 products**; then load the
+   fitted specifications with `POST /qc/products/import-fitted` from the
+   running Potency Spec Service's `GET /api/specs?status=finished` export
+   (the owner supplies the document code/version they are issued under); then
+   approve each strain's fitted set in one sitting, as a different QC person
+   or the QP than the author. Approving a fitted product supersedes the
+   strain's v.03 rows; the code refuses to approve an older version once a
+   newer one exists.
 7. Facility register: re-import the layout (`POST /facility/layout/import`) so
    the 34 rooms now carrying the owner's cleanliness grades get them (the import
    never overwrites a grade QA already set).
@@ -93,8 +98,13 @@ fail-closed, so backend and docengine must ship in the same window:
 - Both must be run as standalone commands from the repo root so the owner's
   allow rules match; the rules are written by the cloud environment's setup
   script, which only runs when a *new* session starts.
-- Environment variable `KVM4_RUNNER_TOKEN` holds the stale pre-migration value
-  and is read by nothing; the owner may delete it.
+- Two different things share the name `KVM4_RUNNER_TOKEN`. The **cloud
+  environment variable** of that name (Claude environment settings) is read by
+  nothing — the helpers read `RUNNER_TOKEN` — and holds the stale pre-migration
+  value; the owner may delete *that one*. The **GitHub Actions secret**
+  `KVM4_RUNNER_TOKEN` is required by `deploy.yml` and
+  `migration-rehearsal.yml` and must hold the current runner token; do not
+  delete it.
 
 ## Open decisions and actions for the owner
 
@@ -102,6 +112,10 @@ Security (do not act on these yourself):
 - **Offsite backups are not running.** `wwf-backup-offsite` was never
   recreated on the new VM; only the on-host daily dumps exist. The watchdog
   now reports it (WARN while the container is absent).
+- The temporary relaxations the owner scoped himself (password floor, the
+  renamed accounts, the `admin` password "for a short while", the trial
+  `qc_mgr` account) are listed in `docs/DECISIONS-2026-09.md` §3 with what
+  reverts them; nothing in this note repeats them.
 - Rotate: the OpenUI key and `HF_TOKEN` (visible in a chat screenshot),
   `GITHUB_PAT_WWF` (read through a Google Doc; the original `1.APIs.md`
   probably still holds it), the Google Drive OAuth token + rclone crypt
@@ -122,16 +136,25 @@ Product decisions — all in `docs/DECISIONS-2026-09.md`:
   role-of-record signatures, session split hours, …). Each needs a yes or a
   correction; each is one line.
 - Still unanswered from earlier: room `E34` and the "FDF 3" premise on the
-  plan; which "six CoQs" the owner meant (2026-09-18); the four disputed strain
-  spellings (Jelly Donutz/Donuts, Wedding Crasher/Crusher, Graps & Crème/Grapes
-  And Cream, Clemosa vs Clemosa A Bud) — the code treats each pair as one
-  strain until the owner picks.
+  plan; the four disputed strain spellings (Jelly Donutz/Donuts, Wedding
+  Crasher/Crusher, Graps & Crème/Grapes And Cream, Sleepy Joe/Joy) — the code
+  treats each pair as one strain until the owner picks.
+- The "six CoQs" of 2026-09-18 are answered: the owner (19:14) says they are
+  the six certificates the agent reported missing, and the certificates exist.
+  What is open is on the agent's side — which six were listed, and where in
+  the workbook (v35+) the owner's "everything" is. Locate them and close.
 
 Answered and applied today (do not re-ask): cleanliness grades per area type
 (2026-09-06 list, in `facility_layout.json`), "Pure Michigen" / "Clemosa A Bud"
 as canonical spellings, and an out-of-window CoQ is **not** blocked from
-issuance — it regrades, notifies Cultivation and Production, and approval waits
-for a formal OOS on the batch (2026-09-06 rule).
+issuance — it regrades, notifies Cultivation and Production, carries a visible
+"OOS pending" flag until the formal OOS on the batch disposition exists, and
+the document prints the regrade and the OOS state (the owner's "NO for now" of
+2026-09-06; fix round 2 corrected an approval gate one workstream had built).
+
+The owner has asked six times since 2026-09-06 to **merge to `main` and
+deploy**. That is the standing instruction this branch is working towards
+(task #33); every rollout step above serves it.
 
 ## Local development notes learned today
 
