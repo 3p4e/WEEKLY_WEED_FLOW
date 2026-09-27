@@ -111,3 +111,43 @@ test('a transfer to a named person with no location is a valid destination', asy
   assert.equal(toasts.some(t => t[1] === 'error'), false);
   h.close();
 });
+
+/* ── R2-FE-05 / QC-29 (B-12): the recorder is the giver or the receiver. ── */
+
+test('when someone else holds the sample, the recipient starts on the recorder and the rule is stated', () => {
+  const h = loadGF({ files: ['data.js', 'core.js', 'qccustody-view.js'], preScript: PRE });
+  const w = render(h, [ENTRY1]);                    // u2 holds it; the recorder is u1
+  assert.equal(w.document.getElementById('qcu-xtouser').value, 'u1', 'the recorder can only be the receiver');
+  assert.equal(w.document.getElementById('qcu-xlog').disabled, false);
+  assert.match(w.document.body.innerHTML, /recorded by the person handing the sample over or the person receiving it/);
+  // choosing someone else as receiver makes the recorder a third party
+  w.document.getElementById('qcu-xtouser').value = 'u2';
+  w.GF.WWF.qcCusRecipient();
+  assert.equal(w.document.getElementById('qcu-xlog').disabled, true);
+  h.close();
+});
+
+test('a third-party entry is refused before the call, with the server\'s sentence', async () => {
+  const h = loadGF({ files: ['data.js', 'core.js', 'qccustody-view.js'], preScript: PRE });
+  const w = render(h, [ENTRY1]);
+  w.document.getElementById('qcu-xtype').value = 'LAB_INTERNAL';
+  w.document.getElementById('qcu-xto').value = 'Freezer 1';
+  w.document.getElementById('qcu-xtouser').value = '';
+  let sent = null, toast = null;
+  w.GF.API.qcAddCustody = async (s, b) => { sent = b; return {}; };
+  w.GF.toast = (m) => { toast = m; };
+  await w.GF.WWF.qcCusLogTransfer('smp1');
+  assert.equal(sent, null);
+  assert.match(toast, /not by a third party/);
+  h.close();
+});
+
+test('the custodian recording their own hand-over is a party and is not defaulted as receiver', () => {
+  const h = loadGF({ files: ['data.js', 'core.js', 'qccustody-view.js'], preScript: PRE });
+  h.window.GF.API.user = { role: 'QC_MGR', id: 'u2' };  // u2 holds it
+  const w = render(h, [ENTRY1]);
+  assert.equal(w.document.getElementById('qcu-xtouser').value, '', 'no default receiver for the giver');
+  assert.equal(w.document.getElementById('qcu-xlog').disabled, false);
+  assert.doesNotMatch(w.document.body.innerHTML, /qcu-party-rule/);
+  h.close();
+});

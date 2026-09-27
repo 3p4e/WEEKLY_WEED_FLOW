@@ -126,14 +126,11 @@ test('a signed decon step shows the facility time, not the UTC stamp', () => {
 });
 
 /* ── The rule, over the files this fix owns ───────────────────────────
-   Files the product-catalogue workstream owns are listed as theirs; the
-   cultivation, propagation, harvest, irrigation and facility views were
-   converted in the second fix round (R2-FE-02) and are guarded here like
-   every other file. core.js keeps the raw slice only as fmtDateTime's
+   Every view is guarded: the cultivation, propagation, harvest, irrigation,
+   facility, CoQ and potency views were converted in the second fix round
+   (R2-FE-02). The set stays so a future exemption has to be written down. core.js keeps the raw slice only as fmtDateTime's
    last-resort fallback for an engine without Intl. */
-const OTHER_WORKSTREAMS = new Set([
-  'qcpotency-view.js', 'qccoa-view.js',
-]);
+const OTHER_WORKSTREAMS = new Set([]);
 const RETIRED = /slice\(0, ?16\)\.replace\('T', ?' '\)|replace\('T', ?' '\)\.slice\(0, ?16\)|\.toLocaleString\(\)|toLocaleTimeString\(|created_at\.slice\(11, ?16\)/;
 
 test('no owned view prints an instant by slicing the UTC string or via the browser locale', () => {

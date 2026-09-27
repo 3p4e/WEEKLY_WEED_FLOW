@@ -174,6 +174,46 @@ async def test_qc03_comma_decimal_is_read_under_the_lab_separator(client, admin_
     assert r.status_code == 201 and r.json()["result_numeric"] == 0.6 and r.json()["complies"] is False
 
 
+async def test_qr01_extraction_patch_takes_the_text_and_derives_the_number(client, admin_headers):
+    """QR-01 (QC-03 residual): the eCoA edit box sends the transcribed TEXT
+    (`raw_value`); the server derives the numeric under the laboratory's
+    decimal separator. A comma value on a ',' laboratory is read, on a '.'
+    laboratory refused; a cleared text leaves the line unmeasured."""
+    lab = await _lab(client, admin_headers, name="Comma Lab", decimal_separator=",")
+    spec = await _spec(client, admin_headers, material="QR01-MAT")
+    lead = await _param(client, admin_headers, spec["id"], name="Lead", lo=None, hi=0.5, unit="mg/kg")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-QR01", laboratory_id=lab["id"],
+                          report_date="2026-07-01")
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                          json={"items": [{"raw_label": "Lead", "raw_value": "0,4", "unit": "mg/kg"}]},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    ext = r.json()["extractions"][0]
+    assert ext["numeric_value"] == 0.4 and ext["complies"] is True
+    r = await client.patch(f"/qc/coa-documents/{doc['id']}/extractions/{ext['id']}",
+                           json={"raw_value": "0,6"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["raw_value"] == "0,6" and r.json()["numeric_value"] == 0.6
+    assert r.json()["complies"] is False
+    # text and a disagreeing number → refused
+    r = await client.patch(f"/qc/coa-documents/{doc['id']}/extractions/{ext['id']}",
+                           json={"raw_value": "0,6", "numeric_value": 0}, headers=admin_headers)
+    assert r.status_code == 422 and "disagrees" in r.json()["detail"], r.text
+    # cleared text → unmeasured, nothing invented
+    r = await client.patch(f"/qc/coa-documents/{doc['id']}/extractions/{ext['id']}",
+                           json={"raw_value": ""}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["numeric_value"] is None and r.json()["complies"] is None
+    # a '.' laboratory: the comma is malformed, never truncated to 0
+    dot = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-QR01D", report_date="2026-07-01")
+    r = await client.post(f"/qc/coa-documents/{dot['id']}/extractions",
+                          json={"items": [{"raw_label": "Lead", "raw_value": "0.4", "unit": "mg/kg"}]},
+                          headers=admin_headers)
+    e2 = r.json()["extractions"][0]
+    r = await client.patch(f"/qc/coa-documents/{dot['id']}/extractions/{e2['id']}",
+                           json={"raw_value": "0,6"}, headers=admin_headers)
+    assert r.status_code == 422 and "decimal separator" in r.json()["detail"], r.text
+
+
 async def test_qc17_result_unit_must_match_the_parameter_unit(client, admin_headers):
     spec = await _spec(client, admin_headers, material="QC17-MAT")
     afla = await _param(client, admin_headers, spec["id"], name="Aflatoxin B1", lo=None, hi=2.0, unit="µg/kg")

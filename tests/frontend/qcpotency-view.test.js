@@ -311,3 +311,18 @@ test('the nav registration is the product catalogue, still under the qcpotency k
   h.window.GF.API.user = { role: 'CU_MGR' };
   assert.equal(reg.guard(), true);
 });
+
+test('once a strain holds a later version, the ImB import is not offered and the refusal is shown (QR-02)', () => {
+  const h = load();
+  let html = state(h.window, { products: [GP26, GP24] });          // only v.03 on file
+  assert.ok(html.includes('data-qcp-act="import"'), 'nothing retired yet: the import is offered');
+  const CJ4 = { ...CJ28, id: 'c4', doc_version: 'v.04' };
+  html = state(h.window, { products: [GP26, CJ4] });
+  assert.ok(!html.includes('data-qcp-act="import"'), 'the real import is withdrawn');
+  assert.ok(html.includes('data-qcp-act="import-dry"'), 'the dry run still reports');
+  assert.match(html, /Retired for CJ/);
+  html = state(h.window, { products: [GP26, CJ4], imbPreview: {
+    dry_run: true, doc_code: 'QCSP 001', doc_version: 'v.03', created: [], skipped: [], conflicts: [],
+    cultivars_created: [], cultivars_renamed: [], refused: ['CJ (v.04)'] } });
+  assert.match(html, /qcprod-refused[^>]*>Retired for: CJ \(v\.04\)/);
+});

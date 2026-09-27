@@ -97,6 +97,11 @@ class ExtractionsIn(BaseModel):
 
 class ExtractionPatch(BaseModel):
     parameter_id: str | None = None
+    # QR-01 / QC-03: the reviewer corrects the TRANSCRIBED TEXT; the numeric
+    # of record is derived from it here, under the laboratory's decimal
+    # separator — the client never parses a number. A supplied numeric_value
+    # must still agree with the text.
+    raw_value: str | None = Field(default=None, max_length=400)
     numeric_value: float | None = None
     unit: str | None = Field(default=None, max_length=60)
     test_name: str | None = Field(default=None, max_length=300)
@@ -828,9 +833,12 @@ async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
         # it). An untouched numeric is re-read the same way, so a row graded
         # from a client-parsed number before this rule is corrected on touch.
         sep = await _doc_decimal_separator(c, doc)
+        raw_value = row["raw_value"]
+        if "raw_value" in patch:
+            raw_value = (patch["raw_value"] or "").strip() or None
         numeric = reconcile_numeric(
-            row["raw_value"], patch["numeric_value"] if "numeric_value" in patch else None, sep)
-        if numeric is None and "numeric_value" not in patch:
+            raw_value, patch["numeric_value"] if "numeric_value" in patch else None, sep)
+        if numeric is None and "numeric_value" not in patch and "raw_value" not in patch:
             numeric = row["numeric_value"]
         pid = row["parameter_id"]
         lo, hi, test_name = row["lower_limit"], row["upper_limit"], row["test_name"]
@@ -882,10 +890,10 @@ async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
         row = await c.fetchrow(
             "UPDATE qc_coa_extractions SET parameter_id=$1, test_name=$2, numeric_value=$3,"
             " unit=$4, lower_limit=$5, upper_limit=$6, complies=$7, grade_status=$8,"
-            " lab_verdict=$9, updated_by=$10, updated_at=now()"
+            " lab_verdict=$9, updated_by=$10, updated_at=now(), raw_value=$13"
             " WHERE id=$11 AND document_id=$12 RETURNING *",
             pid, test_name, numeric, unit, lo, hi, complies, grade, lab_verdict,
-            user["id"], eid, doc_id)
+            user["id"], eid, doc_id, raw_value)
         reset = await _invalidate_checklist(c, user, doc_id) if patch else False
     return {**_extract_out(dict(row)), "checklist_reset": reset}
 

@@ -356,6 +356,25 @@
     }).join('');
   };
 
+  // The packaged ImB pages' document version, and how versions order (the
+  // numbers they carry: v.03 < v.04 < "fitted 2026-09-15") — the same rule
+  // the server applies (products._version_key).
+  const IMB_VERSION = 'v.03';
+  const vkey = (v) => (String(v || '').match(/\d+/g) || []).map(Number);
+  const newerThan = (a, b) => {
+    const x = vkey(a), y = vkey(b);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      const p = x[i] === undefined ? -1 : x[i], q = y[i] === undefined ? -1 : y[i];
+      if (p !== q) return p > q;
+    }
+    return false;
+  };
+  // Strains holding a product of a later document version than the ImB pages
+  // (QR-02, owner 2026-09-18): the v.03 pages are retired for them and the
+  // server refuses to import them again.
+  const retiredFor = (products) => [...new Set((products || [])
+    .filter(p => newerThan(p.doc_version, IMB_VERSION)).map(p => p.cultivar_code || ''))].filter(Boolean).sort();
+
   const previewBlock = (r, kind) => {
     if (!r) return '';
     const parts = [
@@ -368,7 +387,9 @@
       parts.push(`${AL('renamed', 'преименувани')}: ${r.cultivars_renamed.map(x => `${GF.esc(x.code)} ${GF.esc(x.from)} → ${GF.esc(x.to)}`).join(', ')}`);
     }
     const conflicts = (r.conflicts || []).map(c => `<div class="ana-note" style="color:var(--red-fg,var(--red))">${GF.esc(c.strain || c.id || '')} — ${GF.esc(c.code || '')} ${AL('is taken by', 'е зафатен од')} ${GF.esc(c.taken_by || '')}</div>`).join('');
-    return `<div class="qcprod-preview" data-kind="${GF.esc(kind)}"><div class="ana-note">${parts.join(' · ')}${r.doc_version ? ` · ${GF.esc(r.doc_code || '')} ${GF.esc(r.doc_version)}` : ''}</div>${conflicts}
+    const refused = (r.refused && r.refused.length)
+      ? `<div class="ana-note qcprod-refused" style="color:var(--red-fg,var(--red))">${AL('Retired for', 'Повлечено за')}: ${r.refused.map(GF.esc).join(', ')} — ${AL('a later specification version exists for these strains; the import is refused for them', 'постои понова верзија на спецификацијата за овие сорти; внесот за нив е одбиен')}</div>` : '';
+    return `<div class="qcprod-preview" data-kind="${GF.esc(kind)}"><div class="ana-note">${parts.join(' · ')}${r.doc_version ? ` · ${GF.esc(r.doc_code || '')} ${GF.esc(r.doc_version)}` : ''}</div>${conflicts}${refused}
       ${r.dry_run && r.created.length ? `<div class="ana-note">${AL('Nothing was written. Import for real to load these as DRAFT products.', 'Ништо не е запишано. Внесете навистина за да се вчитаат како нацрт производи.')}</div>` : ''}</div>`;
   };
 
@@ -376,6 +397,7 @@
     if (!canApprove()) return '';
     const dis = st.importing ? ' disabled' : '';
     const hasProducts = (st.products || []).length > 0;
+    const retired = retiredFor(st.products);
     return `<div class="panel ana-panel qcprod-import" style="margin-bottom:12px">
       <div class="ana-pt" style="margin-bottom:6px">${AL('Fitted specifications (Potency Spec Service export)', 'Фитувани спецификации (извоз од Potency Spec Service)')}</div>
       <div class="ana-note" style="margin-bottom:6px">${AL(
@@ -392,9 +414,10 @@
       <div class="ana-note" style="margin-bottom:6px">${AL(
         'The issued v.03 pages as printed (±10 % of nominal — reference since 2026-09-18). Idempotent on code + version; a cultivar still spelt the August way is renamed as the specification prints it.',
         'Издадените v.03 страници како што се отпечатени (±10 % од номиналот — референца од 2026-09-18). Идемпотентно по код + верзија; сорта со августовски правопис се преименува како во спецификацијата.')}</div>
+      ${retired.length ? `<div class="ana-note qcprod-retired" style="color:var(--amber);margin-bottom:6px">${AL('Retired for', 'Повлечено за')} ${retired.map(GF.esc).join(', ')}: ${AL('a later specification version is on file, so the v.03 pages cannot be imported again (the server refuses); the dry run shows what it would report.', 'постои понова верзија на спецификацијата, па v.03 страниците не може повторно да се внесат (серверот одбива); пробното покажува што би пријавило.')}</div>` : ''}
       <div class="qcs-form">
         ${btn('import-dry', null, AL('Dry run', 'Пробно'), 'btn btn-sm', dis)}
-        ${btn('import', null, st.importing ? AL('Importing…', 'Внесување…') : AL('Import ImB pages', 'Внеси ImB страници'), 'btn btn-sm btn-primary', dis)}
+        ${retired.length ? '' : btn('import', null, st.importing ? AL('Importing…', 'Внесување…') : AL('Import ImB pages', 'Внеси ImB страници'), 'btn btn-sm btn-primary', dis)}
       </div>
       ${previewBlock(st.imbPreview, 'imb')}
       ${hasProducts ? '' : `<details class="qcprod-legacy" style="margin-top:10px"><summary class="ana-note">${AL('Legacy: the August 2026 ladders (retired once a product is approved)', 'Застарено: скалите од август 2026 (повлечени штом се одобри производ)')}</summary>

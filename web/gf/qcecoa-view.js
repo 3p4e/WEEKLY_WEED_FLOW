@@ -124,7 +124,10 @@
     const items = raw.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
       const parts = line.split('|').map(p => p.trim());
       const it = { raw_label: parts[0] };
-      if (parts[1]) { it.raw_value = parts[1]; const n = parseFloat(parts[1]); if (!isNaN(n)) it.numeric_value = n; }
+      // QR-01 / QC-03: the TEXT as printed is what travels; the server reads
+      // the number under the laboratory's own decimal separator ("0,6" on a
+      // ',' laboratory is 0.6, not the 0 that parseFloat made of it).
+      if (parts[1]) it.raw_value = parts[1];
       if (parts[2]) it.unit = parts[2];
       if (parts[3]) it.lab_verdict = parts[3];   // lab's stated verdict — reference only
       return it;
@@ -170,13 +173,10 @@
     const val = gv('qec-ex-val-' + eid);
     const unit = gv('qec-ex-unit-' + eid);
     const pid = gv('qec-ex-param-' + eid);
-    const body = {};
-    if (val === '') body.numeric_value = null;   // deliberately cleared → stays unmeasured
-    else {
-      const n = parseFloat(val);
-      if (isNaN(n)) return GF.toast(AL('Value must be numeric', 'Вредноста мора да е бројчена'), 'error');
-      body.numeric_value = n;
-    }
+    // QR-01: the corrected value goes as the transcribed TEXT (raw_value); the
+    // server derives the numeric under the laboratory's decimal separator and
+    // refuses what it cannot read. '' clears it — the line stays unmeasured.
+    const body = { raw_value: val };
     body.unit = unit || null;
     if (pid) body.parameter_id = pid;            // re-map → server re-grades
     try {
@@ -499,7 +499,7 @@
       if (!canWrite() || st.editEx !== e.id) return row;
       return row + `
       <tr><td colspan="4"><div class="qms-dl" style="align-items:center;flex-wrap:wrap">
-        <input id="qec-ex-val-${e.id}" value="${GF.esc(e.numeric_value != null ? e.numeric_value : '')}" placeholder="${AL('Value', 'Вредност')}" style="width:100px">
+        <input id="qec-ex-val-${e.id}" value="${GF.esc(e.raw_value != null ? e.raw_value : (e.numeric_value != null ? e.numeric_value : ''))}" placeholder="${AL('Value as printed', 'Вредност како е отпечатена')}" style="width:110px">
         <input id="qec-ex-unit-${e.id}" value="${GF.esc(e.unit || '')}" placeholder="${AL('Unit', 'Единица')}" style="width:80px">
         <select id="qec-ex-param-${e.id}">
           <option value="">${AL('Keep parameter', 'Задржи параметар')}</option>

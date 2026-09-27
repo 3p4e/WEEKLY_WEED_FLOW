@@ -185,6 +185,23 @@
     try { const r = await GF.API.qcCreateSfr(body); GF.toast(r.sfr_number + ' ' + AL('created', 'создадено')); await GF.WWF.loadQcCustody(); GF.WWF.qcCusPick(r.id); }
     catch (e) { GF.toast(e.message, 'error'); }
   };
+  // B-12: who may record a hop. With no previous custodian the recorder is
+  // the giver (the server takes from_user_id = the recorder); otherwise the
+  // recorder must be that custodian or the chosen recipient.
+  const me = () => String((GF.API.user || {}).id || '');
+  const recorderIsParty = (fromUser, toUser) =>
+    !fromUser || String(fromUser) === me() || (!!toUser && String(toUser) === me());
+  const PARTY_RULE = () => AL(
+    'A custody transfer is recorded by the person handing the sample over or the person receiving it — not by a third party on their behalf.',
+    'Трансферот на чување го запишува лицето што го предава примерокот или лицето што го прима — не трето лице во нивно име.');
+  // The recipient picker changed: the Log button follows the B-12 rule live.
+  GF.WWF.qcCusRecipient = () => {
+    const b = GF.$('qcu-xlog'), f = GF.$('qcu-xfromuser'), t = GF.$('qcu-xtouser');
+    if (!b) return;
+    const ok = recorderIsParty(f ? f.value : '', t ? t.value : '');
+    b.disabled = !ok;
+    b.title = ok ? '' : PARTY_RULE();
+  };
   GF.WWF.qcCusLogTransfer = async (sampleId) => {
     const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
     const transfer_type = mk('qcu-xtype'), to_location = mk('qcu-xto'), to_user_id = mk('qcu-xtouser');
@@ -207,6 +224,11 @@
     const from_location = mk('qcu-xfrom'), from_user_id = mk('qcu-xfromuser');
     if (from_location) body.from_location = from_location;
     if (from_user_id) body.from_user_id = from_user_id;
+    // QC-29 / B-12 (the owner's rule, which wins over E-2): the entry is
+    // recorded by one of its two parties — the previous custodian handing
+    // it over, or the person receiving it. Refused here with the server's
+    // own sentence rather than by a 403 after the fact.
+    if (!recorderIsParty(from_user_id, to_user_id)) return GF.toast(PARTY_RULE(), 'error');
     // §6.3.1 — the condition confirmed at the handoff.
     const cond = mk('qcu-xcond'); if (cond) body.sample_condition = cond;
     const okv = mk('qcu-xok'); if (okv) body.condition_ok = okv === 'yes';
@@ -343,6 +365,13 @@
     const fromLoc = (last && last.to_location) || '';
     const fromUser = (last && last.to_user_id) || '';
     const people = Object.keys(GF.PEOPLE || {}).filter(id => !(GF.PEOPLE[id] || {}).inactive);
+    // B-12: when someone else holds the sample, the signed-in writer can only
+    // record the hop as its RECEIVER — so the picker starts on them, and the
+    // Log button is disabled (with the rule as its title) while it does not
+    // name a party the recorder is.
+    const myId = me();
+    const defaultTo = (fromUser && String(fromUser) !== myId && people.includes(myId)) ? myId : '';
+    const partyOk = recorderIsParty(fromUser, defaultTo);
     const originRow = last ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
         <span class="ana-note" style="margin:0">${AL('Collected from', 'Преземено од')}:</span>
         <input id="qcu-xfrom" value="${GF.esc(fromLoc)}" readonly placeholder="${AL('(no location on file)', '(нема локација)')}" style="background:var(--surface-2)">
@@ -355,13 +384,14 @@
       ${canWrite() ? originRow + `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
         <select id="qcu-xtype"><option value="">${AL('type…', 'тип…')}</option>${XFER.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
         <input id="qcu-xto" placeholder="${AL('to location', 'до локација')}">
-        <select id="qcu-xtouser"><option value="">${AL('received by…', 'примено од…')}</option>${people.map(id =>
-          `<option value="${GF.esc(id)}">${GF.esc(GF.PEOPLE[id].name || id)}</option>`).join('')}</select>
+        <select id="qcu-xtouser" onchange="GF.WWF.qcCusRecipient()"><option value="">${AL('received by…', 'примено од…')}</option>${people.map(id =>
+          `<option value="${GF.esc(id)}"${id === defaultTo ? ' selected' : ''}>${GF.esc(GF.PEOPLE[id].name || id)}</option>`).join('')}</select>
         <input id="qcu-xreason" placeholder="${AL('reason', 'причина')}" style="flex:1">
         <input id="qcu-xcond" placeholder="${AL('condition at handoff', 'состојба при предавање')}">
         <select id="qcu-xok"><option value="">${AL('intact?', 'исправно?')}</option><option value="yes">${AL('intact', 'исправно')}</option><option value="no">${AL('compromised', 'нарушено')}</option></select>
-        <button class="btn btn-sm" onclick="GF.WWF.qcCusLogTransfer('${sampleId}')">+ ${AL('Log transfer', 'Запиши трансфер')}</button>
-      </div>` : ''}`;
+        <button id="qcu-xlog" class="btn btn-sm" onclick="GF.WWF.qcCusLogTransfer('${sampleId}')"${partyOk ? '' : ` disabled title="${GF.esc(PARTY_RULE())}"`}>+ ${AL('Log transfer', 'Запиши трансфер')}</button>
+      </div>
+      ${fromUser && String(fromUser) !== myId ? `<div class="ana-note qcu-party-rule" style="margin-top:4px">${GF.esc(PARTY_RULE())}</div>` : ''}` : ''}`;
   };
 
   const sfrDetail = (r) => {
