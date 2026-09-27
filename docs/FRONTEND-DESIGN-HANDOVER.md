@@ -1030,3 +1030,46 @@ Blush.
 *End of handover. This document describes the application as it exists at shell version
 `wwf-shell-v3.71.0`. Design freely on top of this information model, tone, and the GxP
 guardrails — those guardrails are the one thing that cannot bend.*
+
+---
+
+## Appendix — Frontend conventions (added 2026-09-27, after the whole-application review)
+
+Rules the code now enforces in `tests/frontend/`; a new view is held to them.
+
+- **No record data inside an inline handler.** `onclick="fn('${GF.esc(x)}')"` is
+  not escaped for JavaScript: the browser decodes the HTML entities *before* the
+  handler text is parsed, so a value with a quote breaks out and runs (this was a
+  stored XSS through a swab code, FE-04). Put the value in a `data-` attribute and
+  read it back — with one delegated listener on a container that persists (a modal
+  body, assigned as `el.onclick = …` so it does not stack), or with `this.dataset.x`
+  in a *static* handler for markup that is re-rendered into `#panels`. Ids, enums
+  and dates may still be interpolated; typed text never.
+  `tests/frontend/xss-inline-handlers.test.js` scans every `web/gf/*.js` for this.
+- **Every instant is printed through `GF.fmtDateTime` / `GF.fmtTime`, and a day
+  is taken from an instant with `GF.fmtDate`.** The backend serialises
+  `timestamptz` in UTC; slicing the string or calling `toLocaleString()` showed
+  every clock 1–2 h early in Skopje (FE-05). `tests/frontend/timestamps.test.js`
+  guards the retired patterns out of the views.
+- **"Today" is `GF.facilityToday()`, never `GF.todayISO()` or `new Date()`**, for
+  anything that touches a record (due dates, overdue markers, pre-filled dates,
+  the calendar's month, the current week). `GF.todayDay` is a live getter on the
+  facility day. `GF.daysSince(day)` is the one "days in phase" rule.
+- **The date picker highlights, it does not choose.** Arrow keys move a cursor;
+  only Enter or a click writes the input and fires `onPick` (FE-08).
+- **A structured code field pre-fills its constant head** (`GF.codeField`), and a
+  batch id uses `GF.batchCodeField`, whose head is the strain's code as on the
+  cultivation batch form (INS-12).
+- **Loaders carry a stale-response guard** (`st.lseq`): the newest request is the
+  only one allowed to write state.
+- **A view registers in the module that owns it** (`modules.js` keys) and its rail
+  items are emitted for that module only (FE-12).
+- **Role gates mirror the route's `require_role`**, in both directions: never show
+  a button the server will refuse, never hide one it allows. Handoff buttons come
+  from `GF.WWF.handoffRights(h)`, the client reading of `collab.py`'s predicate.
+- **Every backend event verb has a bilingual sentence** in the inbox
+  (`notifications-view.js`); an unknown verb prints as words with its object, never
+  as a raw token.
+- **The service worker's `VERSION` is bumped whenever a shell file changes**, and
+  `index.html`, the `sw.js` shell list and `web/gf/*.js` on disk must agree
+  (`tests/frontend/shell-and-gates.test.js`).
