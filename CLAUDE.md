@@ -40,15 +40,23 @@ them. Use these instead of ad-hoc `urllib` heredocs:
 
     python3 ops/agent/rsh.py '<command>' [timeout]      # one command on KVM4
     python3 ops/agent/rsh.py - [timeout] < script.sh    # a script on KVM4
-    python3 ops/agent/gh_api.py GET|POST|PUT|PATCH /repos/3p4e/WEEKLY_WEED_FLOW/...  [json]
+    python3 ops/agent/gh_api.py GET|POST /repos/3p4e/WEEKLY_WEED_FLOW/...  [json]
 
 `gh_api.py` makes the call from KVM4 with `GITHUB_PAT_WWF` (the owner's
 fine-grained token for this repo), because the session's own proxy will not
-carry a personal token. It refuses DELETE and any path outside this repo. Use it
-for what the read-only GitHub App cannot do: re-run a workflow
+carry a personal token. It is an **allow-list**: GET anything under this repo;
+POST only `…/actions/runs/<id>/rerun[-failed-jobs]`,
+`…/actions/workflows/<file>/dispatches` (deploy.yml included — a production
+deploy is inside the pre-approved command) and `…/issues/<n>/comments`.
+Everything else — PUT, PATCH, DELETE, merges, refs, any other POST, any
+path with `..` or percent-encoding — is refused before a request is built.
+Use it for what the read-only GitHub App cannot do: re-run a workflow
 (`POST …/actions/runs/<id>/rerun`), dispatch one (`POST
 …/actions/workflows/<file>/dispatches {"ref": …}`), list runners. `--dry-run`
-prints the request without sending it.
+prints the request without sending it. The token reaches the host as a 0600
+file through the runner's `/file/write` and is shredded on every exit path;
+a `gh_api: WARNING` line means `/file/write` was unavailable and the fallback
+(token in the command text, which the runner records) fired — rotate the PAT.
 
 How the approval works, so it can be repaired:
 - The allow rules live in the cloud environment's **Setup script**, not in the
@@ -73,9 +81,11 @@ autonomously". **That was wrong**, and it cost a session. Correction:
 
 `RUNNER_URL` + `RUNNER_TOKEN` are set and the runner's **`/shell` endpoint works**.
 `deploy.yml` itself drives the whole deploy through that same endpoint — so
-anything the workflow does, the agent can do directly. The blocked
-**`/file/write`** endpoint is **not needed**: write files on the box with a
-heredoc through `/shell`.
+anything the workflow does, the agent can do directly. **`/file/write` works
+too** on the current kvm4-runner (the new VM's runner serves it; `deploy.yml`
+stages its scripts through it and `gh_api.py` stages its token through it —
+the earlier note here calling it "blocked" described the old VM). A heredoc
+through `/shell` also writes files when `/file/write` is unavailable.
 
 ### Getting the build context onto the box (updated 2026-08-31)
 

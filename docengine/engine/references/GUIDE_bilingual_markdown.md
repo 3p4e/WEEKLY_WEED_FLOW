@@ -1,22 +1,24 @@
 # Purely Plant `.docx` — house format and the bilingual Markdown grammar
 
-> ⚠️ **Provenance corrected 2026-09-05.** This file used to head itself
-> "Use the `pp-document-suite` Skill (AUTHORITATIVE)" and point at
-> `pp-document-suite/SKILL.md`. Both claims were wrong and contradicted the two
-> accurate provenance documents in this tree:
+> ⚠️ **Provenance (corrected 2026-09-05, again 2026-09-27).** This file used to
+> head itself "Use the `pp-document-suite` Skill (AUTHORITATIVE)" and point at
+> `pp-document-suite/SKILL.md`; the 2026-09-05 correction then called
+> `docengine/pp-document-suite/` a frozen snapshot and said engine development
+> had moved to letta-stack. Neither is the state of this tree:
 >
-> - **The live engine is `docengine/engine/scripts/`** — the only one this service
->   imports (`app/config.py`: `ENGINE_SCRIPTS = ROOT/"engine"/"scripts"`). That is
->   engine **line B**; see `../PROVENANCE.md` for its per-file canon.
-> - **`docengine/pp-document-suite/` is a frozen preservation snapshot** of engine
->   line A. It is not imported by anything and must not be edited.
-> - **`SKILL.md` does not exist in this repo.** It was part of the packaged skill
->   this snapshot came from; the specs it covered live in `references/` here.
-> - **Both trees are frozen.** Engine development moved to
->   [3p4e/letta-stack](https://github.com/3p4e/letta-stack) — see `../../DEPRECATED.md`.
+> - **The engine is `docengine/engine/scripts/`, and it is the only copy.** It is
+>   what this service imports (`app/config.py`: `ENGINE_SCRIPTS =
+>   ROOT/"engine"/"scripts"`); see `../PROVENANCE.md` for its per-file canon.
+> - **`docengine/pp-document-suite/` no longer exists.** The second copy was never
+>   in the image and never imported, all six of its scripts had drifted, and it
+>   was removed on 2026-09-27 (review DI-23). Nothing here may refer to it.
+> - **This tree is developed here, not mirrored.** Every production DocEngine
+>   image since v22 was built from `docengine/`; `../../DEPRECATED.md` records
+>   why the "frozen mirror of letta-stack" note was withdrawn.
+> - **`SKILL.md` does not exist in this repo.** The specs it covered live in
+>   `references/` here.
 >
-> The house-style rules below are still correct and still what the live engine
-> produces. Only the paths and the "authoritative tree" claim were stale.
+> The house-style rules below are what the engine produces.
 
 **The house format is produced by ONE thing: the engine.** Do not hand-roll formatting,
 do not invent colours, do not guess. Build with the engine, verify with the engine, render
