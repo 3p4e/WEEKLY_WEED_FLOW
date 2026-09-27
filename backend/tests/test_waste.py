@@ -376,6 +376,30 @@ async def test_reconciliation_reports_unaccounted_and_unmanifested_destruction(c
     assert {r["code"]: r for r in rec2}["GP-PART"]["disposed_destroyed"] == 30
 
 
+async def test_a_line_cannot_name_a_closed_batch(client, admin_headers):
+    """Review 2026-09-27, CS2-03 (waste half). A batch closed as destroyed (or
+    harvested) settled its headcount when it closed; a manifest line added for
+    it afterwards would re-open that reconciliation from the waste side, where
+    nothing checks it. 409 naming the batch's state; an open batch still takes
+    a line."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "c182_cl", "Flowering closed")
+    cv = await _cultivar(client, cu_h, "GP", "Closed")
+    gone = await _batch(client, cu_h, room["id"], cv["id"], "GP-GONE", 40)
+    live = await _batch(client, cu_h, room["id"], cv["id"], "GP-LIVE", 40)
+    r = await client.post(f"/cultivation/batches/{gone['id']}/move",
+                          json={"to_phase": "destroyed", "reason": "HLVd cull"}, headers=cu_h)
+    assert r.status_code == 200, r.text
+    m = await _manifest(client, cu_h, "WM-CLOSED")
+    r = await client.post(f"/waste/manifests/{m['id']}/lines",
+                          json={"batch_id": gone["id"], "plant_qty": 5}, headers=cu_h)
+    assert r.status_code == 409, r.text
+    assert "GP-GONE" in r.json()["detail"] and "destroyed" in r.json()["detail"]
+    r = await client.post(f"/waste/manifests/{m['id']}/lines",
+                          json={"batch_id": live["id"], "plant_qty": 5}, headers=cu_h)
+    assert r.status_code == 201, r.text
+
+
 async def test_production_manager_records_manifests(client, admin_headers):
     """Review 2026-09-27, BC-12: everything from the harvest cut onward is
     production's (DEPARTMENT-MODEL-2026-09), yet only the cultivation manager

@@ -201,7 +201,8 @@ async def _room_or_422(c, room_id: str):
 async def _batch_or_422(c, batch_id: str):
     uuid_or_422(batch_id, "Unknown batch")
     b = await c.fetchrow(
-        "SELECT b.id, b.code, b.plant_count, b.room_id FROM plant_batches b WHERE b.id=$1",
+        "SELECT b.id, b.code, b.plant_count, b.room_id, b.phase, b.is_active"
+        " FROM plant_batches b WHERE b.id=$1",
         batch_id)
     if b is None:
         raise HTTPException(422, "Unknown batch")
@@ -314,6 +315,14 @@ async def add_line(manifest_id: str, body: LineIn,
         room_id = body.room_id
         if body.batch_id is not None:
             b = await _batch_or_422(c, body.batch_id)
+            # A closed batch settled its plants when it closed (harvested or
+            # destroyed: the headcount was reconciled then). A line declaring
+            # more of it afterwards would re-open that reconciliation from the
+            # waste side, where nothing checks it (review 2026-09-27, CS2-03).
+            if b["phase"] in ("harvested", "destroyed") or not b["is_active"]:
+                raise HTTPException(
+                    409, f"batch {b['code']} is {b['phase']} — its plants were settled when "
+                         "it closed; a manifest line cannot be added for a closed batch")
             # Default the line's room to the batch's own, so the physical origin
             # is recorded even when the person entering it does not restate it.
             if room_id is None and b["room_id"] is not None:
