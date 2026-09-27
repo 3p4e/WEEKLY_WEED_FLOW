@@ -199,6 +199,27 @@ async def test_import_skips_a_session_longer_than_a_day(client, admin_headers, o
     assert any("24 hours" in s["reason"] for s in r.json()["skipped"]), r.json()
 
 
+async def test_import_accepts_a_session_whose_two_timestamps_differ_in_tz_awareness(client, admin_headers, org):
+    """Review 2026-09-27, R2-BC-06. `{"started_at": "…T09:00:00", "ended_at":
+    "…T18:00:00+02:00"}` is legal for the model; subtracting the pair in
+    _validate raised TypeError before the per-task try, so the WHOLE import
+    answered 500. Both ends are normalised to the facility clock first: a
+    9-hour sitting imports, a two-day one is skipped with the usual reason."""
+    payload = _payload(ref="mixed-tz-1")
+    payload["tasks"][0]["sessions"] = [
+        {"started_at": "2026-07-06T09:00:00", "ended_at": "2026-07-06T18:00:00+02:00"}]
+    r = await client.post("/capture/import", json=payload, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["created"] == 1 and r.json()["skipped"] == [], r.json()
+    payload = _payload(ref="mixed-tz-2")
+    payload["tasks"][0]["sessions"] = [
+        {"started_at": "2026-07-06T09:00:00+02:00", "ended_at": "2026-07-08T18:00:00"}]
+    r = await client.post("/capture/import", json=payload, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["created"] == 0
+    assert any("24 hours" in x["reason"] for x in r.json()["skipped"]), r.json()
+
+
 # 48 hex characters — what `openssl rand -hex 24` (the documented generator) yields.
 _REAL_TOKEN = "3f1c9e7a5b2d4c8e6a0f1b3d5c7e9a2b4d6f8c0e1a3b5d7f"
 

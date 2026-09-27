@@ -186,9 +186,13 @@ def _validate(t: CaptureTask) -> str | None:
     # One sitting of work is at most a day (tasks.SessionIn carries the same
     # bound): a session over it is a typo, and it would be bucketed whole
     # into the Thursday report's off-hours evidence (BC-24).
+    # Both ends through _tz first: the model accepts a naive and an aware
+    # timestamp side by side, and subtracting them raised TypeError before
+    # the per-task try — the whole import answered 500 instead of one task
+    # being skipped with a reason (review 2026-09-27, R2-BC-06).
     for s in t.sessions:
         span_h = s.hours if s.hours is not None else (
-            (s.ended_at - s.started_at).total_seconds() / 3600.0 if s.ended_at else None)
+            (_tz(s.ended_at) - _tz(s.started_at)).total_seconds() / 3600.0 if s.ended_at else None)
         if span_h is not None and span_h > MAX_SESSION_HOURS:
             return f"session longer than {MAX_SESSION_HOURS} hours"
     return None
@@ -324,7 +328,7 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                     # generic phrasing here instead of composing a more specific
                     # ("outside your department scope") message.
                     try:
-                        await _assert_scope_visible(c, str(row["id"]), actor)
+                        await _assert_scope_visible(c, str(row["id"]), actor, include_handoffs=False)
                     except HTTPException:
                         skipped.append({"external_ref": t.external_ref,
                                          "reason": "task not found or not permitted"})

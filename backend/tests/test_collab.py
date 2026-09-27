@@ -315,6 +315,74 @@ async def test_handoff_reaches_the_receiving_manager_who_can_open_the_task_while
     assert (await client.get(f"/tasks/{tid}", headers=cu_h)).status_code == 404
 
 
+async def test_a_pending_handoff_opens_the_task_to_the_receiving_manager_for_reading_only(
+        client, admin_headers):
+    """Review 2026-09-27, R2-BC-04. A proposal addressed to my department lets
+    me OPEN the task to accept or reject it — it does not make the task mine
+    to edit. The receiving manager could retitle it, log sessions on it, move
+    its status and sign it off while it still sat in the source department,
+    and attach a subtask of their own to it, which kept the parent in their
+    scope through the "child in my family" arm after the proposal was
+    rejected. Reads and the comment thread keep the pending-handoff arm;
+    every write is refused (404, the guard's usual answer) until the handoff
+    is accepted and the task actually moves."""
+    src = (await client.post("/departments", json={"code": "hr_src", "name": "Source"},
+                             headers=admin_headers)).json()
+    cult = (await client.post("/departments", json={"code": "hr_cult", "name": "Cultivation"},
+                              headers=admin_headers)).json()
+    _, src_mgr_h = await _mgr(client, admin_headers, "QC_MGR", src["id"])
+    _, cu_h = await _mgr(client, admin_headers, "CU_MGR", cult["id"])
+    tid = (await client.post("/tasks", json={"title": "Clones needed", "department_id": src["id"]},
+                             headers=src_mgr_h)).json()["id"]
+    r = await client.post(f"/tasks/{tid}/handoffs", json={"to_dept_id": cult["id"]}, headers=src_mgr_h)
+    assert r.status_code == 201, r.text
+    hid = r.json()["id"]
+
+    # reads and the discussion around the proposal
+    assert (await client.get(f"/tasks/{tid}", headers=cu_h)).status_code == 200
+    assert (await client.get(f"/tasks/{tid}/handoffs", headers=cu_h)).status_code == 200
+    assert (await client.get(f"/tasks/{tid}/comments", headers=cu_h)).status_code == 200
+    assert (await client.post(f"/tasks/{tid}/comments", json={"content": "can we make it Nursery?"},
+                              headers=cu_h)).status_code == 201
+    # …but nothing that changes the task or hangs new records off it
+    writes = [
+        ("patch", f"/tasks/{tid}", {"title": "Renamed by the receiver"}),
+        ("patch", f"/tasks/{tid}", {"status": "completed"}),
+        ("post", f"/tasks/{tid}/workflow", {"action": "SUBMIT"}),
+        ("post", f"/tasks/{tid}/sessions", {"started_at": "2026-07-06T09:00:00", "hours": 1}),
+        ("post", f"/tasks/{tid}/progress", {"day_label": "Mon", "note": "x"}),
+        ("post", f"/tasks/{tid}/links", {"url": "https://example.invalid/x", "label": "x"}),
+        ("post", f"/tasks/{tid}/assignees", {"user_id": str(uuid.uuid4())}),
+        ("post", f"/tasks/{tid}/handoffs", {"to_dept_id": src["id"]}),
+    ]
+    for method, path, body in writes:
+        r = await getattr(client, method)(path, json=body, headers=cu_h)
+        assert r.status_code == 404, (method, path, r.status_code, r.text)
+    # a subtask under the pending task is a write on it too: refused, so the
+    # parent cannot be pinned into the receiver's scope through a child
+    r = await client.post("/tasks", json={"title": "child", "parent_id": tid,
+                                          "department_id": cult["id"]}, headers=cu_h)
+    assert r.status_code == 404, r.text
+    t = (await client.get(f"/tasks/{tid}", headers=src_mgr_h)).json()["task"]
+    assert t["title"] == "Clones needed" and t["status"] != "completed"
+
+    # rejected → out of scope again, with no child left behind to keep it
+    r = await client.post(f"/handoffs/{hid}/resolve", json={"status": "rejected"}, headers=cu_h)
+    assert r.status_code == 200, r.text
+    assert (await client.get(f"/tasks/{tid}", headers=cu_h)).status_code == 404
+    assert tid not in {x["id"] for x in (await client.get("/tasks", headers=cu_h)).json()}
+
+    # accepted → the task moves, and only then does the receiver edit it
+    hid = (await client.post(f"/tasks/{tid}/handoffs", json={"to_dept_id": cult["id"]},
+                             headers=src_mgr_h)).json()["id"]
+    assert (await client.post(f"/handoffs/{hid}/resolve", json={"status": "accepted"},
+                              headers=cu_h)).status_code == 200
+    r = await client.patch(f"/tasks/{tid}", json={"title": "Now ours"}, headers=cu_h)
+    assert r.status_code == 200, r.text
+    r = await client.post("/tasks", json={"title": "child", "parent_id": tid}, headers=cu_h)
+    assert r.status_code == 201, r.text
+
+
 async def test_department_head_is_maintained_by_the_roster_and_editable_by_admin(client, admin_headers):
     """The head follows the roster (first scoped manager in, out again on
     move/demotion/delete; an existing head is never displaced automatically)

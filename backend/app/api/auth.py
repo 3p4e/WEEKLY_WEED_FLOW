@@ -392,6 +392,28 @@ async def _sync_department_head(actor: dict, user_id, role: str | None, departme
                 actor["org_id"], uid, str(department_id))
 
 
+async def _sync_department_head_safe(actor: dict, user_id, role: str | None, department_id,
+                                     what: str) -> bool:
+    """_sync_department_head, logged and swallowed. The roster write it
+    follows has already committed in the users database; the head lives in
+    the tasks database and its own transaction. A failure there (pool
+    exhausted, statement timeout) used to surface as a 500 AFTER the profile
+    existed — the one-time password the administrator had to read off the
+    screen was never returned, and on delete/update the 500 suggested nothing
+    had happened while the roster change stood (review 2026-09-27, R2-BC-07).
+    The head is derivable from the roster and settable by ADMIN (PATCH
+    /departments/{id}), so a missed sync is a logged repair, never a lost
+    credential. Returns whether the sync ran."""
+    try:
+        await _sync_department_head(actor, user_id, role, department_id)
+        return True
+    except Exception:  # noqa: BLE001 — the roster write stands; the head is repairable
+        log.warning("department head sync failed after %s of user %s — the roster change "
+                    "stands; set departments.head_user_id by hand (PATCH /departments/{id})",
+                    what, user_id, exc_info=True)
+        return False
+
+
 async def _validate_department(org_id, department_id) -> None:
     """profiles.department_id is a bare uuid — departments live in the tasks DB
     with no cross-database FK, so validate app-side that it names a real
@@ -438,7 +460,9 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
         # looked to the operator (and to the logs) like "pick another
         # username". Anything not a genuine conflict now surfaces as a 500 and
         # is logged by the request middleware, which is how it gets found.
-    await _sync_department_head(actor, row["id"], body.role, body.department_id)
+    # Before the response is built, and never allowed to lose it: the OTP
+    # below is the only copy the administrator will ever see.
+    await _sync_department_head_safe(actor, row["id"], body.role, body.department_id, "create")
     # OTP is shown on the creator's screen (email delivery is best-effort, added later).
     return {"user": _public(row), "otp": otp}
 
@@ -560,7 +584,7 @@ async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *M
             " WHERE id=$1 AND org_id=$2",
             user_id, actor["org_id"])
     # A deleted account heads nothing (role=None: no department qualifies).
-    await _sync_department_head(actor, user_id, None, None)
+    await _sync_department_head_safe(actor, user_id, None, None, "delete")
     return {"ok": True}
 
 
@@ -660,5 +684,5 @@ async def update_user(user_id: str, body: UpdateUserReq,
             f"UPDATE profiles SET {', '.join(sets)}, updated_at=now()"
             f" WHERE id=${len(args)-1} AND org_id=${len(args)} RETURNING *", *args)
     if "role" in fields or "department_id" in fields:
-        await _sync_department_head(actor, user_id, row["role"], row["department_id"])
+        await _sync_department_head_safe(actor, user_id, row["role"], row["department_id"], "update")
     return _public(row)

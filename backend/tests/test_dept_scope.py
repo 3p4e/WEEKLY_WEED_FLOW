@@ -52,6 +52,44 @@ def test_every_task_id_route_calls_the_scope_guard():
         "manager could reach a foreign task through them:\n  " + "\n  ".join(offenders))
 
 
+def test_every_task_id_write_route_evaluates_scope_without_the_handoff_arm():
+    """Companion to the guard test above (review 2026-09-27, R2-BC-04). The
+    pending-handoff arm of _assert_scope_visible is READ scope: it lets the
+    receiving manager open a task offered to their department. Every route
+    that WRITES to a task by id must evaluate the rule without it
+    (include_handoffs=False), or a proposal that has not been accepted lets
+    the receiver edit, sign off and hang records off a task that still
+    belongs to the source department. Reads keep the arm; the comment thread
+    is the one write that does (the discussion around the proposal)."""
+    from app.main import app
+    from tests.conftest import iter_routes
+
+    _KEEP_ARM: dict[str, str] = {
+        "add_comment": "the comment thread is where the proposal is discussed",
+    }
+    offenders, seen = [], 0
+    for route in iter_routes(app):
+        path = getattr(route, "path", "")
+        endpoint = getattr(route, "endpoint", None)
+        if endpoint is None:
+            continue
+        targets_a_task = "{task_id}" in path or path == "/sessions/{session_id}"
+        methods = set(getattr(route, "methods", []) or [])
+        if not targets_a_task or methods <= {"GET", "HEAD", "OPTIONS"}:
+            continue
+        seen += 1
+        if endpoint.__name__ in _KEEP_ARM:
+            continue
+        src = inspect.getsource(endpoint)
+        if "include_handoffs=False" not in src:
+            offenders.append(f"{','.join(sorted(methods))} {path} ({endpoint.__name__})")
+    assert seen >= 8, f"only {seen} writing task-id routes found — the route walk is not seeing the app"
+    assert not offenders, (
+        "these task-id WRITE routes evaluate scope with the pending-handoff arm — "
+        "a receiving manager could edit a task that has not been handed over yet:\n  "
+        + "\n  ".join(offenders))
+
+
 async def _two_departments(org):
     from app.db import tasks_admin_pool
     rows = await tasks_admin_pool().fetch(

@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.tasks import _assert_scope_visible
+from app.api.tasks import _assert_scope_visible, task_in_scope
 from app.db import rls, rls_users
 from app.deps import dept_family, dept_lineage, dept_scope, require_password_set, uuid_or_404
 from app.roles import DEPT_SCOPED_ROLES, ELEVATED_ROLES
@@ -124,22 +124,38 @@ async def add_comment(task_id: str, body: CommentReq, user: dict = Depends(requi
             if handles:
                 async with rls_users(user) as uc:
                     rows = await uc.fetch(
-                        "SELECT id, role FROM profiles"
+                        "SELECT id, role, department_id FROM profiles"
                         " WHERE org_id=$1 AND is_deleted=false"
                         " AND lower(username) = ANY($2::text[])",
                         user["org_id"], sorted(handles)[:16])
                 # A mention notification carries the task title + a comment
                 # preview — deliver it only to people who can actually see the
-                # task: elevated roles (org-wide task read under RLS) and the
-                # task's own participants. A base USER reads only tasks they
-                # own or are assigned to (tasks_read), and those people ARE
+                # task: the task's own participants, org-wide roles, and a
+                # department-scoped manager only when the task is inside their
+                # department scope. A base USER reads only tasks they own or
+                # are assigned to (tasks_read), and those people ARE
                 # participants — so "same department" was never a visibility
                 # test for a USER, and a department colleague who was merely
                 # @mentioned received the title and an 80-character preview of
                 # a task that answers 404 to them (review 2026-09-27, BC-17).
+                # The app's boundary for a MANAGER is the department scope
+                # (tasks._assert_scope_visible), not RLS: a QC manager
+                # @mentioned on a Cultivation task got the same title and
+                # preview of a task their GET answers 404 for (R2-BC-05), so
+                # a scoped manager is asked the same rule the guard applies.
                 who_set = {str(w) for w in who}
-                mentioned = [str(r["id"]) for r in rows
-                             if r["role"] != "USER" or str(r["id"]) in who_set]
+                mentioned = []
+                for r in rows:
+                    uid = str(r["id"])
+                    if uid in who_set:
+                        mentioned.append(uid)
+                    elif r["role"] == "USER":
+                        continue
+                    elif r["role"] in DEPT_SCOPED_ROLES and r["department_id"]:
+                        if await task_in_scope(c, task_id, str(r["department_id"]), uid):
+                            mentioned.append(uid)
+                    else:
+                        mentioned.append(uid)
             await safe_emit(c, user, verb="commented", object_type="task", object_id=task_id,
                             recipients=[(u, "mentioned") for u in mentioned]
                                        + [(u, "comment") for u in who],
@@ -178,7 +194,7 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
         # An elevated role is any manager, not just an org-wide one — without
         # this, a dept-scoped manager's "elevated" status above would let them
         # assign/unassign on ANY task in the org, not just their own scope.
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         # task_assignees.user_id has NO foreign key (profiles live in the
         # users database), so this org-membership check is the ONLY integrity
         # guard on assignee ids: it stops both a dangling uuid and a cross-org
@@ -220,7 +236,7 @@ async def unassign(task_id: str, assignee_id: str, user: dict = Depends(require_
         task = await _task_or_404(c, task_id)
         if not _can_manage_task(user, task):
             raise HTTPException(403, "Only the task owner or an elevated role can unassign")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         res = await c.execute("DELETE FROM task_assignees WHERE task_id=$1 AND user_id=$2", task_id, assignee_id)
         # Research matrix: assigned AND unassigned notify the (ex-)assignee.
         if res.split()[-1] != "0":
@@ -239,7 +255,7 @@ async def acknowledge(task_id: str, body: AckReq, user: dict = Depends(require_p
     """The assignee accepts or declines their own assignment (decline records a reason)."""
     async with rls(user) as c:
         await _task_or_404(c, task_id)
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         res = await c.execute(
             "UPDATE task_assignees SET accepted=$1, accepted_at=now() WHERE task_id=$2 AND user_id=$3",
             body.accepted, task_id, user["id"])
@@ -289,7 +305,7 @@ async def propose_handoff(task_id: str, body: HandoffIn, user: dict = Depends(re
             "SELECT id, title, department_id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if t is None:
             raise HTTPException(404, "Task not found")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         dst = await c.fetchrow(
             "SELECT id, name, head_user_id FROM departments WHERE id=$1 AND is_active=true", body.to_dept_id)
         if dst is None:

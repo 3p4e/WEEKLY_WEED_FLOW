@@ -56,7 +56,38 @@ def _ser(rows):
     return [dict(r) for r in rows]
 
 
-async def _assert_scope_visible(c, task_id: str, user: dict) -> None:
+# The one visibility rule for a department-scoped manager, spelled once for
+# the EXISTS form (_assert_scope_visible / task_in_scope) — _scope_clause is
+# the same rule for a WHERE. The `handoffs` arm is the read-only one: a
+# proposal addressed to my department lets me OPEN the task to accept or
+# reject it; it does not make the task mine to edit (review 2026-09-27,
+# R2-BC-04), so write paths evaluate the rule with include_handoffs=False.
+_SCOPE_ARMS = (
+    " t.department_id = ANY(app.dept_family($2)) OR t.user_id=$3"
+    " OR EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id=t.id AND a.user_id=$3)"
+    " OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id = ANY(app.dept_family($2)) AND ch.is_deleted=false)"
+    " OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id = ANY(app.dept_family($2)))"
+)
+_HANDOFF_ARM = (
+    " OR EXISTS (SELECT 1 FROM handoffs h WHERE h.task_id=t.id AND h.status='proposed' AND h.to_dept_id = ANY(app.dept_family($2)))"
+)
+
+
+async def task_in_scope(c, task_id: str, scope: str, user_id, *, include_handoffs: bool = True) -> bool:
+    """Whether the task is inside the department scope `scope` for the person
+    `user_id` — the predicate behind _assert_scope_visible, usable for someone
+    OTHER than the caller (collab.py asks it of an @mentioned manager before
+    sending them a task's title). Under the caller's RLS connection a plain
+    USER sees fewer rows than an elevated one, so for a third party the answer
+    can only ever be conservative (False where the manager could in fact open
+    the task), never the reverse."""
+    return await c.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id=$1 AND t.is_deleted=false AND ("
+        + _SCOPE_ARMS + (_HANDOFF_ARM if include_handoffs else "") + "))",
+        task_id, scope, str(user_id))
+
+
+async def _assert_scope_visible(c, task_id: str, user: dict, *, include_handoffs: bool = True) -> None:
     """THE single in-scope guard for department-scoped managers. RLS alone is
     NOT a department boundary — app.is_elevated() grants every manager role
     org-wide row access (department scoping is an app-layer concept, see
@@ -65,31 +96,34 @@ async def _assert_scope_visible(c, task_id: str, user: dict) -> None:
 
     In-scope = own dept (and its sub-departments), personally owned, assigned,
     a subtask delegated into my dept, a child whose parent lives in my dept,
-    or a task with an OPEN handoff addressed to my department: the receiving
-    manager must be able to open what is being offered to them to accept or
-    reject it, and the task still sits in the SOURCE department until they do
-    (review 2026-09-27, BC-04). Org-wide roles (dept_scope is None) are
-    unaffected. Raises 404 rather than 403 to avoid confirming a foreign
-    task's existence.
+    or — for READS — a task with an OPEN handoff addressed to my department:
+    the receiving manager must be able to open what is being offered to them
+    to accept or reject it, and the task still sits in the SOURCE department
+    until they do (review 2026-09-27, BC-04). Org-wide roles (dept_scope is
+    None) are unaffected. Raises 404 rather than 403 to avoid confirming a
+    foreign task's existence.
+
+    `include_handoffs=False` is what every WRITE path passes. A pending
+    proposal opened the task to the receiving manager for reads AND writes:
+    they could retitle it, log sessions on it, move its status and sign it
+    off while it was still the source department's — and attach a subtask of
+    their own to it, which kept the parent in their scope through the
+    "child in my family" arm after the proposal was rejected (review
+    2026-09-27, R2-BC-04). Reads, the handoff list and the comment thread
+    (the discussion around a proposal) keep the arm; everything that changes
+    the task or hangs new records off it does not, until the handoff is
+    accepted and the task actually moves.
 
     get_task and every guarded write path call THIS function (not a re-derived
     copy of the rule) so read-scope and write-scope can never drift apart —
     the drift that silently reopens this exact bypass class. When adding a new
-    endpoint that touches a task (or its sub-resources) by id, call this. The
-    list predicate (_scope_clause) is the same rule spelled for a WHERE."""
+    endpoint that touches a task (or its sub-resources) by id, call this — with
+    include_handoffs=False if it writes. The list predicate (_scope_clause) is
+    the same rule spelled for a WHERE."""
     scope = dept_scope(user)
     if not scope:
         return
-    visible = await c.fetchval(
-        "SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id=$1 AND t.is_deleted=false AND ("
-        " t.department_id = ANY(app.dept_family($2)) OR t.user_id=$3"
-        " OR EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id=t.id AND a.user_id=$3)"
-        " OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id = ANY(app.dept_family($2)) AND ch.is_deleted=false)"
-        " OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id = ANY(app.dept_family($2)))"
-        " OR EXISTS (SELECT 1 FROM handoffs h WHERE h.task_id=t.id AND h.status='proposed' AND h.to_dept_id = ANY(app.dept_family($2)))"
-        "))",
-        task_id, scope, str(user["id"]))
-    if not visible:
+    if not await task_in_scope(c, task_id, scope, user["id"], include_handoffs=include_handoffs):
         raise HTTPException(404, "Task not found or not permitted")
 
 
@@ -505,7 +539,7 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
                     # visibility clause on that task — a self-served scope
                     # escalation (_assert_scope_visible counts existing children,
                     # so the check runs before the new child exists).
-                    await _assert_scope_visible(c, str(body.parent_id), user)
+                    await _assert_scope_visible(c, str(body.parent_id), user, include_handoffs=False)
                 if not mine and body.department_id and str(body.department_id) not in fam:
                     raise HTTPException(403, "Managers may delegate subtasks only under their own department's tasks")
                 if not body.department_id:
@@ -733,7 +767,7 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         # this runs for EVERY patch (including a no-op) so an out-of-scope or
         # nonexistent task returns 404, never a misleading noop-success; scope
         # must be enforced on writes exactly as it already is on reads.
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         if noop:
             # _assert_scope_visible no-ops for an org-wide caller (dept_scope
             # is None) — it never confirms the row exists in that case. Without
@@ -872,7 +906,7 @@ async def add_progress(task_id: str, body: ProgressIn, user: dict = Depends(requ
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         row = await c.fetchrow(
             "INSERT INTO task_progress(org_id,task_id,user_id,day_label,note)"
             " VALUES ($1,$2,$3,$4,$5) RETURNING day_label,note,created_at",
@@ -929,7 +963,7 @@ async def add_session(task_id: str, body: SessionIn, user: dict = Depends(requir
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         row = await c.fetchrow(
             "INSERT INTO work_sessions(org_id,task_id,user_id,started_at,ended_at,hours,note,source)"
             " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
@@ -971,7 +1005,7 @@ async def delete_session(session_id: str, user: dict = Depends(require_password_
         # endpoint takes only a session_id — no task in the path). Resolve the
         # session's task and enforce department scope on it first, so a manager
         # can only delete sessions on tasks they can actually see.
-        await _assert_scope_visible(c, str(row["task_id"]), user)
+        await _assert_scope_visible(c, str(row["task_id"]), user, include_handoffs=False)
         if str(row["user_id"]) != str(user["id"]) and user["role"] not in _ELEVATED:
             raise HTTPException(403, "Only the session's author or an elevated role can delete it")
         await c.execute("DELETE FROM work_sessions WHERE id=$1", session_id)
@@ -999,7 +1033,7 @@ async def add_link(task_id: str, body: LinkIn, user: dict = Depends(require_pass
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         row = await c.fetchrow(
             "INSERT INTO task_links(org_id,task_id,url,label,kind,created_by)"
             " VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
@@ -1019,7 +1053,7 @@ async def delete_link(task_id: str, link_id: str, user: dict = Depends(require_p
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         res = await c.execute("DELETE FROM task_links WHERE id=$1 AND task_id=$2", link_id, task_id)
     if res.split()[-1] == "0":
         raise HTTPException(404, "Link not found")
@@ -1055,7 +1089,7 @@ async def add_dependency(task_id: str, body: DependencyIn, user: dict = Depends(
             t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", tid)
             if t is None:
                 raise HTTPException(404, "Task not found or not permitted")
-            await _assert_scope_visible(c, tid, user)
+            await _assert_scope_visible(c, tid, user, include_handoffs=False)
         # Cycle guard: can `dep` already reach `task_id` through the graph? If
         # so, task_id -> dep would close a loop. Walk the edges from dep.
         reaches = await c.fetchval(
@@ -1090,7 +1124,7 @@ async def delete_dependency(task_id: str, dep_id: str, user: dict = Depends(requ
             t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", tid)
             if t is None:
                 raise HTTPException(404, "Task not found or not permitted")
-            await _assert_scope_visible(c, tid, user)
+            await _assert_scope_visible(c, tid, user, include_handoffs=False)
         res = await c.execute(
             "DELETE FROM task_dependencies WHERE task_id=$1 AND depends_on_task_id=$2", task_id, dep_id)
     if res.split()[-1] == "0":
@@ -1162,7 +1196,7 @@ async def workflow_transition(task_id: str, body: WorkflowIn,
             " WHERE id=$1 AND is_deleted=false FOR UPDATE", task_id)
         if t is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         cur = t["workflow_state"] or "draft"
         role = user["role"]
         if action == "SUBMIT":

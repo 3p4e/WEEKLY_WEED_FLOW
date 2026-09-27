@@ -66,8 +66,16 @@ class _FakeClient:
 # ════════════════════ QMS Studio — DocEngine surface ════════════════════
 
 class _FakeDEClient(_FakeClient):
-    async def request(self, method, path, json=None, **kw):
+    """Records every forwarded call in full — (method, path) for the
+    existing assertions, plus the JSON body and the headers the proxy
+    actually sent, so the org header and the server-stamped identity can be
+    pinned per route (review 2026-09-27, DI2-04 / DI2-13)."""
+    calls: list = []
+
+    async def request(self, method, path, json=None, headers=None, params=None, **kw):
         self.requests.append((method, path))
+        _FakeDEClient.calls.append({"method": method, "path": path, "json": json,
+                                    "headers": dict(headers or {}), "params": params})
         if isinstance(self._response, Exception):
             raise self._response
         return self._response
@@ -80,6 +88,7 @@ def de_configured(monkeypatch):
 
 
 def _stub_de(monkeypatch, response):
+    _FakeDEClient.calls = []
     monkeypatch.setattr(qms_mod, "_de_client",
                         lambda timeout=20.0: _FakeDEClient(response))
 
@@ -181,6 +190,86 @@ async def test_studio_verify_fail_detail_surfaces(client, admin_headers, de_conf
                           headers=admin_headers)
     assert r.status_code == 422
     assert r.json()["detail"]["verify"] == "RESULT: FAIL"
+
+
+async def test_studio_build_stamps_requested_by_and_writes_the_feed(client, admin_headers, org,
+                                                                   de_configured, monkeypatch):
+    """Review 2026-09-27, DI2-04. /studio/build forwarded the browser's
+    `requested_by` unchanged, so a Studio direct build was registered as
+    whoever the client claimed (usually nobody), and no event recorded that a
+    controlled document had been built. The identity now comes from the JWT
+    like /studio/workflows and /revise, and the registered document lands in
+    the audited event feed as `studio_build` naming the same person."""
+    _stub_de(monkeypatch, _FakeResponse(json_data={
+        "ok": True, "document_id": "d-42", "bytes": 10, "verify": "RESULT: PASS",
+        "audited": False,
+        "registered": {"code": "QCSOP-999", "version": "1.0", "doctype": "SOP",
+                       "title_mk": "а", "title_en": "Test SOP", "created_by": "ignored"}}))
+    qa, qah = await _actor(client, admin_headers, role="QA_MGR")
+    r = await client.post("/qms/studio/build",
+                          json={"markdown": "<!--HEADERDATA\n-->\n# x|y\nтело|body",
+                                "requested_by": "qp.someone-else"},
+                          headers=qah)
+    assert r.status_code == 200, r.text
+    sent = [c for c in _FakeDEClient.calls if c["path"] == "/build"]
+    assert len(sent) == 1
+    assert sent[0]["json"]["requested_by"] == qa["username"], "the browser's claim must be overwritten"
+    assert sent[0]["headers"]["X-Org-Id"] == org["org_id"]
+    feed = (await client.get("/activity", headers=admin_headers)).json()
+    ev = next((e for e in feed if e["verb"] == "studio_build"), None)
+    assert ev is not None, feed
+    assert ev["params"]["document_id"] == "d-42" and ev["params"]["code"] == "QCSOP-999"
+    assert ev["params"]["audited"] is False
+    assert str(ev["actor_id"]) == qa["id"]
+
+
+_STUDIO_ROUTES = [
+    ("get", "/qms/studio/questionnaires", None),
+    ("get", "/qms/studio/questionnaires/sop_qc", None),
+    ("post", "/qms/studio/workflows", {"questionnaire": "sop_qc", "answers": {}, "meta": {}}),
+    ("get", "/qms/studio/workflows/j1", None),
+    ("get", "/qms/studio/presets", None),
+    ("post", "/qms/studio/workflows/j1/chat", {"question": "what?"}),
+    ("post", "/qms/studio/workflows/j1/revise", {"preset_key": "tighten"}),
+    ("post", "/qms/studio/build", {"markdown": "<!--HEADERDATA\n-->\n# x|y\nтело|body"}),
+    ("get", "/qms/studio/documents", None),
+    ("get", "/qms/studio/documents/abc", None),
+    ("get", "/qms/studio/documents/abc/download", None),
+    ("get", "/qms/studio/documents/abc/pdf", None),
+]
+
+
+@pytest.mark.parametrize("method,path,body", _STUDIO_ROUTES)
+async def test_every_studio_route_sends_the_callers_organisation(client, admin_headers, org,
+                                                                 de_configured, monkeypatch,
+                                                                 method, path, body):
+    """Review 2026-09-27, DI2-13. DocEngine scopes every read and write by
+    X-Org-Id and answers 400 without it; dropping `org_id=user["org_id"]`
+    from one qms.py route passed this suite and would 400 in production.
+    Pinned on the fake client's captured headers, route by route."""
+    _stub_de(monkeypatch, _FakeResponse(json_data={"job_id": "j1", "document_id": "d1",
+                                                   "documents": [], "answer": "x"},
+                                        headers={"content-type": "application/octet-stream"}))
+    r = await getattr(client, method)(path, json=body, headers=admin_headers) if body is not None \
+        else await getattr(client, method)(path, headers=admin_headers)
+    assert r.status_code == 200, (path, r.text)
+    assert _FakeDEClient.calls, path
+    for call in _FakeDEClient.calls:
+        assert call["headers"].get("X-Org-Id") == org["org_id"], (path, call)
+
+
+def test_every_de_forward_call_site_passes_the_organisation():
+    """Static companion: every `_de_forward(` / `_de_stream(` call in qms.py
+    carries an org argument, so a new route cannot forget it silently."""
+    import re
+    from pathlib import Path
+    src = (Path(qms_mod.__file__)).read_text()
+    calls = re.findall(r"await _de_forward\((?:[^()]|\([^()]*\))*\)", src)
+    assert len(calls) >= 10, f"only {len(calls)} call sites found — the regex is broken"
+    for c in calls:
+        assert "org_id=" in c, c
+    streams = re.findall(r"_de_stream\([^)]*\)", src)
+    assert all("org_id" in c or 'user["org_id"]' in c for c in streams), streams
 
 
 async def test_studio_download_streams(client, admin_headers, de_configured, monkeypatch):

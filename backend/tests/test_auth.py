@@ -359,6 +359,43 @@ async def test_admin_creates_managers_and_executives(client, admin_headers):
     assert r.status_code == 422
 
 
+async def test_a_failing_department_head_sync_never_loses_the_one_time_password(
+        client, admin_headers, monkeypatch, caplog):
+    """Review 2026-09-27, R2-BC-07. The profile INSERT commits in the users
+    database, then the head sync opens its own transaction on the tasks
+    database. When THAT failed the request was a 500 after the account
+    existed — the one-time password the administrator had to read off the
+    screen was never returned, and on delete/update the 500 suggested nothing
+    had happened while the roster change stood. The sync is now logged and
+    swallowed: the head is derivable from the roster and settable by ADMIN."""
+    import logging
+
+    from app.api import auth as auth_mod
+
+    async def boom(*a, **k):
+        raise RuntimeError("tasks pool exhausted")
+    monkeypatch.setattr(auth_mod, "_sync_department_head", boom)
+    d = (await client.post("/departments", json={"code": "sync_d", "name": "Sync Dept"},
+                           headers=admin_headers)).json()
+    with caplog.at_level(logging.WARNING, logger="app.auth"):
+        r = await client.post("/auth/users", json={"username": f"mgr_{uuid.uuid4().hex[:8]}",
+                                                   "full_name": "M", "role": "PR_MGR",
+                                                   "department_id": d["id"]}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["otp"], "the OTP is the only copy the administrator will ever see"
+    assert any("department head sync failed" in rec.getMessage() for rec in caplog.records)
+    # the credential works, and the account is a normal one
+    await login_and_set_password(client, body["user"]["username"], body["otp"])
+    uid = body["user"]["id"]
+    r = await client.patch(f"/auth/users/{uid}", json={"role": "WH_MGR"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert (await client.delete(f"/auth/users/{uid}", headers=admin_headers)).status_code == 200
+    # the head is repairable by hand (nothing was written for it by the failed sync)
+    heads = {x["code"]: x["head_user_id"] for x in (await client.get("/departments", headers=admin_headers)).json()}
+    assert heads["sync_d"] is None
+
+
 async def test_create_user_rejects_unknown_department(client, admin_headers):
     """department_id is a bare uuid (departments live in the tasks DB, no FK) —
     create_user now validates it against a real department for the org."""

@@ -283,6 +283,52 @@ async def test_mention_does_not_leak_a_task_to_a_same_department_user_who_cannot
     assert any(n["task_id"] == tid and n["reason"] == "mentioned" for n in inbox)
 
 
+async def test_mention_does_not_leak_a_task_to_a_scoped_manager_of_another_department(client, admin_headers):
+    """Review 2026-09-27, R2-BC-05 (the BC-17 residual). The recipient filter
+    reasoned from RLS ("elevated roles read org-wide"), but the app's
+    boundary for a manager is the department scope: a QC manager @mentioned
+    on a Cultivation task received the title and an 80-character preview of a
+    task their GET answers 404 for. A scoped manager is now asked the same
+    rule the guard applies — so the manager of the task's PARENT department
+    (whose scope covers it) still gets the mention, and one of an unrelated
+    department does not."""
+    cult = (await client.post("/departments", json={"code": "mn_cult", "name": "Cultivation"},
+                              headers=admin_headers)).json()
+    clone = (await client.post("/departments", json={"code": "mn_clone", "name": "Cloning",
+                                                     "parent_id": cult["id"]},
+                               headers=admin_headers)).json()
+    qc = (await client.post("/departments", json={"code": "mn_qc", "name": "QC"},
+                            headers=admin_headers)).json()
+    qc_mgr, qh = await _actor_in(client, admin_headers, "QC_MGR", qc["id"])
+    cu_mgr, ch = await _actor_in(client, admin_headers, "CU_MGR", cult["id"])
+    tid = (await client.post("/tasks", json={"title": "Confidential cloning plan",
+                                             "department_id": clone["id"]},
+                             headers=admin_headers)).json()["id"]
+    assert (await client.get(f"/tasks/{tid}", headers=qh)).status_code == 404
+    assert (await client.get(f"/tasks/{tid}", headers=ch)).status_code == 200
+    r = await client.post(f"/tasks/{tid}/comments",
+                          json={"content": f"@{qc_mgr['username']} @{cu_mgr['username']} see the detail"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    qc_inbox = (await client.get("/notifications", headers=qh)).json()
+    assert not any(n["task_id"] == tid for n in qc_inbox), \
+        "a mention must not carry a task's title to a manager the task 404s for"
+    cu_inbox = (await client.get("/notifications", headers=ch)).json()
+    assert any(n["task_id"] == tid and n["reason"] == "mentioned" for n in cu_inbox)
+    # once the QC manager is a participant (assigned), the mention lands
+    await client.post(f"/tasks/{tid}/assignees", json={"user_id": qc_mgr["id"]}, headers=admin_headers)
+    await client.post(f"/tasks/{tid}/comments", json={"content": f"@{qc_mgr['username']} now"},
+                      headers=admin_headers)
+    qc_inbox = (await client.get("/notifications", headers=qh)).json()
+    assert any(n["task_id"] == tid and n["reason"] == "mentioned" for n in qc_inbox)
+
+
+async def _actor_in(client, admin_headers, role, dept_id):
+    u, otp = await create_user(client, admin_headers, role=role, department_id=dept_id)
+    token = await login_and_set_password(client, u["username"], otp)
+    return u, {"Authorization": f"Bearer {token}"}
+
+
 async def test_activity_feed_shows_a_user_only_events_of_tasks_they_can_open(client, admin_headers):
     """Review 2026-09-27, BC-17: /activity and /digest showed a department's
     USERs every event in the department — comment previews and workflow

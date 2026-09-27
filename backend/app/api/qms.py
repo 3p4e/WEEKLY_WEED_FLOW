@@ -24,7 +24,9 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from app import demo_org, docengine
+from app.db import rls
 from app.deps import require_password_set
+from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES
 
 router = APIRouter(prefix="/qms", tags=["qms"])
@@ -153,10 +155,31 @@ async def studio_build(body: dict = Body(...),
                        user: dict = Depends(_require_author)):
     """Direct Markdown -> verified .docx (Mode B/C). Long timeout: the
     build+verify run in-process upstream. A verify FAIL comes back as 422
-    with the pp_verify report in the detail."""
+    with the pp_verify report in the detail.
+
+    requested_by is stamped from the JWT identity like /studio/workflows and
+    /revise do — it used to be forwarded as the browser sent it, so a Studio
+    build registered a controlled document as whoever the client claimed
+    (usually nobody), and nothing in the facility's own trail recorded that
+    a build happened (review 2026-09-27, DI2-04). The registered document is
+    written to the event feed as `studio_build` so the registry row and the
+    audited feed name the same person and the same document id."""
     if len(str(body)) > 450_000:
         raise HTTPException(status_code=422, detail="Payload too large")
-    return (await _de_forward("POST", "/build", body, timeout=120.0, org_id=user["org_id"])).json()
+    body["requested_by"] = user["username"]
+    out = (await _de_forward("POST", "/build", body, timeout=120.0, org_id=user["org_id"])).json()
+    doc_id = out.get("document_id") if isinstance(out, dict) else None
+    if doc_id:
+        registered = out.get("registered") or {}
+        async with rls(user) as c:
+            await safe_emit(c, user, verb="studio_build", object_type="docengine_document",
+                            object_id=str(doc_id), recipients=[],
+                            params={"document_id": str(doc_id),
+                                    "code": registered.get("code") or (body.get("meta") or {}).get("code") or "",
+                                    "version": registered.get("version") or "",
+                                    "title_en": registered.get("title_en") or "",
+                                    "audited": bool(out.get("audited", False))})
+    return out
 
 
 @router.get("/studio/documents")
