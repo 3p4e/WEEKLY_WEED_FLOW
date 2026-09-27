@@ -1391,10 +1391,14 @@ async def test_coq_blocked_by_open_oos(client, admin_headers, monkeypatch):
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409 and "OOS" in r.json()["detail"]
     # QP closes the investigation (with a disposition + root cause) → the COQ
-    # may now be issued
+    # may now be issued. The investigation INVALIDATED the result, and says so
+    # in the record: since review 2026-09-27 QR-03 this route shares the QC-01
+    # rule, under which a closed OOS on a certified test that did not
+    # invalidate its result CONFIRMED the failure and refuses the certificate.
     assert (await client.patch(f"/qc/oos/{oos['id']}",
                                json={"status": "CLOSED", "disposition": "RELEASE",
                                      "disposition_reason": "invalidated, retest in spec",
+                                     "lab_error": True, "invalidated": True,
                                      "root_cause_description": "sampling error"},
                                headers=qp)).status_code == 200
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
