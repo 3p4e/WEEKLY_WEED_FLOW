@@ -64,7 +64,9 @@ test('cultivation module: correct roles and keys', () => {
 test('biosecurity module: correct roles and keys', () => {
   const { GF, close } = loadModules();
   const mod = GF.moduleById('biosecurity');
-  assert.deepEqual(toJS(mod.roles), ['CU_MGR','QA_MGR','SE_MGR']);
+  // PR_MGR: waste.py / decon.py / biosecurity.py admit production for the
+  // post-harvest (`dry`) rooms it runs (DECISIONS A-2; R2-FE-03).
+  assert.deepEqual(toJS(mod.roles), ['CU_MGR','PR_MGR','QA_MGR','SE_MGR']);
   assert.deepEqual(toJS(mod.keys), ['decon','waste']);
   close();
 });
@@ -131,6 +133,7 @@ const ACCESS_TABLE = [
   ['IR_MGR', 'analytics',   true],
 
   ['PR_MGR', 'cultivation', true],   // harvest: dry weights and the close are production's
+  ['PR_MGR', 'biosecurity', true],   // waste manifests, dry-room decon and gowning (A-2)
 
   ['OWNER',  'tasks',       true],
   ['OWNER',  'qc',          true],

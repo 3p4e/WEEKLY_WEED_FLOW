@@ -16,7 +16,7 @@
 
 (function () {
   GF.WWF._decon = { cycles: null, loading: false, error: null, campaign: '',
-                    corridors: null, biosecurity: null };
+                    corridors: null, biosecurity: null, roomKinds: null };
 
   // The plan's §12 sequence, in order. Labels are bilingual per house style.
   const STEPS = [
@@ -39,8 +39,24 @@
   const stLbl = (s) => AL(STATUS[s]?.en || s, STATUS[s]?.mk || s);
   const stCol = (s) => (STATUS[s] || {}).color || 'var(--ink-3)';
   const role = () => (GF.API.user || {}).role;
-  const canClean = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR'].includes(role());
+  // Mirrors decon.py _CLEAN_WRITERS / _QA_WRITERS. Production (PR_MGR) runs
+  // the decontamination of the post-harvest rooms — `dry` only, per
+  // decon.assert_room_authority (shared with biosecurity.py); a corridor is
+  // an `other` room and stays the cultivation crew's. The room pickers and
+  // the cycle-card actions below apply the same kind rule, so the button a
+  // production manager sees is one the server accepts (review 2026-09-27,
+  // R2-FE-03 / R2-BC-01; DECISIONS A-2).
+  const canClean = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'PR_MGR'].includes(role());
   const canQA    = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'QA_MGR'].includes(role());
+  const PRODUCTION_ROOM_KINDS = ['dry'];
+  const isProduction = () => role() === 'PR_MGR';
+  // May this role record against a room of this kind? An UNKNOWN kind (the
+  // room registry could not be read) fails open: the server has the final
+  // say, and hiding a button the server allows is the wrong side to err on.
+  const roomKindOk = (kind) => !isProduction() || kind == null || PRODUCTION_ROOM_KINDS.includes(kind);
+  const roomOk = (roomId) => roomKindOk((GF.WWF._decon.roomKinds || {})[roomId]);
+  // The room picker for this role: production sees only its rooms.
+  const pickableRooms = (rooms) => rooms.filter(r => roomKindOk(r.kind));
 
   GF.WWF.loadDecon = async () => {
     const st = GF.WWF._decon;
@@ -71,15 +87,25 @@
       // with no screen left to record its result (review 2026-09-27, FE-10).
       // The panel splits the recent events into open failures and pending
       // reads itself.
-      const [r, cor, bio] = await Promise.all([
+      //
+      // The cycle list does not carry the room's kind, and a production
+      // manager's cycle-card actions depend on it (dry rooms only). Read the
+      // room registry for that role alone, and let it fail to "unknown" —
+      // roomKindOk then fails open and the server's 403 is the gate.
+      const [r, cor, bio, fac] = await Promise.all([
         GF.API.deconCycles(st.campaign || undefined),
         GF.API.deconCorridors(st.campaign || undefined).catch(() => null),
         GF.API.biosecurity({ limit: 200 }).catch(() => null),
+        (isProduction() && GF.API.facility) ? GF.API.facility().catch(() => null) : null,
       ]);
       if (my !== st.lseq) return;
       st.cycles = r.cycles || [];
       st.corridors = cor;
       st.biosecurity = bio;
+      if (fac && fac.rooms) {
+        st.roomKinds = {};
+        fac.rooms.forEach(rm => { st.roomKinds[rm.id] = rm.kind; });
+      }
     } catch (e) { if (my !== st.lseq) return; st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'decon') GF.render.all();
@@ -132,12 +158,13 @@
         : AL(`${blocking} swab(s) not negative`, `${blocking} брис(еви) не се негативни`);
     }
     const actions = [];
-    if (canClean() && cyc.status === 'in_progress' && next) {
+    const mayClean = canClean() && roomOk(cyc.room_id);
+    if (mayClean && cyc.status === 'in_progress' && next) {
       const label = STEPS.find(s => s.key === next);
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.deconSignStep('${cyc.id}','${next}')">
         ${GF.icon('check', 'icon')}${GF.esc(AL('Sign: ', 'Потпиши: ') + AL(label.en, label.mk))}</button>`);
     }
-    if (canClean()) {
+    if (mayClean) {
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.deconBleachForm('${cyc.room_id}','${cyc.id}')">
         ${GF.icon('drop', 'icon')}${AL('Log bucket', 'Внеси кофа')}</button>`);
     }
@@ -218,7 +245,9 @@
     if (!cor || !(cor.corridors || []).length) return '';
     const rows = cor.corridors.map(c => {
       const col = c.overdue ? '#E5484D' : '#2BE8A0';
-      const btn = canClean()
+      // Corridors are `other` rooms: a production manager's dry-room
+      // authority does not extend to them (decon.py record_corridor_clean).
+      const btn = canClean() && !isProduction()
         ? `<button class="btn btn-sm" onclick="GF.WWF.deconCorridorForm('${c.room_id}')">
             ${AL('Record clean', 'Запиши чистење')}</button>`
         : '';
@@ -436,8 +465,10 @@
     try { rooms = (await GF.API.facility()).rooms || []; } catch (e) { rooms = []; }
     GF.WWF._ensureModal('dc-bio-modal', '440px');
     GF.$('dc-bio-modal-title').textContent = AL('Log biosecurity check', 'Запиши биобезбедносна проверка');
+    // A record with no room is not kind-restricted (biosecurity.py); a room
+    // offered to production is one it runs.
     const roomOpts = [{ v: '', label: AL('— no room —', '— без соба —') }]
-      .concat(rooms.map(r => ({ v: r.id, label: r.name })));
+      .concat(pickableRooms(rooms).map(r => ({ v: r.id, label: r.name })));
     GF.$('dc-bio-modal-body').innerHTML = `
       <div class="field"><label>${AL('Kind', 'Вид')}</label>
         ${GF.selectField('dc-bio-kind', { value: 'ahu_filter', title: AL('Kind', 'Вид'),
@@ -948,6 +979,14 @@
     if (!rooms.length) {
       GF.toast(AL('No rooms configured — add rooms on the Facility board first',
                   'Нема соби — прво додајте соби на Капацитет'), 'error');
+      return;
+    }
+    rooms = pickableRooms(rooms);
+    if (!rooms.length) {
+      // Production's rooms only (decon.py assert_room_authority): none
+      // registered means nothing this role may start a cycle for.
+      GF.toast(AL('No post-harvest (dry) room is registered — the production manager records only those',
+                  'Нема регистрирана соба за сушење — менаџерот за производство запишува само за такви'), 'error');
       return;
     }
     GF.WWF._ensureModal('dc-cycle-modal', '420px');

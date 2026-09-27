@@ -725,3 +725,110 @@ test('a legitimate zero reading still submits as zero, not mistaken for garbage 
     'a declared zero reading must survive as zero, not become null');
   h.close();
 });
+
+/* ── Production (PR_MGR) records for the dry rooms it runs ──────────────────
+   decon.py _CLEAN_WRITERS admits PR_MGR and assert_room_authority fences it
+   to `dry` rooms; biosecurity.py shares the rule. The view used to hide the
+   whole board's actions from production (review 2026-09-27, R2-FE-03 /
+   R2-BC-01; DECISIONS A-2). These pin the client-side mirror.
+   ──────────────────────────────────────────────────────────────────────── */
+
+const withKinds = (h, kinds) => { h.window.GF.WWF._decon.roomKinds = kinds; return h; };
+
+test('PR_MGR is offered the cleaning actions on a dry-room cycle', () => {
+  const h = withKinds(load('PR_MGR'), { r1: 'dry' });
+  const html = renderCycle(h, CYCLE({ room_name: 'Dry room 1' }));
+  assert.match(html, /deconSignStep\('c1','dry_clean'\)/, 'production signs the steps of its own room');
+  assert.match(html, /deconBleachForm\('r1','c1'\)/, 'and logs the bucket');
+  assert.match(html, /deconCycleForm\(\)/, 'and may start a room cycle');
+  assert.doesNotMatch(html, /deconSwabForm/, 'swabs stay QA');
+  h.close();
+});
+
+test('PR_MGR is NOT offered the cleaning actions on a flowering-room cycle (the server 403s it)', () => {
+  const h = withKinds(load('PR_MGR'), { r1: 'flower' });
+  const html = renderCycle(h, CYCLE());
+  assert.doesNotMatch(html, /deconSignStep\('c1'/);
+  assert.doesNotMatch(html, /deconBleachForm\('r1'/);
+  h.close();
+});
+
+test('an unknown room kind fails OPEN for PR_MGR — the server, not a missing registry read, is the gate', () => {
+  const h = load('PR_MGR');   // roomKinds never loaded
+  const html = renderCycle(h, CYCLE());
+  assert.match(html, /deconSignStep\('c1','dry_clean'\)/);
+  h.close();
+});
+
+test('the cultivation crew keeps every room regardless of kind', () => {
+  const h = withKinds(load('CU_MGR'), { r1: 'flower' });
+  const html = renderCycle(h, CYCLE());
+  assert.match(html, /deconSignStep\('c1','dry_clean'\)/);
+  h.close();
+});
+
+test('PR_MGR never sees the corridor "Record clean" — corridors are `other` rooms', () => {
+  const h = load('PR_MGR');
+  const w = h.window;
+  w.GF.WWF._decon.cycles = [];
+  w.GF.WWF._decon.corridors = { interval_hours: 4, corridors: [
+    { room_id: 'k1', room_name: 'Corridor A', overdue: true, minutes_since: 300, cleanings: 2 }] };
+  w.GF.state.view = 'decon';
+  assert.doesNotMatch(w.GF.views.decon(), /deconCorridorForm/);
+  w.GF.API.user = { role: 'CU_MGR' };
+  assert.match(w.GF.views.decon(), /deconCorridorForm\('k1'\)/, 'the cultivation crew records it');
+  h.close();
+});
+
+test('the start-cycle room picker offers PR_MGR only dry rooms, and says so when there are none', async () => {
+  const h = loadForms('PR_MGR');
+  const w = h.window;
+  w.GF.API.facility = async () => ({ rooms: [
+    { id: 'r1', name: 'Flowering 1.1', kind: 'flower' }, { id: 'r2', name: 'Dry room 1', kind: 'dry' }] });
+  await w.GF.WWF.deconCycleForm();
+  // The forms harness stubs GF.selectField to a hidden input and records the
+  // cfg, so the offered rooms are read off it.
+  const labels = w.__selCfg['dc-cyc-room'].options.map(o => o.label);
+  assert.deepEqual(JSON.parse(JSON.stringify(labels)), ['Dry room 1']);
+
+  w.GF.API.facility = async () => ({ rooms: [{ id: 'r1', name: 'Flowering 1.1', kind: 'flower' }] });
+  w.__modals.length = 0;
+  await w.GF.WWF.deconCycleForm();
+  assert.equal(w.__modals.length, 0, 'no picker with nothing production may pick');
+  assert.match(w.__toasts.at(-1)[0], /dry/i);
+  h.close();
+});
+
+test('the biosecurity room picker offers PR_MGR only dry rooms (a room-less record is always allowed)', async () => {
+  const h = loadForms('PR_MGR');
+  const w = h.window;
+  w.GF.API.facility = async () => ({ rooms: [
+    { id: 'r1', name: 'Flowering 1.1', kind: 'flower' }, { id: 'r2', name: 'Dry room 1', kind: 'dry' }] });
+  await w.GF.WWF.bioForm();
+  const labels = w.__selCfg['dc-bio-room'].options.map(o => o.label);
+  assert.deepEqual(JSON.parse(JSON.stringify(labels)), ['— no room —', 'Dry room 1']);
+  h.close();
+});
+
+test('loadDecon reads the room registry for PR_MGR only, and the board survives it failing', async () => {
+  const h = load('PR_MGR');
+  const w = h.window;
+  let facCalls = 0;
+  w.GF.API.deconCycles = async () => ({ cycles: [] });
+  w.GF.API.deconCorridors = async () => null;
+  w.GF.API.biosecurity = async () => null;
+  w.GF.API.facility = async () => { facCalls++; return { rooms: [{ id: 'r2', name: 'Dry', kind: 'dry' }] }; };
+  await w.GF.WWF.loadDecon();
+  assert.equal(facCalls, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(w.GF.WWF._decon.roomKinds)), { r2: 'dry' });
+
+  w.GF.API.facility = async () => { throw new Error('boom'); };
+  await w.GF.WWF.loadDecon();
+  assert.equal(w.GF.WWF._decon.error, null, 'the registry read cannot fail the board');
+
+  w.GF.API.user = { role: 'CU_MGR' };
+  facCalls = 0;
+  await w.GF.WWF.loadDecon();
+  assert.equal(facCalls, 0, 'no kind rule for cultivation, so no extra round trip');
+  h.close();
+});

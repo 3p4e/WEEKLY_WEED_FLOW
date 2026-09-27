@@ -54,7 +54,11 @@ GF.MODULES = [
     id: 'biosecurity', icon: 'shield',
     label: () => _AL('Biosecurity & Waste', 'Биобезбедност и отпад'),
     desc:  () => _AL('Decontamination, destruction', 'Деконтаминација, уништување'),
-    roles: ['CU_MGR', 'QA_MGR', 'SE_MGR'],
+    // PR_MGR: everything from the harvest onward is production's (owner
+    // 2026-09-05; DECISIONS A-2) — waste.py, decon.py and biosecurity.py
+    // admit the production manager, for the `dry` rooms it runs. The module
+    // gate hid all of it (review 2026-09-27, R2-FE-03 / R2-BC-01).
+    roles: ['CU_MGR', 'PR_MGR', 'QA_MGR', 'SE_MGR'],
     defaultView: () => 'decon',
     keys: ['decon', 'waste'],
   },

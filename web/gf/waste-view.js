@@ -72,7 +72,11 @@
   const stCol = (s) => (STATUS[s] || {}).color || 'var(--ink-3)';
 
   const role = () => (GF.API.user || {}).role;
-  const canRecord = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR'].includes(role());
+  // Mirrors waste.py _RECORDERS / _WITNESSES. Production (PR_MGR) records
+  // manifests too — trim, de-bucking and packaging waste are theirs (owner
+  // 2026-09-05, DECISIONS A-2); waste.py puts no room-kind rule on it, so
+  // neither does this view (review 2026-09-27, R2-FE-03 / R2-BC-01).
+  const canRecord = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'PR_MGR'].includes(role());
   const canWitness = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'QA_MGR'].includes(role());
   // Mirrors ManifestIn.manifest_code server-side (slashes allowed: carrier
   // dockets are routinely written WM/2026/0731-04).
