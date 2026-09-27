@@ -647,7 +647,15 @@
     const st = GF.WWF._qccoq;
     st.loading = true; st.error = null;
     try {
-      st.list = await GF.API.qcCoqs({});
+      // The out-of-grade follow-up (INS2-01): a bare list leaves the product
+      // verdict unresolved, so the CoQs still owing their formal OOS are asked
+      // for separately (GET /qc/coq?regrade_oos_pending=true) and marked.
+      const [list, owed] = await Promise.all([
+        GF.API.qcCoqs({}),
+        GF.API.qcCoqs({ regrade_oos_pending: 'true' }).catch(() => []),
+      ]);
+      const owedIds = new Set((owed || []).map(q => q.id));
+      st.list = (list || []).map(q => (owedIds.has(q.id) ? Object.assign({}, q, { regrade_oos_pending: true }) : q));
       // picker data for the compile form: the APPROVED products of the
       // official catalogue (a CoQ names the product it certifies against;
       // the cultivar follows from it), and — for strains with no product yet —

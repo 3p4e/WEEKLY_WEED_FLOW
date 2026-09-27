@@ -419,3 +419,28 @@ test('the QP may void a CoQ but not approve or render it (R2-FE-10)', () => {
   assert.doesNotMatch(html, /GF\.WWF\.qcCoqRender\(/);
   assert.doesNotMatch(html, /GF\.WWF\.qcCoqReview\(/);
 });
+
+test('loading the CoQ list marks the regraded CoQs that still owe their formal OOS (INS2-01)', async () => {
+  const h = load();
+  const w = h.window;
+  const asked = [];
+  w.GF.API.qcCoqs = async (q) => {
+    asked.push(JSON.parse(JSON.stringify(q)));
+    if (q && q.regrade_oos_pending === 'true') return [{ id: 'q1' }];
+    return [{ id: 'q1', coq_number: 'CoQ-PP-2026-0012', batch_id: 'GP092601', status: 'APPROVED',
+              overall_conform: true, regrade_oos_pending: null },
+            { id: 'q2', coq_number: 'CoQ-PP-2026-0013', batch_id: 'GP092602', status: 'DRAFT',
+              overall_conform: true, regrade_oos_pending: null }];
+  };
+  w.GF.API.qcProducts = async () => [];
+  w.GF.API.cultivars = async () => ({ cultivars: [] });
+  await w.GF.WWF.loadQcCoqs();
+  assert.deepEqual(asked, [{}, { regrade_oos_pending: 'true' }]);
+  const list = w.GF.WWF._qccoq.list;
+  assert.equal(list.find(q => q.id === 'q1').regrade_oos_pending, true);
+  assert.equal(list.find(q => q.id === 'q2').regrade_oos_pending, null);
+  w.GF.WWF._qccoa = Object.assign(w.GF.WWF._qccoa || {}, {
+    coas: [], loading: false, error: null, specs: [], samples: [], labs: [], q: '', status: '', sel: null, detail: null });
+  const html = w.GF.views.qccoa();
+  assert.equal((html.match(/OOS pending/g) || []).length, 1, 'only the CoQ owing an OOS is flagged');
+});
