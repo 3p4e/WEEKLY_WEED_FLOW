@@ -371,8 +371,18 @@ GF.WWF.loadAndRender = async () => {
   // GF.setView stores the choice once the user actually navigates.
   if (!localStorage.getItem('gf_view')) {
     const role = (GF.API.user || {}).role;
-    if (role === 'OWNER' || role === 'CEO' || role === 'COO') GF.state.view = 'exec';
-    else if (GF.hasDeptHome && GF.hasDeptHome()) GF.state.view = 'depthome';
+    if (role === 'OWNER' || role === 'CEO' || role === 'COO') {
+      // The exec overview is an ANALYTICS-module view. Setting only the view
+      // left the module at 'tasks', and render.all()'s module bounce sent
+      // the executive to the task default instead (review 2026-09-27,
+      // FE-12) — the landing was dead. Carry the module with it, the same
+      // way GF.setView does for a cross-module jump.
+      GF.state.view = 'exec';
+      if (GF.moduleForKey && GF.moduleAccessibleFor && GF.moduleAccessibleFor('analytics', role)) {
+        GF.state.module = 'analytics';
+        try { localStorage.setItem('gf_module', 'analytics'); } catch (e) {}
+      }
+    } else if (GF.hasDeptHome && GF.hasDeptHome()) GF.state.view = 'depthome';
   }
   GF.WWF.buildCalendar(weeks);
   GF.WWF.applyTasks(tasks);

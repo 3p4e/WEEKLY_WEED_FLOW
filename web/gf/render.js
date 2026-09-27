@@ -143,11 +143,15 @@ GF.render = {
     if (GF.hasDeptHome && GF.hasDeptHome()) ops.push(['depthome', 'dept_home', 'home']);
     ops.push(['mywork', 'my_week', 'check'], ['board', 'board', 'grid'],
              ['timeline', 'timeline', 'timeline'], ['calendar', 'calendar', 'calendar']);
-    const mgr = [];
-    if (GF.isExec && GF.isExec()) mgr.push(['exec', 'exec_overview', 'layers']);
-    mgr.push(['coord', 'coordination', 'at', coordPending], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user']);
-    // Workload balancing is a coordination tool — managers/execs only.
-    if (GF.can('team')) mgr.push(['workload', 'workload', 'clock']);
+    const mgr = [['coord', 'coordination', 'at', coordPending], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user']];
+    // Workload and the Executive overview belong to the ANALYTICS module
+    // (modules.js keys). They used to sit in the task rail: clicking one
+    // switched the module, the rail re-rendered without them, and the way
+    // back was the module picker (review 2026-09-27, FE-12). They are
+    // emitted in their own module's rail instead, with their own gates.
+    const ana = [];
+    if (GF.isExec && GF.isExec()) ana.push(['exec', 'exec_overview', 'layers']);
+    if (GF.can('team')) ana.push(['workload', 'workload', 'clock']);   // a coordination tool — managers/execs only
     const sys = [['inbox', 'inbox', 'bell', unreadN]];
     const item = ([id, key, ic, badge]) => `
       <div class="nav-item ${id === GF.state.view ? 'active' : ''}" data-nav="${id}" onclick="GF.setView('${id}')">
@@ -174,10 +178,15 @@ GF.render = {
     // anchor for them, whichever module is active, and they insert before it.
     const floorGroup = `<div class="nav-group">${AL('Floor', 'Погон')}</div>`
       + `<div data-nav="floor-end" style="display:none"></div>`;
+    // The Analytics group is emitted for its module; the Analytics and
+    // Executive Report views register into the rail after this body returns
+    // and land beneath it (their anchor is a task-module item, so they fall
+    // back to "before the last group label").
     GF.$('nav').innerHTML =
       (activeModule === 'tasks' ? group(AL('Operations', 'Операции'), ops) : '')
       + floorGroup
       + (activeModule === 'tasks' ? group(AL('Management', 'Менаџмент'), mgr) : '')
+      + (activeModule === 'analytics' ? group(AL('Analytics', 'Аналитика'), ana) : '')
       + qmsGroup
       + group(AL('System', 'Систем'), sys);
     // Floor and QMS Studio are ANCHOR groups: their label is emitted here, but
