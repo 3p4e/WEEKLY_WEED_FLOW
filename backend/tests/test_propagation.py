@@ -619,3 +619,74 @@ async def test_a_batch_with_plants_freezes_its_runs(client, admin_headers):
     codes = [p["plant_code"] for p in
              (await client.get(f"/cultivation/batches/{x['id']}/plants", headers=cu_h)).json()["plants"]]
     assert codes == [f"{m['code']}-01.00{n}" for n in (1, 2, 3, 4)]
+
+
+# ── the second review (2026-09-27): CS2-01 ───────────────────────────────────
+
+async def test_a_reissued_catalogue_page_does_not_freeze_the_line(client, admin_headers):
+    """CS2-01. Approving the fitted GP_THC26:CBD1 retires the v.03 row the
+    line was opened against (qc/products.py, C-3). The line is the product
+    CODE, not the row: generation 2 from M01 and a second stock plant on M01
+    both register against the live page, the parent's own row is moved onto
+    it, and the next-code preview no longer refuses the line. Another code
+    is still refused, whatever its version."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    cv = await _cultivar(client, cu_h)
+    v03 = await _approved_product(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    m1 = await _mother(client, cu_h, v03["id"], camp["id"])
+    assert m1["code"] == "GP26_S1M01-1_001" and m1["product_id"] == v03["id"]
+
+    fitted = await _approved_product(client, admin_headers, cv["id"], "GP_THC26:CBD1", 26,
+                                     window=(24.6, 27.59), doc_version="fitted 2026-09-15")
+    old = (await client.get(f"/qc/products/{v03['id']}", headers=admin_headers)).json()["product"]
+    assert old["status"] == "SUPERSEDED", "the premise: a new version retires the old row"
+
+    # Generation 2 from M01, no product named: the line's code, resolved to the live page.
+    r = await client.post("/cultivation/mothers", json={"parent_id": m1["id"]}, headers=cu_h)
+    assert r.status_code == 201, r.text
+    gen2 = r.json()
+    assert gen2["code"] == "GP26_S1M01-2_001"
+    assert gen2["product_id"] == fitted["id"] and gen2["product_status"] == "APPROVED"
+    assert gen2["parent_code"] == "GP26_S1M01-1_001"
+    # Naming the live page is the same registration; naming the retired row is not a live product.
+    r = await client.post("/cultivation/mothers", json={"product_id": fitted["id"],
+                                                        "parent_id": m1["id"]}, headers=cu_h)
+    assert r.status_code == 201 and r.json()["code"] == "GP26_S1M01-2_002", r.text
+    r = await client.post("/cultivation/mothers", json={"product_id": v03["id"],
+                                                        "parent_id": m1["id"]}, headers=cu_h)
+    assert r.status_code == 422 and "SUPERSEDED" in r.text
+
+    # A second stock plant on line M01: the suggestion and the save both take it.
+    r = await client.get(f"/cultivation/mothers/next-code?product_id={fitted['id']}"
+                         f"&campaign_id={camp['id']}&mother_no=1", headers=cu_h)
+    assert r.status_code == 200, r.text
+    assert r.json()["suggested"] == "GP26_S1M01-1_002"
+    s2 = await _mother(client, cu_h, fitted["id"], camp["id"], mother_no=1)
+    assert s2["code"] == "GP26_S1M01-1_002" and s2["product_id"] == fitted["id"]
+
+    # The line's first mother now names the live page too — same product, new version.
+    bank = {x["code"]: x for x in
+            (await client.get("/cultivation/mothers", headers=cu_h)).json()["mothers"]}
+    assert bank["GP26_S1M01-1_001"]["product_id"] == fitted["id"]
+    assert bank["GP26_S1M01-1_001"]["product_status"] == "APPROVED"
+    assert all(x["product_code"] == "GP_THC26:CBD1" for x in bank.values())
+
+    # Another CODE cannot take the line, and a clone cannot change its code.
+    gp24 = await _approved_product(client, admin_headers, cv["id"], "GP_THC24:CBD1", 24,
+                                   window=(22.6, 25.59), doc_version="fitted 2026-09-15")
+    r = await client.post("/cultivation/mothers", json={
+        "product_id": gp24["id"], "campaign_id": camp["id"], "mother_no": 1}, headers=cu_h)
+    assert r.status_code == 422 and "GP_THC26:CBD1" in r.text
+    r = await client.post("/cultivation/mothers", json={"product_id": gp24["id"],
+                                                        "parent_id": m1["id"]}, headers=cu_h)
+    assert r.status_code == 422 and "cannot change its specification strain" in r.text
+    # No parent and no product is nothing to register against.
+    r = await client.post("/cultivation/mothers", json={"campaign_id": camp["id"]}, headers=cu_h)
+    assert r.status_code == 422 and "product_id" in r.text
+    # A parent whose code has no live page any more cannot grow a generation.
+    _, qc2 = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.post(f"/qc/products/{fitted['id']}/supersede",
+                              headers=qc2)).status_code == 200
+    r = await client.post("/cultivation/mothers", json={"parent_id": m1["id"]}, headers=cu_h)
+    assert r.status_code == 422 and "no APPROVED page" in r.text

@@ -398,7 +398,8 @@ async def _batch_or_404(c, batch_id: str, lock: bool = False):
     UPDATE cannot lock the nullable side of one)."""
     uuid_or_404(batch_id, "Batch not found")
     row = await c.fetchrow(
-        "SELECT b.*, cv.code AS cultivar_code, r.name AS room_name, r.kind AS room_kind"
+        "SELECT b.*, cv.code AS cultivar_code, cv.name AS cultivar_name,"
+        " r.name AS room_name, r.kind AS room_kind"
         " FROM plant_batches b"
         " LEFT JOIN cultivars cv ON cv.id = b.cultivar_id"
         " LEFT JOIN rooms r ON r.id = b.room_id"
@@ -557,15 +558,15 @@ async def list_batches(user: dict = Depends(require_role(*ELEVATED_ROLES)),
             # inside it, so the expected date must not restart on the move.
             " (SELECT min(e.occurred_on) FROM plant_phase_events e"
             "   WHERE e.batch_id=b.id AND e.to_phase = ANY($2::text[])) AS clone_leg_started_on,"
-            " tc.checked_on AS tc_on, tc.verdict AS tc_verdict, tc.pct_amber AS tc_amber,"
-            " tc.instrument AS tc_instrument"
+            " tc.id AS tc_id, tc.checked_on AS tc_on, tc.verdict AS tc_verdict,"
+            " tc.pct_amber AS tc_amber, tc.instrument AS tc_instrument"
             " FROM plant_batches b"
             " LEFT JOIN cultivars cv ON cv.id=b.cultivar_id"
             " LEFT JOIN rooms r ON r.id=b.room_id"
             " LEFT JOIN qc_products pr ON pr.id=b.product_id"
             # The latest check AS OF TODAY: a row dated ahead (from before
             # trichome.py bounded the date) must not stay "latest" for a year.
-            " LEFT JOIN LATERAL (SELECT checked_on, verdict, pct_amber, instrument"
+            " LEFT JOIN LATERAL (SELECT id, checked_on, verdict, pct_amber, instrument"
             "   FROM trichome_checks t WHERE t.batch_id=b.id AND t.checked_on <= $3::date"
             "   ORDER BY t.checked_on DESC, t.created_at DESC LIMIT 1) tc ON true"
             " WHERE ($1::bool IS FALSE OR b.is_active)"
@@ -588,7 +589,9 @@ async def list_batches(user: dict = Depends(require_role(*ELEVATED_ROLES)),
          "plants_materialised": r["plants_materialised"],
          "plants_active": r["plants_active"],
          # A check that was never taken is absent, never a neutral verdict.
-         "latest_trichome": ({"checked_on": r["tc_on"].isoformat(), "verdict": r["tc_verdict"],
+         # `id` is what the board's "Correct" action patches (trichome.py).
+         "latest_trichome": ({"id": str(r["tc_id"]),
+                              "checked_on": r["tc_on"].isoformat(), "verdict": r["tc_verdict"],
                               "pct_amber": float(r["tc_amber"]) if r["tc_amber"] is not None else None,
                               "instrument": r["tc_instrument"]} if r["tc_on"] else None),
          **_plan_out(r, today)}
@@ -651,9 +654,15 @@ async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_REGIST
             f" VALUES ($1,$2,'create',$3,$4,$5,COALESCE($6::date,{SITE_TODAY_SQL}),$7)",
             user["org_id"], row["id"], body.phase, body.plant_count, body.room_id,
             body.clone_date or body.phase_since, user["id"])
+        # The params are the CONTRACT with the activity sentences
+        # (notifications-view.js, views.js): `strain` is the cultivar's NAME
+        # and `room` the room's NAME, because that is what the sentence
+        # prints — "added 96 × Grape Pie to Flowering 1.1 (flower)". The
+        # older keys stay for anything that read them (review CS2-02).
         await safe_emit(c, user, verb="batch_added", object_type="plant_batch",
                         object_id=row["id"], recipients=[],
                         params={"code": row["code"], "cultivar": cv["code"],
+                                "strain": cv["name"], "room": room["name"],
                                 "plant_count": row["plant_count"], "phase": row["phase"],
                                 "product_code": product["product_code"] if product else None})
     return {"id": str(row["id"]), "code": row["code"], "cultivar_id": body.cultivar_id,
@@ -731,7 +740,16 @@ async def generate_plants(batch_id: str, user: dict = Depends(require_role(*_REG
 
     A mother whose cuttings were not counted contributes no ids: numbering
     clones 1..n needs an n, and inventing one would name plants that may not
-    exist. A closed batch gets no new plants at all (409)."""
+    exist. A closed batch gets no new plants at all (409).
+
+    THE PLAN READ AND THE FIRST CHUNK SHARE ONE LOCKED TRANSACTION. The
+    freeze above is a count of plants; between reading the plan and writing
+    the first row that count is still zero, and a run committing in that
+    window would pass the freeze and change the plan the ids were numbered
+    from. So the plan is read under `pg_advisory_xact_lock('fill:<batch>')`
+    — the key propagation.py takes before it counts — and chunk 1 is written
+    before the lock is released, so the count is non-zero for the next
+    reader (review CS2-04). Later chunks keep their own transactions."""
     async with rls(user) as c:
         b = await _batch_or_404(c, batch_id)
         if b["cultivar_id"] is None:
@@ -741,6 +759,16 @@ async def generate_plants(batch_id: str, user: dict = Depends(require_role(*_REG
         if b["phase"] in _TERMINAL or not b["is_active"]:
             raise HTTPException(
                 409, f"batch {b['code']} is {b['phase']} — a closed batch has no plants to number")
+        # THE FILL LOCK. The plan is read and the FIRST chunk is written under
+        # one advisory lock per batch — the same key propagation.py takes
+        # before it counts plants to decide whether a run may still join,
+        # move or leave the batch. Without it a run could commit between this
+        # read and the first insert (the count was still 0, so the freeze
+        # check let it through), and the plan on file would no longer be the
+        # plan the ids were numbered from (review CS2-04). Writing chunk 1
+        # here is what makes the freeze real the moment the lock is released:
+        # the batch then has plants, and the count says so to everyone.
+        await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"fill:{batch_id}")
         target = b["plant_count"]
         have = await c.fetchval(
             "SELECT COALESCE(max(seq), 0) FROM plants WHERE batch_id=$1", batch_id)
@@ -762,69 +790,88 @@ async def generate_plants(batch_id: str, user: dict = Depends(require_role(*_REG
             "          AND p.mother_plant_id = cm.mother_plant_id AND p.cutting_no = cm.cutting_no))"
             " ORDER BY cr.started_on, cr.created_at, mp.code", batch_id)
 
-    # Lay the segments end to end: [(first_seq, last_seq, mother_id, code, cutting_no)].
-    plan, at = [], 1
-    for sg in segs:
-        n = sg["cuttings"]
-        if not n:
-            continue
-        if n > MAX_CLONE_NO:
-            raise HTTPException(
-                422, f"mother {sg['code']} cutting {sg['cutting_no']:02d}: {n} clones exceeds the"
-                     f" {MAX_CLONE_NO} a clone id can number — split the cutting")
-        if at > target:
-            break
-        take = min(int(n), target - at + 1)
-        plan.append((at, at + take - 1, sg["mother_plant_id"], sg["code"], sg["cutting_no"]))
-        at += take
-    capped = at <= sum(int(sg["cuttings"] or 0) for sg in segs)
+        # Lay the segments end to end: [(first_seq, last_seq, mother_id, code, cutting_no)].
+        plan, at = [], 1
+        for sg in segs:
+            n = sg["cuttings"]
+            if not n:
+                continue
+            if n > MAX_CLONE_NO:
+                raise HTTPException(
+                    422, f"mother {sg['code']} cutting {sg['cutting_no']:02d}: {n} clones exceeds"
+                         f" the {MAX_CLONE_NO} a clone id can number — split the cutting")
+            if at > target:
+                break
+            take = min(int(n), target - at + 1)
+            plan.append((at, at + take - 1, sg["mother_plant_id"], sg["code"], sg["cutting_no"]))
+            at += take
+        capped = at <= sum(int(sg["cuttings"] or 0) for sg in segs)
 
-    def _row(n: int):
-        """The id and lineage of plant number n — the same answer every call."""
-        for first, last, mid, code, cutting in plan:
-            if first <= n <= last:
-                return (clone_code(code, cutting, n - first + 1), mid, cutting, n - first + 1)
-        return (legacy_plant_code(day, b["code"], n), None, None, None)
+        def _row(n: int):
+            """The id and lineage of plant number n — the same answer every call."""
+            for first, last, mid, code, cutting in plan:
+                if first <= n <= last:
+                    return (clone_code(code, cutting, n - first + 1), mid, cutting, n - first + 1)
+            return (legacy_plant_code(day, b["code"], n), None, None, None)
 
-    def _report(created, materialised):
-        return {"batch_id": batch_id, "target": target, "created": created,
-                "materialised": materialised, "complete": materialised >= target,
-                "per_mother": [{"mother_code": c_, "cutting_no": cn, "count": last - first + 1}
-                               for first, last, _m, c_, cn in plan],
-                "legacy": max(0, target - (at - 1)), "capped": capped}
+        def _report(created, materialised):
+            return {"batch_id": batch_id, "target": target, "created": created,
+                    "materialised": materialised, "complete": materialised >= target,
+                    "per_mother": [{"mother_code": c_, "cutting_no": cn, "count": last - first + 1}
+                                   for first, last, _m, c_, cn in plan],
+                    "legacy": max(0, target - (at - 1)), "capped": capped}
 
-    if have >= target:
-        return _report(0, have)
+        _INSERT = (
+            # SITE_TODAY_SQL only; every value travels in the parameters.
+            "INSERT INTO plants(org_id, batch_id, room_id, cultivar_id, plant_code,"  # nosec B608
+            " clone_date, seq, mother_plant_id, cutting_no, clone_no, status_since,"
+            " created_by, updated_by)"
+            f" VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,{SITE_TODAY_SQL},$11,$11)"
+            " ON CONFLICT (batch_id, seq) DO NOTHING")
 
-    created = 0
-    seq = have + 1
-    while seq <= target:
-        top = min(seq + _PLANT_CHUNK - 1, target)
-        rows = []
-        for n in range(seq, top + 1):
-            code, mid, cutting, clone_no = _row(n)
-            rows.append((user["org_id"], batch_id, b["room_id"], b["cultivar_id"],
-                         code, clone_ev, n, mid, cutting, clone_no, user["id"]))
-        # Fresh rls() per chunk = fresh transaction = the audit lock is taken and
-        # released per chunk, not held across the whole fill.
-        try:
-            async with rls(user) as c:
-                await c.executemany(
-                    # SITE_TODAY_SQL only; every value travels in the parameters.
-                    "INSERT INTO plants(org_id, batch_id, room_id, cultivar_id, plant_code,"  # nosec B608
-                    " clone_date, seq, mother_plant_id, cutting_no, clone_no, status_since,"
-                    " created_by, updated_by)"
-                    f" VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,{SITE_TODAY_SQL},$11,$11)"
-                    " ON CONFLICT (batch_id, seq) DO NOTHING", rows)
-        except UniqueViolationError as e:
+        def _chunk(seq: int, top: int):
+            rows = []
+            for n in range(seq, top + 1):
+                code, mid, cutting, clone_no = _row(n)
+                rows.append((user["org_id"], batch_id, b["room_id"], b["cultivar_id"],
+                             code, clone_ev, n, mid, cutting, clone_no, user["id"]))
+            return rows
+
+        def _conflict(e, created):
             # (org, plant_code) is taken by a plant of ANOTHER batch. The ids
             # above are unique by construction, so this means a mother's run
             # was relinked or a batch code reused; say which id, and stop —
             # the fill is still resumable once the record is put right.
-            raise HTTPException(
+            return HTTPException(
                 409, "a plant id in this chunk already names a plant of another batch"
                      f" ({getattr(e, 'detail', None) or e}); {created} plant(s) of this call"
                      " were written and the fill resumes from there once the conflict is resolved")
+
+        if have >= target:
+            return _report(0, have)
+
+        # Chunk 1, under the lock, in the plan's own transaction.
+        created = 0
+        seq = have + 1
+        top = min(seq + _PLANT_CHUNK - 1, target)
+        rows = _chunk(seq, top)
+        try:
+            await c.executemany(_INSERT, rows)
+        except UniqueViolationError as e:
+            raise _conflict(e, created)
+        created += len(rows)
+        seq = top + 1
+
+    while seq <= target:
+        top = min(seq + _PLANT_CHUNK - 1, target)
+        rows = _chunk(seq, top)
+        # Fresh rls() per chunk = fresh transaction = the audit lock is taken and
+        # released per chunk, not held across the whole fill.
+        try:
+            async with rls(user) as c:
+                await c.executemany(_INSERT, rows)
+        except UniqueViolationError as e:
+            raise _conflict(e, created)
         created += len(rows)
         seq = top + 1
 
@@ -912,11 +959,29 @@ async def move_batch(batch_id: str, body: MoveIn,
             raise HTTPException(
                 422, f"closing a batch as {body.to_phase} needs a stated reason — it settles"
                      " every plant in it and cannot be undone")
-        to_room = b["room_id"]
+        if kind == "terminal" and body.to_phase == "harvested":
+            # A DRAFT manifest line is a declaration nobody has sealed: its
+            # count may still change or the line be removed, and a plant
+            # settled from it would say "destroyed on WM-9" for a manifest
+            # that may end up listing none (review CS2-03). Settling only
+            # from sealed lines and IGNORING a draft would drift the other
+            # way once it is sealed. So the close waits for the record to be
+            # settled first: seal the manifest, or take the line off it.
+            drafts = await c.fetch(
+                "SELECT DISTINCT m.manifest_code FROM waste_manifest_lines l"
+                " JOIN waste_manifests m ON m.id = l.manifest_id"
+                " WHERE l.batch_id=$1 AND m.status='draft' ORDER BY m.manifest_code", batch_id)
+            if drafts:
+                codes = ", ".join(r["manifest_code"] for r in drafts)
+                raise HTTPException(
+                    409, f"waste manifest {codes} still names this batch on a DRAFT line — seal"
+                         " the manifest (or remove the line) before closing the batch, so the"
+                         " plants it declares destroyed are settled from a fixed declaration")
+        to_room, to_room_name = b["room_id"], b["room_name"]
         if body.to_room_id is not None:
             room = await _room_or_422(c, body.to_room_id)
             _check_room_for_phase(room, body.to_phase)
-            to_room = room["id"]
+            to_room, to_room_name = room["id"], room["name"]
         elif kind != "room" and b["room_kind"] is not None:
             _check_room_for_phase({"name": b["room_name"], "kind": b["room_kind"]}, body.to_phase)
         row = await c.fetchrow(
@@ -943,18 +1008,23 @@ async def move_batch(batch_id: str, body: MoveIn,
         # destroyed are settled as `destroyed`, not `harvested`: the manifest
         # does not name plants, so the count is taken off the top of the seq
         # order and the reason says so, and only the remainder is harvested.
+        # Only SEALED declarations count (sealed, witnessed or disposed — the
+        # manifest's own ladder in waste.py): a draft's lines can still be
+        # changed or removed, and the close above refuses while one exists.
         settled = {"harvested": 0, "destroyed": 0}
         if kind == "terminal":
             destroyed_n = 0
             if body.to_phase == "harvested":
                 destroyed_n = int(await c.fetchval(
                     "SELECT COALESCE(sum(l.plant_qty), 0) FROM waste_manifest_lines l"
-                    " WHERE l.batch_id=$1", batch_id) or 0)
+                    " JOIN waste_manifests m ON m.id = l.manifest_id"
+                    " WHERE l.batch_id=$1 AND m.status <> 'draft'", batch_id) or 0)
                 if destroyed_n:
                     manifests = await c.fetch(
                         "SELECT DISTINCT m.manifest_code FROM waste_manifest_lines l"
                         " JOIN waste_manifests m ON m.id = l.manifest_id"
-                        " WHERE l.batch_id=$1 ORDER BY m.manifest_code", batch_id)
+                        " WHERE l.batch_id=$1 AND m.status <> 'draft' ORDER BY m.manifest_code",
+                        batch_id)
                     codes = ", ".join(r["manifest_code"] for r in manifests)
                     settled["destroyed"] = int((await c.execute(
                         "UPDATE plants SET status='destroyed', status_since=$2, reason=$3,"
@@ -962,8 +1032,9 @@ async def move_batch(batch_id: str, body: MoveIn,
                         " WHERE id IN (SELECT id FROM plants WHERE batch_id=$1 AND status='active'"
                         "              ORDER BY seq DESC LIMIT $5)",
                         batch_id, occurred,
-                        f"declared destroyed on waste manifest {codes}; plants not individually"
-                        " identified, counted off the end of the batch", user["id"], destroyed_n)
+                        f"declared destroyed on sealed waste manifest {codes}; plants not"
+                        " individually identified, counted off the end of the batch",
+                        user["id"], destroyed_n)
                     ).split()[-1])
                     await c.execute(
                         "INSERT INTO plant_phase_events(org_id, batch_id, event, from_phase,"
@@ -985,10 +1056,15 @@ async def move_batch(batch_id: str, body: MoveIn,
         if kind != "room":
             generated = await _generate_phase_tasks(
                 c, user, {"id": batch_id}, body.to_phase, occurred)
+        # Same contract as batch_added: the sentence prints the strain NAME,
+        # the plant count and both room NAMES (review CS2-02).
         await safe_emit(c, user, verb="batch_moved", object_type="plant_batch",
                         object_id=batch_id, recipients=[],
                         params={"code": b["code"], "old_phase": b["phase"],
                                 "phase": body.to_phase, "room_change": kind == "room",
+                                "strain": b["cultivar_name"] or b["strain"],
+                                "plant_count": b["plant_count"],
+                                "old_room": b["room_name"], "room": to_room_name,
                                 "generated_tasks": len(generated)})
     return {"id": batch_id, "code": row["code"], "phase": row["phase"],
             "room_id": str(row["room_id"]) if row["room_id"] else None,

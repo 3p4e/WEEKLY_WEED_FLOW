@@ -159,7 +159,10 @@ async def test_a_check_is_dated_when_it_happened_and_can_be_corrected(client, ad
     assert r.json()["pct_cloudy"] == 50.0 and r.json()["verdict"] == "ready"
     assert r.json()["note"] == "re-read the slide"
     board = (await client.get("/cultivation/batches", headers=cu_h)).json()["batches"]
-    assert next(x for x in board if x["id"] == b["id"])["latest_trichome"]["verdict"] == "ready"
+    latest = next(x for x in board if x["id"] == b["id"])["latest_trichome"]
+    assert latest["verdict"] == "ready"
+    # The board's "Correct" action patches THIS row, so the board names it (CS2-05).
+    assert latest["id"] == cid
     assert (await client.patch("/cultivation/trichome-checks/not-a-uuid", json={"note": "x"},
                                headers=cu_h)).status_code == 404
 

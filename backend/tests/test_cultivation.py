@@ -875,9 +875,13 @@ async def test_two_moves_at_once_serialise_on_the_batch_row(client, admin_header
 
 
 async def test_closing_after_a_waste_manifest_settles_the_destroyed_plants(client, admin_headers):
-    """CS-07. 150 of 2000 declared destroyed on a manifest and the rest
-    harvested: closing the batch marks 150 plants destroyed, not harvested,
-    with the manifest named as the reason."""
+    """CS-07 / CS2-03. 150 of 2000 declared destroyed on a manifest and the
+    rest harvested: closing the batch marks 150 plants destroyed, not
+    harvested, with the manifest named as the reason — and only once the
+    manifest is SEALED. A draft line is a declaration that can still change
+    or be removed, so the close refuses (409) while one names the batch,
+    rather than stamping plants "destroyed on WM-9" for a manifest that may
+    end up listing none. (Until CS2-03 this test closed over a draft line.)"""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     flower = await _room(client, admin_headers, "flower_wm", "Flowering WM")
     cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
@@ -891,6 +895,24 @@ async def test_closing_after_a_waste_manifest_settles_the_destroyed_plants(clien
                           json={"batch_id": b["id"], "plant_qty": 15}, headers=cu_h)
     assert r.status_code == 201, r.text
 
+    # Still a draft: the close waits for the declaration to be fixed.
+    r = await _mv(client, cu_h, b["id"], to_phase="harvested", reason="final pull")
+    assert r.status_code == 409 and "WM-CS07" in r.text and "DRAFT" in r.text, r.text
+    plants = (await client.get(f"/cultivation/batches/{b['id']}/plants?limit=100",
+                               headers=cu_h)).json()["plants"]
+    assert all(p["status"] == "active" for p in plants), "a refused close settles nothing"
+    # A DESTROYED close does not read manifests at all, so a draft does not
+    # hold it up — checked on a sibling batch so this one stays open.
+    sib = await _bt(client, cu_h, flower["id"], cv["id"], "GP092681", phase="flower", plant_count=4)
+    r = await client.post(f"/waste/manifests/{m.json()['id']}/lines",
+                          json={"batch_id": sib["id"], "plant_qty": 4}, headers=cu_h)
+    assert r.status_code == 201, r.text
+    assert (await _mv(client, cu_h, sib["id"], to_phase="destroyed",
+                      reason="damping off")).status_code == 200
+
+    r = await client.post(f"/waste/manifests/{m.json()['id']}/seal",
+                          json={"gross_weight_kg": 12.5}, headers=cu_h)
+    assert r.status_code == 200, r.text
     r = await _mv(client, cu_h, b["id"], to_phase="harvested", reason="final pull")
     assert r.status_code == 200, r.text
     assert r.json()["plants_settled"] == {"harvested": 25, "destroyed": 15}
@@ -899,8 +921,158 @@ async def test_closing_after_a_waste_manifest_settles_the_destroyed_plants(clien
     assert sum(1 for p in plants if p["status"] == "destroyed") == 15
     assert sum(1 for p in plants if p["status"] == "harvested") == 25
     gone = [p for p in plants if p["status"] == "destroyed"]
-    assert "WM-CS07" in gone[0]["reason"]
+    assert "WM-CS07" in gone[0]["reason"] and "sealed" in gone[0]["reason"]
     assert all(p["status_since"] == facility_today().isoformat() for p in plants)
+
+
+async def test_only_sealed_manifest_lines_settle_plants_and_a_witnessed_one_still_counts(
+        client, admin_headers):
+    """CS2-03. Two manifests name the batch: one sealed and witnessed, one
+    that never left draft and drops its line before the close. Only the
+    sealed declaration settles plants; the removed draft line leaves no
+    trace on the per-plant record."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    flower = await _room(client, admin_headers, "flower_wm2", "Flowering WM2")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    b = await _bt(client, cu_h, flower["id"], cv["id"], "GP092682", phase="flower", plant_count=20)
+    await client.post(f"/cultivation/batches/{b['id']}/plants", headers=cu_h)
+
+    async def manifest(code):
+        r = await client.post("/waste/manifests", json={
+            "manifest_code": code, "waste_type": "plant_material",
+            "reason": "routine_cull"}, headers=cu_h)
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    fixed = await manifest("WM-FIX")
+    assert (await client.post(f"/waste/manifests/{fixed}/lines",
+                              json={"batch_id": b["id"], "plant_qty": 6},
+                              headers=cu_h)).status_code == 201
+    assert (await client.post(f"/waste/manifests/{fixed}/seal", json={"gross_weight_kg": 3},
+                              headers=cu_h)).status_code == 200
+    assert (await client.post(f"/waste/manifests/{fixed}/witness", json={},
+                              headers=qa_h)).status_code == 200
+    loose = await manifest("WM-LOOSE")
+    line = (await client.post(f"/waste/manifests/{loose}/lines",
+                              json={"batch_id": b["id"], "plant_qty": 5},
+                              headers=cu_h)).json()["id"]
+    r = await _mv(client, cu_h, b["id"], to_phase="harvested", reason="final pull")
+    assert r.status_code == 409 and "WM-LOOSE" in r.text and "WM-FIX" not in r.text
+    assert (await client.delete(f"/waste/manifests/{loose}/lines/{line}",
+                                headers=cu_h)).status_code == 200
+    r = await _mv(client, cu_h, b["id"], to_phase="harvested", reason="final pull")
+    assert r.status_code == 200, r.text
+    assert r.json()["plants_settled"] == {"harvested": 14, "destroyed": 6}
+    plants = (await client.get(f"/cultivation/batches/{b['id']}/plants?limit=100",
+                               headers=cu_h)).json()["plants"]
+    gone = [p for p in plants if p["status"] == "destroyed"]
+    assert len(gone) == 6 and all("WM-FIX" in p["reason"] and "WM-LOOSE" not in p["reason"]
+                                  for p in gone)
+
+
+async def test_batch_events_carry_the_names_the_activity_sentences_print(client, admin_headers):
+    """CS2-02 / R2-FE-04. The inbox and the activity feed read `strain` (the
+    cultivar's NAME), `room` (the room's NAME), `plant_count` and `phase`
+    from batch_added, and `old_room` / `old_phase` besides from batch_moved.
+    The backend used to send `cultivar` (a code) and no room at all, so
+    every registration read "added 96 × undefined to undefined"."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    veg = await _room(client, admin_headers, "veg_ev", "Veg EV", kind="veg")
+    flower = await _room(client, admin_headers, "flower_ev", "Flowering EV")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    b = await _bt(client, cu_h, veg["id"], cv["id"], "GP092685", phase="veg", plant_count=96)
+    r = await _mv(client, cu_h, b["id"], to_phase="flower", to_room_id=flower["id"])
+    assert r.status_code == 200, r.text
+    feed = (await client.get("/activity", headers=admin_headers)).json()
+    added = next(e for e in feed if e["verb"] == "batch_added" and e["params"].get("code") == "GP092685")
+    moved = next(e for e in feed if e["verb"] == "batch_moved" and e["params"].get("code") == "GP092685")
+    assert {k: added["params"][k] for k in ("code", "strain", "room", "plant_count", "phase")} == {
+        "code": "GP092685", "strain": "Grape Pie", "room": "Veg EV", "plant_count": 96, "phase": "veg"}
+    assert added["params"]["cultivar"] == "GP", "the older key stays for whatever read it"
+    assert {k: moved["params"][k] for k in ("code", "strain", "plant_count", "old_room", "old_phase",
+                                           "room", "phase", "room_change")} == {
+        "code": "GP092685", "strain": "Grape Pie", "plant_count": 96, "old_room": "Veg EV",
+        "old_phase": "veg", "room": "Flowering EV", "phase": "flower", "room_change": False}
+    # A room change keeps both names distinct too.
+    f2 = await _room(client, admin_headers, "flower_ev2", "Flowering EV2")
+    assert (await _mv(client, cu_h, b["id"], to_phase="flower", to_room_id=f2["id"])).status_code == 200
+    feed = (await client.get("/activity", headers=admin_headers)).json()
+    rc = next(e for e in feed if e["verb"] == "batch_moved" and e["params"].get("room_change"))
+    assert (rc["params"]["old_room"], rc["params"]["room"]) == ("Flowering EV", "Flowering EV2")
+    assert (rc["params"]["old_phase"], rc["params"]["phase"]) == ("flower", "flower")
+
+
+async def _hold_fill_lock(batch_id):
+    """An open transaction holding the batch's fill lock — the same key the
+    fill's plan read and propagation's freeze check take."""
+    conn = await tasks_admin_pool().acquire()
+    tx = conn.transaction()
+    await tx.start()
+    try:
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"fill:{batch_id}")
+    except Exception:
+        await tx.rollback()
+        await tasks_admin_pool().release(conn)
+        raise
+    return conn, tx
+
+
+async def test_the_fill_and_a_joining_run_serialise_on_one_lock(client, admin_headers):
+    """CS2-04. The plan read and the first chunk of a fill, and a run's
+    freeze check, all take pg_advisory_xact_lock('fill:<batch>'): with the
+    lock held by an outside transaction neither proceeds, and once it is
+    released the two land in SOME order — either the run joined first and the
+    ids are numbered from both runs, or the fill went first and the run is
+    refused as a renumbering — never a fill whose ids disagree with the runs
+    on file."""
+    from tests.test_products import _approved
+    from tests.test_propagation import _campaign, _mother
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_lock", "Clone LOCK", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    prod = await _approved(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    m0 = await _mother(client, cu_h, prod["id"], camp["id"])
+    m1 = await _mother(client, cu_h, prod["id"], camp["id"])
+    b = await _bt(client, cu_h, room["id"], cv["id"], "GP092686", plant_count=6, clone_date="2026-09-02")
+    r = await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 4, "started_on": "2026-09-02",
+        "batch_id": b["id"], "mothers": [{"mother_plant_id": m1["id"], "cuttings": 4}]})
+    assert r.status_code == 201, r.text
+
+    conn, tx = await _hold_fill_lock(b["id"])
+    try:
+        fill = asyncio.create_task(client.post(f"/cultivation/batches/{b['id']}/plants", headers=cu_h))
+        join = asyncio.create_task(client.post("/cultivation/clone-runs", headers=cu_h, json={
+            "cultivar_id": cv["id"], "planned_count": 2, "started_on": "2026-09-01",
+            "batch_id": b["id"], "mothers": [{"mother_plant_id": m0["id"], "cuttings": 2}]}))
+        await asyncio.sleep(0.6)
+        assert not fill.done(), "the fill must wait for the lock before it reads its plan"
+        assert not join.done(), "the run must wait for the lock before it counts plants"
+        assert await conn.fetchval("SELECT count(*) FROM plants WHERE batch_id=$1", b["id"]) == 0
+    finally:
+        await tx.rollback()
+        await tasks_admin_pool().release(conn)
+    fr, jr = await fill, await join
+    assert fr.status_code == 200 and fr.json()["complete"], fr.text
+    codes = [p["plant_code"] for p in
+             (await client.get(f"/cultivation/batches/{b['id']}/plants", headers=cu_h)).json()["plants"]]
+    if jr.status_code == 201:
+        # The earlier-dated run joined before the plan was read: it leads.
+        assert codes == [f"{m0['code']}-01.001", f"{m0['code']}-01.002"] + \
+            [f"{m1['code']}-01.{n:03d}" for n in (1, 2, 3, 4)]
+        assert fr.json()["per_mother"][0]["mother_code"] == m0["code"]
+    else:
+        # The fill went first: the batch is frozen, the run is refused.
+        assert jr.status_code == 409 and "GP092686" in jr.text, jr.text
+        assert codes == [f"{m1['code']}-01.{n:03d}" for n in (1, 2, 3, 4)] + \
+            ["20260902_GP092686_0005", "20260902_GP092686_0006"]
+    # Either way the ids on file are the ids the plan computes now.
+    again = await client.post(f"/cultivation/batches/{b['id']}/plants", headers=cu_h)
+    assert again.json()["created"] == 0
+    assert [x["mother_code"] for x in again.json()["per_mother"]] == (
+        [m0["code"], m1["code"]] if jr.status_code == 201 else [m1["code"]])
 
 
 async def test_the_next_batch_number_is_max_plus_one_in_the_cloning_month(client, admin_headers):

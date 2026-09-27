@@ -44,6 +44,17 @@ mother cannot take it (422). Migration 0070 makes the line key
 under an advisory lock per campaign, so two registrations at once get M05
 and M06 rather than both M05.
 
+A LINE IS ONE PRODUCT CODE, NOT ONE PRODUCT ROW. Approving a new document
+version of the catalogue retires the old version's rows (qc/products.py
+supersedes them), so after the fitted GP_THC26:CBD1 is approved the row a
+mother was registered against is SUPERSEDED and the live page is another
+row. The line-owner check and the parent check therefore compare the
+product CODE; a later generation or a new stock plant registers against the
+live page of that code (product_id may be left out with a parent and is
+resolved to it), and the line's mothers still pointing at the retired row
+are moved onto the live one at that moment, so the bank never reads
+SUPERSEDED for a plant whose product did not change (review CS2-01).
+
 A LATER GENERATION KEEPS ITS LINE. Registering from a parent takes the
 campaign and the mother number FROM the parent — "GP26_S1M03-2_020 … all
 clones made from this -2 (second) cloning generation of motherplant
@@ -158,7 +169,11 @@ class MotherIn(BaseModel):
     # the next free number, so the common case is: pick the product and the
     # campaign, save. With a parent, the campaign and the mother number come
     # FROM the parent (the line is inherited); given here they must agree.
-    product_id: str
+    # product_id may be left out when a parent is named: the line's product
+    # CODE is the parent's, and the row is the live (APPROVED) page of that
+    # code — which is a later document version than the parent's own row
+    # once the catalogue has been re-issued (review CS2-01).
+    product_id: str | None = None
     campaign_id: str | None = None
     mother_no: int | None = Field(default=None, ge=1, le=MAX_MOTHER_NO)
     generation: int = Field(default=1, ge=1, le=MAX_GENERATION)
@@ -261,7 +276,16 @@ async def _batch_of_cultivar_or_422(c, batch_id, cultivar_id):
 async def _batch_unfrozen_or_409(c, batch_id, what: str):
     """A batch with plant rows has its run membership frozen: the clone ids
     were numbered from the runs laid end to end, and changing the set now
-    would rename plants that exist (cultivation.generate_plants)."""
+    would rename plants that exist (cultivation.generate_plants).
+
+    Under the batch's FILL lock — the same key, byte for byte, that
+    generate_plants takes while it reads its allocation plan and writes the
+    first chunk. Without it a run could pass this count (0 plants committed)
+    while a fill that already read the plan without it was writing chunk 1,
+    and the ids on file would disagree with the runs on file (review
+    CS2-04). The lock is transaction-scoped, so it is held until the run's
+    own insert or relink commits and the fill's plan read sees it."""
+    await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"fill:{batch_id}")
     row = await c.fetchrow(
         "SELECT b.code, (SELECT count(*) FROM plants p WHERE p.batch_id=b.id) AS n"
         " FROM plant_batches b WHERE b.id=$1", batch_id)
@@ -613,16 +637,52 @@ async def _next_numbers(c, campaign_id, product_id, mother_no=None, generation=1
 
 async def _line_owner_or_422(c, campaign_id, mother_no, pr) -> None:
     """A mother number names one line of one product: M03 of S1 that already
-    exists as a Grape Pie 26 line cannot also be an OPM22 line."""
+    exists as a Grape Pie 26 line cannot also be an OPM22 line.
+
+    The product is compared by CODE, never by row id. Approving a new
+    document version of the catalogue retires the old version's rows
+    (qc/products.py), so the live GP_THC26:CBD1 is a different row from the
+    one the line was opened against; it is still the same product, and the
+    line must go on taking it (review CS2-01)."""
     other = await c.fetchrow(
         "SELECT DISTINCT pr.product_code FROM mother_plants m"
         " JOIN qc_products pr ON pr.id = m.product_id"
-        " WHERE m.campaign_id=$1 AND m.mother_no=$2 AND m.product_id <> $3 LIMIT 1",
-        campaign_id, mother_no, pr["id"])
+        " WHERE m.campaign_id=$1 AND m.mother_no=$2 AND pr.product_code <> $3 LIMIT 1",
+        campaign_id, mother_no, pr["product_code"])
     if other is not None:
         raise HTTPException(
             422, f"M{mother_no:02d} of this campaign is a {other['product_code']} line —"
                  f" a mother number names one line, and {pr['product_code']} cannot take it")
+
+
+async def _live_product_of_code_or_422(c, product_code: str):
+    """The APPROVED row of a product code — the page the catalogue currently
+    holds live for it. A code with no live page cannot take a new mother:
+    the id's grade would be read off a retired or draft nominal."""
+    row = await c.fetchrow(
+        "SELECT p.id, p.product_code, p.grade, p.status, p.cultivar_id, cv.code AS cultivar_code"
+        " FROM qc_products p JOIN cultivars cv ON cv.id=p.cultivar_id"
+        " WHERE p.product_code=$1 AND p.status='APPROVED'", product_code)
+    if row is None:
+        raise HTTPException(
+            422, f"{product_code} has no APPROVED page in the catalogue — approve the current"
+                 " version of the specification before registering another mother on this line")
+    return row
+
+
+async def _repoint_line_to_live_product(c, user, campaign_id, mother_no, pr) -> int:
+    """Move the line's mothers from a retired row of the product code onto
+    the live one. Called under the campaign's advisory lock, after the code
+    check above, so every mother of the line names the same live page and
+    the bank reads APPROVED, not SUPERSEDED, for a plant whose product did
+    not change — only the document version of its page did. Returns the
+    number of rows re-pointed."""
+    n = await c.fetchval(
+        "WITH r AS (UPDATE mother_plants m SET product_id=$3, updated_by=$4, updated_at=now()"
+        " FROM qc_products pr WHERE pr.id = m.product_id AND m.campaign_id=$1 AND m.mother_no=$2"
+        "   AND pr.product_code=$5 AND m.product_id <> $3 RETURNING 1) SELECT count(*) FROM r",
+        campaign_id, mother_no, pr["id"], user["id"], pr["product_code"])
+    return int(n or 0)
 
 
 @router.get("/mothers/next-code")
@@ -663,7 +723,6 @@ async def create_mother(body: MotherIn, user: dict = Depends(require_role(*_WRIT
     next-number reads and the insert run under one advisory lock per campaign,
     so two registrations at once cannot both read M04 and both become M05."""
     async with rls(user) as c:
-        pr = await _product_or_422(c, body.product_id)
         if body.room_id is not None:
             await _room_or_422(c, body.room_id)
         generation = body.generation
@@ -671,11 +730,19 @@ async def create_mother(body: MotherIn, user: dict = Depends(require_role(*_WRIT
         if body.parent_id:
             uuid_or_422(body.parent_id, "Unknown parent mother plant")
             parent = await c.fetchrow(
-                "SELECT id, code, generation, product_id, campaign_id, mother_no"
-                " FROM mother_plants WHERE id=$1", body.parent_id)
+                "SELECT m.id, m.code, m.generation, m.product_id, m.campaign_id, m.mother_no,"
+                " pr.product_code"
+                " FROM mother_plants m JOIN qc_products pr ON pr.id = m.product_id"
+                " WHERE m.id=$1", body.parent_id)
             if parent is None:
                 raise HTTPException(422, "Unknown parent mother plant")
-            if _sid(parent["product_id"]) != _sid(pr["id"]):
+            # The product is the parent's by CODE. Its row may be a retired
+            # document version by now (a fitted page superseded the ImB one),
+            # so a body that names no product takes the live page of that
+            # code, and a body that names one must name the same code.
+            pr = (await _product_or_422(c, body.product_id) if body.product_id
+                  else await _live_product_of_code_or_422(c, parent["product_code"]))
+            if parent["product_code"] != pr["product_code"]:
                 raise HTTPException(
                     422, f"{parent['code']} is not a {pr['product_code']} mother —"
                          " a clone cannot change its specification strain")
@@ -701,6 +768,9 @@ async def create_mother(body: MotherIn, user: dict = Depends(require_role(*_WRIT
             camp = await _campaign_or_422(c, str(parent["campaign_id"]))
             mother_no_wanted = parent["mother_no"]
         else:
+            if body.product_id is None:
+                raise HTTPException(422, "product_id is required unless a parent mother is named")
+            pr = await _product_or_422(c, body.product_id)
             if body.campaign_id is None:
                 raise HTTPException(422, "campaign_id is required unless a parent mother is named")
             camp = await _campaign_or_422(c, body.campaign_id)
@@ -710,6 +780,10 @@ async def create_mother(body: MotherIn, user: dict = Depends(require_role(*_WRIT
         await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"mother:{camp['id']}")
         if mother_no_wanted is not None:
             await _line_owner_or_422(c, camp["id"], mother_no_wanted, pr)
+            # The line goes on under the live page of its code: mothers still
+            # pointing at a retired version of the same code are moved onto
+            # the row this registration names (review CS2-01).
+            await _repoint_line_to_live_product(c, user, camp["id"], mother_no_wanted, pr)
         mother_no, _next_m, next_stock = await _next_numbers(
             c, camp["id"], pr["id"], mother_no_wanted, generation)
         stock_no = body.stock_no if body.stock_no is not None else next_stock
@@ -936,10 +1010,13 @@ async def update_clone_run(run_id: str, body: CloneRunPatch,
                 await _batch_of_cultivar_or_422(c, patch["batch_id"], cur["cultivar_id"])
             # Leaving a batch whose plants were numbered from this run, or
             # joining one that is already numbered, renames plants that exist.
-            if cur["batch_id"] is not None:
-                await _batch_unfrozen_or_409(c, cur["batch_id"], "moving this run away from it")
+            # Both fill locks are taken in id order, so two relinks crossing
+            # between the same two batches cannot wait on each other.
+            sides = {str(cur["batch_id"]): "moving this run away from it"} if cur["batch_id"] else {}
             if patch["batch_id"] is not None:
-                await _batch_unfrozen_or_409(c, patch["batch_id"], "linking this run to it")
+                sides[str(patch["batch_id"])] = "linking this run to it"
+            for bid in sorted(sides):
+                await _batch_unfrozen_or_409(c, bid, sides[bid])
         if patch.get("room_id") is not None:
             await _room_or_422(c, patch["room_id"])
         fields, args = [], []
