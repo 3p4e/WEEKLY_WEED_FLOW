@@ -1,6 +1,5 @@
 import asyncpg
 from app.db import rls
-from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
@@ -8,7 +7,8 @@ from datetime import date
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .common import _HOQC, _WRITERS, _uuid_or_404, _uuid_or_422, router
+from .common import (ACID_FACTOR, _HOQC, _WRITERS, _dec, _uuid_or_404, _uuid_or_422,
+                     mint_series_number, router)
 
 
 _SPEC_STATUSES = (
@@ -23,7 +23,12 @@ _THC_GRADES = ("GRADE_I", "GRADE_II", "GRADE_III", "GRADE_IV", "GRADE_V")
 _COMPUTED_KINDS = ("total_thc", "total_cbd")
 
 
-_ACID_FACTOR = 0.877
+# The Ph. Eur. 3028 factor lives in common.ACID_FACTOR (Decimal) next to
+# derived_total(), the ONE computation of a derived total — review 2026-09-27
+# QC-10/QC-20 found two float copies of it here and a third path that skipped
+# the computation altogether. This float alias only remains until the last
+# caller has moved to derived_total(); nothing new may use it.
+_ACID_FACTOR = float(ACID_FACTOR)
 
 
 def _looks_acidic(*names: str | None) -> bool:
@@ -185,17 +190,17 @@ async def create_spec(body: SpecIn, user: dict = Depends(require_role(*_WRITERS)
     _check_range(body.thc_acceptance_min, body.thc_acceptance_max,
                 "thc_acceptance_min/thc_acceptance_max")
     async with rls(user) as c:
+        # per-(org, year) register series, never the old cross-tenant sequence (QC-28)
+        spec_no = await mint_series_number(c, user["org_id"], "qc_specifications", "spec_id", "PP-SPEC")
         try:
             row = await c.fetchrow(
                 "INSERT INTO qc_specifications(org_id, spec_id, material_code, material_name_en,"
                 " material_name_mk, version, effective_date, thc_grade, thc_acceptance_min,"
                 " thc_acceptance_max, notes, created_by, updated_by)"
-                f" VALUES ($1, 'PP-SPEC-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
-                "         lpad(nextval('qc_spec_id_seq')::text, 4, '0'),"
-                "         $2,$3,$4,$5,$6::date,$7,$8,$9,$10,$11,$11) RETURNING *",
+                " VALUES ($1, $12, $2,$3,$4,$5,$6::date,$7,$8,$9,$10,$11,$11) RETURNING *",
                 user["org_id"], body.material_code, body.material_name_en, body.material_name_mk,
-                body.version, body.effective_date, body.thc_grade, body.thc_acceptance_min,
-                body.thc_acceptance_max, body.notes, user["id"])
+                body.version, body.effective_date, body.thc_grade, _dec(body.thc_acceptance_min),
+                _dec(body.thc_acceptance_max), body.notes, user["id"], spec_no)
         except Exception as e:
             # UNIQUE(org, material_code, version) collision
             if "qc_specifications_material_version_key" in str(e):
@@ -212,17 +217,17 @@ async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(requir
     _uuid_or_404(spec_id, "Specification")
     patch = body.model_dump(exclude_unset=True)
     _check_grade(patch.get("thc_grade"))
-    # Only judged when BOTH bounds are supplied together in THIS patch — a
-    # partial patch (e.g. only thc_acceptance_max, leaving min at its stored
-    # value) is not cross-checked against the stored counterpart here.
-    if "thc_acceptance_min" in patch and "thc_acceptance_max" in patch:
-        _check_range(patch["thc_acceptance_min"], patch["thc_acceptance_max"],
-                    "thc_acceptance_min/thc_acceptance_max")
     async with rls(user) as c:
         cur = await c.fetchrow(
-            "SELECT status, created_by, updated_by FROM qc_specifications WHERE id=$1", spec_id)
+            "SELECT status, created_by, updated_by, thc_acceptance_min, thc_acceptance_max"
+            " FROM qc_specifications WHERE id=$1", spec_id)
         if cur is None:
             raise HTTPException(404, "Specification not found")
+        # Judged on the EFFECTIVE pair (review 2026-09-27 QC-08): a partial
+        # patch of one bound used to slip past the check and store min > max.
+        eff_min = patch["thc_acceptance_min"] if "thc_acceptance_min" in patch else cur["thc_acceptance_min"]
+        eff_max = patch["thc_acceptance_max"] if "thc_acceptance_max" in patch else cur["thc_acceptance_max"]
+        _check_range(_dec(eff_min), _dec(eff_max), "thc_acceptance_min/thc_acceptance_max")
         # The pharmaceutically load-bearing fields (acceptance criteria, grade,
         # effective date, identity) are locked once the spec leaves authoring —
         # the same control the child parameters already enforce. Outside the
@@ -256,6 +261,22 @@ async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(requir
                     raise HTTPException(
                         403, "The person approving a specification must be different from the"
                              " person who authored it (segregation of duties)")
+                # Review 2026-09-27 QC-11: the acceptance criteria ARE the
+                # parameters, so whoever authored any of them is a co-author of
+                # the specification and may not approve it either.
+                authored = await c.fetchval(
+                    "SELECT 1 FROM qc_spec_parameters WHERE spec_id=$1 AND created_by=$2 LIMIT 1",
+                    spec_id, user["id"])
+                if authored:
+                    raise HTTPException(
+                        403, "The person approving a specification must not have authored any of"
+                             " its parameters (segregation of duties)")
+                # Review 2026-09-27 QC-08: the header THC window printed on the
+                # CoQ must be the window the batch is graded against — the
+                # computed Total THC parameter's limits. A header that names a
+                # range no parameter enforces is a third grade vocabulary
+                # nothing checks; it is refused at the GMP sign-off.
+                await _assert_header_window_backed(c, spec_id, eff_min, eff_max)
         fields, args = [], []
         _NULLABLE = {"material_name_mk", "effective_date", "thc_grade",
                      "thc_acceptance_min", "thc_acceptance_max", "notes"}
@@ -264,6 +285,8 @@ async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(requir
                 continue
             if col == "effective_date":
                 args.append(val); fields.append(f"{col}=${len(args)}::date")
+            elif col in ("thc_acceptance_min", "thc_acceptance_max"):
+                args.append(_dec(val)); fields.append(f"{col}=${len(args)}")
             else:
                 args.append(val); fields.append(f"{col}=${len(args)}")
         if not fields:
@@ -279,6 +302,27 @@ async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(requir
                 raise HTTPException(409, "Another ACTIVE specification already exists for this material")
             raise
     return _spec_out(dict(row))
+
+
+async def _assert_header_window_backed(c, spec_id, eff_min, eff_max) -> None:
+    """409 unless the specification header's THC acceptance window (when set)
+    equals the limits of its computed total_thc parameter — the parameter the
+    CoQ's Total Δ9-THC line is graded by (QC-08)."""
+    if eff_min is None and eff_max is None:
+        return
+    total = await c.fetchrow(
+        "SELECT lower_limit, upper_limit FROM qc_spec_parameters"
+        " WHERE spec_id=$1 AND computed_kind='total_thc'", spec_id)
+    if total is None:
+        raise HTTPException(
+            409, "the specification header states a THC acceptance window but has no computed"
+                 " Total THC parameter to enforce it — add the Ph. Eur. 3028 total_thc"
+                 " parameter carrying these limits, or clear thc_acceptance_min/max")
+    if _dec(eff_min) != _dec(total["lower_limit"]) or _dec(eff_max) != _dec(total["upper_limit"]):
+        raise HTTPException(
+            409, f"the header THC window {eff_min}–{eff_max} differs from the computed Total THC"
+                 f" parameter's limits {total['lower_limit']}–{total['upper_limit']} — the CoQ grades"
+                 " the batch against the parameter, so the header must state the same window")
 
 
 @router.post("/specifications/{spec_id}/parameters", status_code=201)
@@ -336,8 +380,11 @@ async def add_parameter(spec_id: str, body: ParamIn, user: dict = Depends(requir
             " test_location, sorting_order, created_by, computed_kind, component_a_id, component_b_id)"
             " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *",
             user["org_id"], spec_id, body.test_name_en, body.test_name_mk, body.test_method,
-            body.spec_type, body.lower_limit, body.upper_limit, body.unit, body.pharmacopoeia_ref,
-            body.test_location, body.sorting_order, user["id"],
+            # bound as Decimal: a float binds into `numeric` as its binary
+            # expansion, and a limit of 23.4 stored as 23.3999999… then fails
+            # a value of exactly 23.4 (review 2026-09-27 QC-05 / common._dec)
+            body.spec_type, _dec(body.lower_limit), _dec(body.upper_limit), body.unit,
+            body.pharmacopoeia_ref, body.test_location, body.sorting_order, user["id"],
             body.computed_kind, body.component_a_id, body.component_b_id)
     return _param_out(dict(row))
 

@@ -1,5 +1,4 @@
 from app.db import rls
-from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
@@ -7,7 +6,8 @@ from datetime import date
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from .common import _QP_ROLES, _SAMPLE_KINDS, _WRITERS, _uuid_or_404, _uuid_or_422, router
+from .common import (_QP_ROLES, _SAMPLE_KINDS, _WRITERS, _uuid_or_404, _uuid_or_422,
+                     mint_series_number, norm_batch, router)
 from .leaves import _assert_leaf_open
 
 
@@ -75,8 +75,9 @@ class SampleIn(BaseModel):
         # it. Normalize (strip) and reject here, at the one place batch_id is
         # first accepted, so no sample can ever reach the DB — or that gate
         # — carrying a blank batch_id. Mirrors genealogy.py's
-        # parent/child_batch_id blank rejection.
-        v = v.strip()
+        # parent/child_batch_id blank rejection. Upper-cased too (QC-27), the
+        # one canonical form every OOS/CoQ gate compares.
+        v = norm_batch(v)
         if not v:
             raise ValueError("batch_id must not be blank")
         return v
@@ -139,14 +140,13 @@ async def create_plan(body: PlanIn, user: dict = Depends(require_role(*_WRITERS)
     if body.sampling_frequency not in _FREQUENCIES:
         raise HTTPException(422, f"sampling_frequency must be one of: {', '.join(_FREQUENCIES)}")
     async with rls(user) as c:
+        plan_id = await mint_series_number(c, user["org_id"], "qc_sampling_plans", "plan_id", "PP-SPL")
         row = await c.fetchrow(
             "INSERT INTO qc_sampling_plans(org_id, plan_id, material_code, sampling_frequency,"
             " sample_size_formula, min_sample_size, max_sample_size, created_by, updated_by)"
-            f" VALUES ($1, 'PP-SPL-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
-            "         lpad(nextval('qc_sampling_plan_id_seq')::text, 4, '0'),"
-            "         $2,$3,COALESCE($4,'ROUNDUP(SQRT(N)*1.5)'),$5,$6,$7,$7) RETURNING *",
+            " VALUES ($1, $8, $2,$3,COALESCE($4,'ROUNDUP(SQRT(N)*1.5)'),$5,$6,$7,$7) RETURNING *",
             user["org_id"], body.material_code, body.sampling_frequency, body.sample_size_formula,
-            body.min_sample_size, body.max_sample_size, user["id"])
+            body.min_sample_size, body.max_sample_size, user["id"], plan_id)
     return _plan_out(dict(row))
 
 
@@ -191,18 +191,20 @@ async def create_sample(body: SampleIn, user: dict = Depends(require_role(*_WRIT
             pl = await c.fetchrow("SELECT id FROM qc_sampling_plans WHERE id=$1", body.sampling_plan_id)
             if pl is None:
                 raise HTTPException(422, "Unknown sampling plan")
+        # per-(org, year) register series, never the old cross-tenant sequence (QC-28)
+        sample_no = await mint_series_number(c, user["org_id"], "qc_samples", "sample_id", "PP-SMP")
         row = await c.fetchrow(
             "INSERT INTO qc_samples(org_id, sample_id, batch_id, material_code, sample_type,"
             " material_name_en, material_name_mk, sampling_date, location, quantity, quantity_unit,"
             " retention_sample, sample_kind, retention_expiry, parent_id, sampling_plan_id, notes,"
             " created_by, updated_by)"
-            f" VALUES ($1, 'PP-SMP-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
-            "         lpad(nextval('qc_sample_id_seq')::text, 4, '0'),"
+            " VALUES ($1, $18,"
             "         $2,$3,$4,$5,$6,$7::date,$8,$9,$10,$11,$12,$13::date,$14,$15,$16,$17,$17) RETURNING *",
             user["org_id"], body.batch_id, body.material_code, body.sample_type,
             body.material_name_en, body.material_name_mk, body.sampling_date, body.location,
             body.quantity, body.quantity_unit, body.retention_sample, body.sample_kind,
-            body.retention_expiry, body.parent_id, body.sampling_plan_id, body.notes, user["id"])
+            body.retention_expiry, body.parent_id, body.sampling_plan_id, body.notes, user["id"],
+            sample_no)
         await safe_emit(c, user, verb="sample_collected", object_type="qc_sample",
                    object_id=row["id"], recipients=[],
                    params={"sample_id": row["sample_id"], "batch_id": row["batch_id"]})
@@ -253,8 +255,8 @@ async def update_sample(sample_id: str, body: SamplePatch, user: dict = Depends(
             # QUARANTINE→…→RELEASED path was otherwise reachable with an OOS OPEN.
             if target == "RELEASED" and cur["batch_id"]:
                 open_oos = await c.fetchval(
-                    "SELECT count(*) FROM qc_oos_records WHERE batch_id=$1 AND status <> 'CLOSED'",
-                    cur["batch_id"])
+                    "SELECT count(*) FROM qc_oos_records WHERE upper(batch_id)=upper($1)"
+                    " AND status <> 'CLOSED'", cur["batch_id"])
                 if open_oos:
                     raise HTTPException(
                         409, f"{open_oos} open OOS investigation(s) on batch {cur['batch_id']}"
