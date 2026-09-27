@@ -597,7 +597,7 @@
                and the save below refuses an empty date — a run saved without
                ever touching this field must not silently carry today
                (review INS2-04). */ ''}
-          ${GF.dateField('cr-date', { value: '', max: today(), clearable: false })}</div>
+          ${GF.dateField('cr-date', { value: '', clearable: false })}</div>
         <div class="field" style="flex:1"><label>${AL('Cuttings planned', 'Планирани резници')}</label>
           <input id="cr-count" type="number" min="0" max="100000" step="1" placeholder="2000"></div>
       </div>
