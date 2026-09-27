@@ -604,8 +604,13 @@ async def test_icoa_approval_is_hoqc_not_qp(client, admin_headers):
     (handoff, owner decision 2026-08-14): a QP may NOT approve/release an iCoA,
     the Head of QC may — and the three persons must all differ."""
     spec = await _spec(client, admin_headers, material="QPG-MAT")
+    pm = await _param(client, admin_headers, spec["id"])
     coa = await _coa(client, admin_headers, spec["id"])   # analyst = admin (ICOA default)
-    # a disposition of record is a precondition of approval (M3)
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": pm["id"], "test_name": "Total THC",
+                                    "result_numeric": 22.0}, headers=admin_headers)).status_code == 201
+    # a disposition of record is a precondition of approval (M3) — and a PASS
+    # needs a conforming result to attest (review 2026-09-27 QC-06)
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
                                headers=admin_headers)).status_code == 200
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
@@ -630,12 +635,16 @@ async def test_ecoa_approval_still_requires_qp(client, admin_headers):
     """The HoQC gate is ICOA-specific: an eCoA (external evidence) keeps the
     Qualified-Person approval — a QC_MGR gets 403 there."""
     spec = await _spec(client, admin_headers, material="EQP-MAT")
+    pm = await _param(client, admin_headers, spec["id"])
     r = await client.post("/qc/certificates",
                           json={"batch_id": "B-EQP", "specification_id": spec["id"],
                                 "cert_type": "ECOA", "source_lab": "External Lab"},
                           headers=admin_headers)
     assert r.status_code == 201, r.text
     coa = r.json()
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": pm["id"], "test_name": "Total THC",
+                                    "result_numeric": 22.0}, headers=admin_headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
                                headers=admin_headers)).status_code == 200
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
@@ -657,7 +666,11 @@ async def test_coa_approve_rejects_analyst(client, admin_headers):
     possible for anyone who was both the analyst and QP-eligible)."""
     _, qc_analyst = await _actor(client, admin_headers, "QC_MGR")
     spec = await _spec(client, admin_headers, material="APR-ANALYST")
+    pm = await _param(client, admin_headers, spec["id"])
     coa = await _coa(client, qc_analyst, spec["id"], batch="B-APR-A")  # the HoQC is the analyst
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": pm["id"], "test_name": "Total THC",
+                                    "result_numeric": 22.0}, headers=qc_analyst)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
                                headers=qc_analyst)).status_code == 200  # disposition of record (M3)
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
@@ -679,7 +692,11 @@ async def test_coa_approve_requires_a_recorded_disposition(client, admin_headers
     APPROVED). A reviewed-but-undecided certificate cannot be approved; recording
     the disposition — even in the same PATCH — unblocks it."""
     spec = await _spec(client, admin_headers, material="DISP-MAT")
+    pm = await _param(client, admin_headers, spec["id"])
     coa = await _coa(client, admin_headers, spec["id"], batch="B-DISP")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": pm["id"], "test_name": "Total THC",
+                                    "result_numeric": 22.0}, headers=admin_headers)).status_code == 201
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
                                headers=qc_h)).status_code == 200
@@ -750,15 +767,25 @@ async def _oos(client, headers, batch="B-OOS-1", **extra):
     return r.json()
 
 
-async def _closed_oos(client, headers, qp_headers, batch, **extra):
+async def _closed_oos(client, headers, qp_headers, batch, invalidated=True, lab_error=True,
+                      disposition="RELEASE", **extra):
     """Open an OOS and walk it all the way to CLOSED (needs QP for the last two
-    steps — disposition and the close itself are QP decisions)."""
+    steps — disposition and the close itself are QP decisions). By default the
+    investigation INVALIDATES the original result (Phase I: assignable
+    laboratory error) and the batch is dispositioned RELEASE — the one outcome
+    that lets a re-test replace a failure in the CoQ (review 2026-09-27 QC-01);
+    pass invalidated=False / disposition="REJECT" for a confirmed failure."""
     oos = await _oos(client, headers, batch=batch, **extra)
-    for tgt in ("PHASE_I", "PHASE_II"):
-        assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": tgt},
-                                   headers=headers)).status_code == 200
     assert (await client.patch(f"/qc/oos/{oos['id']}",
-                               json={"disposition": "REJECT", "disposition_reason": "confirmed",
+                               json={"status": "PHASE_I", "lab_error": lab_error,
+                                     "invalidated": invalidated,
+                                     "lab_investigation_result": "balance out of calibration"
+                                     if lab_error else "no laboratory error found"},
+                               headers=headers)).status_code == 200
+    assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": "PHASE_II"},
+                               headers=headers)).status_code == 200
+    assert (await client.patch(f"/qc/oos/{oos['id']}",
+                               json={"disposition": disposition, "disposition_reason": "confirmed",
                                      "root_cause_description": "miscalibrated balance"},
                                headers=qp_headers)).status_code == 200
     r = await client.patch(f"/qc/oos/{oos['id']}",
@@ -1314,10 +1341,21 @@ async def test_coq_only_from_released(client, admin_headers, monkeypatch):
 
 async def test_coq_blocks_on_noncompliant_result(client, admin_headers, monkeypatch):
     _stub_de(monkeypatch, {"document_id": "X"})
-    _, qp = await _actor(client, admin_headers, "QP")
-    # a failing result → the batch does not conform → COQ refused (never fabricated)
-    coa = await _released_coa(client, admin_headers, qp, material="COQ-FAIL",
-                              result_numeric=99.0)      # outside the spec's 10–30
+    # a failing result → the batch does not conform → no PASS can be recorded
+    # over it (review 2026-09-27 QC-06) …
+    spec = await _spec(client, admin_headers, material="COQ-FAIL")
+    pm = await _param(client, admin_headers, spec["id"])
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-COQ-FAIL", report_date="2026-07-01")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": pm["id"], "test_name": "Total THC",
+                                    "result_numeric": 99.0}, headers=admin_headers)).status_code == 201
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"}, headers=admin_headers)
+    assert r.status_code == 409 and "do not comply" in r.json()["detail"], r.text
+    # … and a row staged past that gate is still refused a COQ (never fabricated)
+    from app.db import tasks_admin_pool
+    await tasks_admin_pool().execute(
+        "UPDATE qc_certificates SET decision='PASS', status='RELEASED', approver_id=analyst_id"
+        " WHERE id=$1", coa["id"])
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409 and "comply" in r.json()["detail"]
 
@@ -1621,9 +1659,22 @@ async def test_coq_computed_total_rejects_mismatched_component_units(client, adm
     against it, naming the offending parameter."""
     _stub_de(monkeypatch, {"document_id": "X"})
     _, qp = await _actor(client, admin_headers, "QP")
-    spec, pa, pb, pt = await _computed_spec(client, admin_headers, material="PH3028-U")
+    # component A declared in %, component B in mg/g on the SPEC itself —
+    # incompatible for a direct sum. (A result unit differing from its own
+    # parameter's is refused at entry since review 2026-09-27 QC-17, so the
+    # mismatch can only come from the specification's authoring.)
+    spec = await _spec(client, admin_headers, material="PH3028-U")
+    base = f"/qc/specifications/{spec['id']}/parameters"
+    pa = (await client.post(base, json={"test_name_en": "Delta-9-THC", "test_method": "HPLC",
+                                        "unit": "%"}, headers=admin_headers)).json()
+    pb = (await client.post(base, json={"test_name_en": "THCA", "test_method": "HPLC",
+                                        "unit": "mg/g"}, headers=admin_headers)).json()
+    pt = await client.post(base, json={"test_name_en": "Total THC", "test_method": "Ph. Eur. 3028",
+                                       "unit": "%", "lower_limit": 10.0, "upper_limit": 30.0,
+                                       "computed_kind": "total_thc", "component_a_id": pa["id"],
+                                       "component_b_id": pb["id"]}, headers=admin_headers)
+    assert pt.status_code == 201, pt.text
     coa = await _coa(client, admin_headers, spec["id"], batch="B-3028-U", report_date="2026-07-01")
-    # component A in %, component B in mg/g — incompatible for a direct sum
     assert (await client.post(f"/qc/certificates/{coa['id']}/results",
                               json={"parameter_id": pa["id"], "test_name": "Delta-9-THC",
                                     "result_numeric": 1.5, "unit": "%"},
@@ -1854,7 +1905,8 @@ async def test_ecoa_doc_promote_carries_laboratory(client, admin_headers):
     spec, param = await _ecoa_spec_with_param(client, admin_headers, material="LAB-PROMO")
     r = await client.post("/qc/coa-documents",
                           json={"batch_id": "B-LAB-PROMO", "specification_id": spec["id"],
-                                "laboratory_id": lab["id"], "source_institution": "Promote Lab"},
+                                "laboratory_id": lab["id"], "source_institution": "Promote Lab",
+                                "report_date": "2026-07-01"},
                           headers=admin_headers)
     assert r.status_code == 201 and r.json()["laboratory_id"] == lab["id"]
     doc = r.json()
@@ -1960,10 +2012,10 @@ async def test_certificate_numbering_per_type_series(client, admin_headers):
     seq2 = int(icoa2["coa_number"].rsplit("-", 1)[-1])
     assert seq2 == seq1 + 1                      # the ICOA series advances by exactly one
     r = await client.post("/qc/certificates",
-                          json={"batch_id": "B-NUM-Q", "specification_id": spec["id"], "cert_type": "COQ"},
+                          json={"batch_id": "B-NUM-Q", "specification_id": spec["id"], "cert_type": "WATER"},
                           headers=admin_headers)
     coq = r.json()
-    assert coq["coa_number"].startswith("CoQ-PP-")   # a distinct series, distinct prefix
+    assert coq["coa_number"].startswith("WCoA-PP-")  # a distinct series, distinct prefix
     # scoping the gap report to a type keeps its series clean of the other type's numbers
     year = int(icoa1["coa_number"].split("-")[2])
     g = (await client.get(f"/qc/register/gaps?year={year}&cert_type=ICOA", headers=admin_headers)).json()
@@ -2027,7 +2079,10 @@ async def _ecoa_spec_with_param(client, headers, material="ECOA-MAT"):
 
 
 async def _ecoa_doc(client, headers, spec_id=None, batch="B-ECOA-1", **extra):
-    body = {"batch_id": batch, "source_institution": "Contract Lab GmbH", **extra}
+    # a report date by default: promote carries it onto every result as the
+    # measurement date (review 2026-09-27 QC-09) and refuses without one
+    body = {"batch_id": batch, "source_institution": "Contract Lab GmbH",
+            "report_date": "2026-07-01", **extra}
     if spec_id:
         body["specification_id"] = spec_id
     r = await client.post("/qc/coa-documents", json=body, headers=headers)
@@ -2142,10 +2197,13 @@ async def test_ecoa_lab_verdict_reference_only(client, admin_headers):
     assert r.status_code == 200
     e2 = r.json()
     assert e2["complies"] is True and e2["lab_verdict_mismatch"] is False
-    # an extraction with no stated lab verdict never computes a mismatch
+    # an extraction with no stated lab verdict never computes a mismatch (a
+    # second parameter — one transcribed line per parameter, review QC-31)
+    await _param(client, admin_headers, spec["id"], name="Moisture", lo=None, hi=12.0)
     r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
-                          json={"items": [{"raw_label": "Total THC", "numeric_value": 99.0}]},
+                          json={"items": [{"raw_label": "Moisture", "numeric_value": 99.0}]},
                           headers=admin_headers)
+    assert r.status_code == 201, r.text
     e3 = r.json()["extractions"][0]
     assert e3["lab_verdict"] is None and e3["lab_verdict_mismatch"] is False
 
@@ -2195,8 +2253,11 @@ async def test_ecoa_new_extractions_after_signoff_invalidate_checklist(client, a
                       json={"items": [{"raw_label": "Total THC", "numeric_value": 22.0}]},
                       headers=admin_headers)
     await _accept_checklist(client, admin_headers, doc["id"])
+    # a FURTHER field (one transcribed line per parameter, review 2026-09-27
+    # QC-31 — a re-submitted 'Total THC' is refused, not appended)
+    await _param(client, admin_headers, spec["id"], name="Moisture", lo=None, hi=12.0)
     r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
-                          json={"items": [{"raw_label": "Total THC", "numeric_value": 26.0}]},
+                          json={"items": [{"raw_label": "Moisture", "numeric_value": 6.0}]},
                           headers=admin_headers)
     assert r.status_code == 201 and r.json()["checklist_reset"] is True, r.text
     cl = (await client.get(f"/qc/coa-documents/{doc['id']}/checklist",
@@ -2368,25 +2429,29 @@ async def test_certificate_esignature_records_and_lists(client, admin_headers):
     the detail. The admin's account password is TestPassword123456 (conftest)."""
     _, qp = await _actor(client, admin_headers, "QP")
     coa = await _released_coa(client, admin_headers, qp, material="SIG-MAT")
+    # the admin is the analyst of record → AUTHORED is their own act (review
+    # 2026-09-27 QC-12: a lifecycle meaning is signed by its role of record)
     r = await client.post(f"/qc/certificates/{coa['id']}/sign",
-                          json={"password": "TestPassword123456", "meaning": "APPROVED",
-                                "statement": "Reviewed and approved."}, headers=admin_headers)
+                          json={"password": "TestPassword123456", "meaning": "AUTHORED",
+                                "statement": "Results entered."}, headers=admin_headers)
     assert r.status_code == 201, r.text
     s = r.json()
-    assert s["meaning"] == "APPROVED" and s["signer_name"] == "Test Admin" and s["signed_at"]
+    assert s["meaning"] == "AUTHORED" and s["signer_name"] == "Test Admin" and s["signed_at"]
     assert s["object_type"] == "qc_certificate" and s["object_id"] == coa["id"]
-    # a second meaning appends a second signature (append-only attestation log)
+    assert s["role_of_record_match"] is True
+    # a second meaning appends a second signature (append-only attestation log);
+    # VERIFIED attests the eCoA verify loop and is open to any QC writer
     assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
-                              json={"password": "TestPassword123456", "meaning": "RELEASED"},
+                              json={"password": "TestPassword123456", "meaning": "VERIFIED"},
                               headers=admin_headers)).status_code == 201
     lst = (await client.get(f"/qc/certificates/{coa['id']}/signatures", headers=admin_headers)).json()
-    assert [x["meaning"] for x in lst] == ["APPROVED", "RELEASED"]
+    assert [x["meaning"] for x in lst] == ["AUTHORED", "VERIFIED"]
     detail = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
     assert len(detail["signatures"]) == 2
     # 0060 — the SAME person re-signing the SAME meaning asserts nothing new: 409,
     # and no duplicate signatory row appears on the record.
     r = await client.post(f"/qc/certificates/{coa['id']}/sign",
-                          json={"password": "TestPassword123456", "meaning": "APPROVED"},
+                          json={"password": "TestPassword123456", "meaning": "VERIFIED"},
                           headers=admin_headers)
     assert r.status_code == 409 and "already signed" in r.json()["detail"]
     lst = (await client.get(f"/qc/certificates/{coa['id']}/signatures", headers=admin_headers)).json()
@@ -2394,7 +2459,7 @@ async def test_certificate_esignature_records_and_lists(client, admin_headers):
     # a DIFFERENT person signing the same meaning is a real event and stays legal
     _, qc2 = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
-                              json={"password": "NewPassword123456", "meaning": "APPROVED"},
+                              json={"password": "NewPassword123456", "meaning": "VERIFIED"},
                               headers=qc2)).status_code == 201
 
 
@@ -2425,9 +2490,13 @@ async def test_signature_meaning_must_match_reached_status(client, admin_headers
     # once REVIEWED, that meaning becomes attestable; RELEASED still does not.
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
                                headers=qp)).status_code == 200
+    # …by its reviewer of record (review 2026-09-27 QC-12), not by the analyst
     assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
                               json={**pw, "meaning": "REVIEWED"},
-                              headers=admin_headers)).status_code == 201
+                              headers=admin_headers)).status_code == 403
+    assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
+                              json={"password": "NewPassword123456", "meaning": "REVIEWED"},
+                              headers=qp)).status_code == 201
     assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
                               json={**pw, "meaning": "RELEASED"},
                               headers=admin_headers)).status_code == 409
@@ -2803,7 +2872,8 @@ async def _promoted_cert(client, headers, batch, thc=22.0):
                             "upper_limit": 30.0}, headers=headers)
     doc = (await client.post("/qc/coa-documents",
                              json={"batch_id": batch, "specification_id": spec["id"],
-                                   "source_institution": "Lab X"}, headers=headers)).json()
+                                   "source_institution": "Lab X", "report_date": "2026-07-01"},
+                             headers=headers)).json()
     await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
                       json={"items": [{"raw_label": "Total THC", "numeric_value": thc, "unit": "%"}]},
                       headers=headers)
@@ -3094,7 +3164,7 @@ async def test_custody_continuity_enforced(client, admin_headers):
     """Each new handoff must start with whoever the chain last recorded as
     HAVING custody — a break (skipping a custodian) is refused."""
     sample = await _sample(client, admin_headers, batch="B-CUST-2")
-    other, _ = await _actor(client, admin_headers, "USER")
+    other, other_h = await _actor(client, admin_headers, "QC_MGR")
     admin_me = (await client.get("/auth/me", headers=admin_headers)).json()
     # first entry: admin -> other (to_user_id = other's id)
     r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
@@ -3107,10 +3177,16 @@ async def test_custody_continuity_enforced(client, admin_headers):
         "from_user_id": admin_me["id"], "to_location": "QC Lab",
         "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
     assert r.status_code == 409
-    # the correct continuation (from_user_id = other, the actual current custodian) succeeds
+    # the correct continuation (from_user_id = other, the actual current custodian)
+    # succeeds — recorded by that custodian (review 2026-09-27 QC-29: a custody
+    # event is recorded by one of its parties, never by a third person)
     r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
         "from_user_id": other["id"], "to_location": "QC Lab",
         "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
+    assert r.status_code == 403, r.text
+    r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
+        "from_user_id": other["id"], "to_location": "QC Lab",
+        "transfer_type": "LAB_INTERNAL"}, headers=other_h)
     assert r.status_code == 201, r.text
 
 
@@ -3122,7 +3198,7 @@ async def test_custody_requires_a_destination(client, admin_headers):
     both halves of that check silently no-op, letting the entry after it
     declare any origin unchecked. Reject the vacuous entry outright."""
     sample = await _sample(client, admin_headers, batch="B-CUST-3")
-    other, _ = await _actor(client, admin_headers, "USER")
+    other, other_h = await _actor(client, admin_headers, "QC_MGR")
     r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
         "transfer_reason": "no recipient, no location"}, headers=admin_headers)
     assert r.status_code == 422 and "destination" in r.text
@@ -3137,7 +3213,7 @@ async def test_custody_requires_a_destination(client, admin_headers):
     # location-only drop) — continuing from the sample's actual holder
     r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
         "from_user_id": other["id"], "to_location": "QC Lab - Shelf 2",
-        "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
+        "transfer_type": "LAB_INTERNAL"}, headers=other_h)
     assert r.status_code == 201, r.text
 
 
@@ -3157,8 +3233,10 @@ async def test_water_test_crud(client, admin_headers):
     wt = r.json()
     assert wt["water_test_id"].startswith("PP-WT-") and wt["grade"] == "RO"
     assert wt["parameters"]["pH"] == 6.8 and wt["passed"] is True
+    # the verdict is stated once (review 2026-09-27 QC-24): a PATCH cannot flip it,
+    # only annotate the record
     r = await client.patch(f"/qc/water-tests/{wt['id']}", json={"passed": False, "ooe": "TOC drift"}, headers=admin_headers)
-    assert r.status_code == 200 and r.json()["passed"] is False and r.json()["ooe"] == "TOC drift"
+    assert r.status_code == 200 and r.json()["passed"] is True and r.json()["ooe"] == "TOC drift"
     lst = (await client.get("/qc/water-tests?location=RO_F97_001", headers=admin_headers)).json()
     assert any(x["id"] == wt["id"] for x in lst)
     # bad grade rejected
@@ -3527,15 +3605,19 @@ async def test_coq_compile_aggregates_batch(client, admin_headers):
     assert by_name["Moisture"]["testing_lab"] == "Contract Lab GmbH"
     assert by_name["Total THC"]["complies"] is True
     assert "10" in by_name["Total THC"]["acceptance_criterion"]
-    # §6.13 shared series — a certificate-type-COQ record mints the NEXT number
-    # in the same CoQ-PP series (never a duplicate), and vice versa.
+    # §6.13 one CoQ-PP series. A hand-made COQ-type certificate is no longer a
+    # way to mint from it (review 2026-09-27 QC-07: it skipped compile, sources
+    # and HoQC review) — the next aggregation takes the next number.
     seq = int(coq["coq_number"].rsplit("-", 1)[1])
-    cert_coq = await _coa(client, admin_headers, spec["id"], batch="B-AGG",
-                          cert_type="COQ")
-    assert int(cert_coq["coa_number"].rsplit("-", 1)[1]) == seq + 1
+    r = await client.post("/qc/certificates", json={"batch_id": "B-AGG", "specification_id": spec["id"],
+                                                    "cert_type": "COQ"}, headers=admin_headers)
+    assert r.status_code == 422 and "/qc/coq" in r.json()["detail"], r.text
     r2 = await client.post("/qc/coq", json={"batch_id": "B-AGG", "specification_id": spec["id"]},
                            headers=admin_headers)
-    assert int(r2.json()["coq_number"].rsplit("-", 1)[1]) == seq + 2
+    assert int(r2.json()["coq_number"].rsplit("-", 1)[1]) == seq + 1
+    r3 = await client.post("/qc/coq", json={"batch_id": "B-AGG", "specification_id": spec["id"]},
+                           headers=admin_headers)
+    assert int(r3.json()["coq_number"].rsplit("-", 1)[1]) == seq + 2
     # the gap report scans the SHARED series across both tables — the numbers
     # held by aggregation records must never read as missing certificates.
     yr = coq["coq_number"].rsplit("-", 2)[1]
@@ -3830,9 +3912,16 @@ async def test_coq_masked_fail_oos_matches_case_insensitively(client, admin_head
 async def test_coq_empty_spec_never_certifies(client, admin_headers):
     """GxP — a spec with no parameters must never compile a vacuously-conformant
     CoQ (an empty results table certifies nothing)."""
-    _, qp = await _actor(client, admin_headers, "QP")
     spec = await _spec(client, admin_headers, material="COQA-EMPTY")
-    await _approved_coa(client, admin_headers, qp, spec["id"], "B-EMPTY", [])
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-EMPTY", report_date="2026-07-01")
+    # a result-less certificate cannot even be dispositioned PASS (review
+    # 2026-09-27 QC-06) …
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"}, headers=admin_headers)
+    assert r.status_code == 409 and "no results" in r.json()["detail"], r.text
+    # … and the compile-level guard still refuses a row staged past that gate
+    from app.db import tasks_admin_pool
+    await tasks_admin_pool().execute(
+        "UPDATE qc_certificates SET decision='PASS', status='APPROVED' WHERE id=$1", coa["id"])
     r = await client.post("/qc/coq", json={"batch_id": "B-EMPTY", "specification_id": spec["id"]},
                           headers=admin_headers)
     assert r.status_code == 409 and "no parameters" in r.json()["detail"]
