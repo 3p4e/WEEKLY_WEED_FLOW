@@ -325,24 +325,10 @@ ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: profiles profiles_manage; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY profiles_manage ON public.profiles USING (((org_id = app.current_org_id()) AND app.is_elevated())) WITH CHECK (((org_id = app.current_org_id()) AND app.is_elevated()));
-
-
---
 -- Name: profiles profiles_read; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY profiles_read ON public.profiles FOR SELECT USING ((org_id = app.current_org_id()));
-
-
---
--- Name: profiles profiles_self; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY profiles_self ON public.profiles FOR UPDATE USING ((id = app.current_user_id())) WITH CHECK ((id = app.current_user_id()));
 
 
 --
