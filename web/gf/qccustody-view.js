@@ -187,12 +187,26 @@
   };
   GF.WWF.qcCusLogTransfer = async (sampleId) => {
     const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
-    const transfer_type = mk('qcu-xtype'), to_location = mk('qcu-xto');
-    // §6.3 — a custody entry must record at minimum the transfer type and
-    // destination; a blank submit would PATCH a fully-null entry onto the
-    // chain-of-custody record for this sample.
-    if (!transfer_type || !to_location) return GF.toast(AL('Transfer type and destination are required', 'Потребни се тип на трансфер и локација'), 'error');
-    const body = { transfer_type, to_location, transfer_reason: mk('qcu-xreason') || null };
+    const transfer_type = mk('qcu-xtype'), to_location = mk('qcu-xto'), to_user_id = mk('qcu-xtouser');
+    // §6.3 — a custody entry must record at minimum the transfer type and a
+    // destination (a place or a named recipient — the server's own minimum);
+    // a blank submit would PATCH a fully-null entry onto the chain-of-custody
+    // record for this sample.
+    if (!transfer_type || !(to_location || to_user_id)) {
+      return GF.toast(AL('Transfer type and a destination (location or recipient) are required',
+                         'Потребни се тип на трансфер и дестинација (локација или примач)'), 'error');
+    }
+    const body = { transfer_type, to_location: to_location || null, transfer_reason: mk('qcu-xreason') || null };
+    if (to_user_id) body.to_user_id = to_user_id;
+    // Continuity (custody.py): every transfer after the first is anchored on
+    // where — and with whom — the previous entry left the sample. The form
+    // pre-fills both from the last chain entry (read-only) and sends them;
+    // without them the server refused every second hop with 409 and no
+    // field-to-lab chain could be recorded past its first step (review
+    // 2026-09-27, FE-02).
+    const from_location = mk('qcu-xfrom'), from_user_id = mk('qcu-xfromuser');
+    if (from_location) body.from_location = from_location;
+    if (from_user_id) body.from_user_id = from_user_id;
     // §6.3.1 — the condition confirmed at the handoff.
     const cond = mk('qcu-xcond'); if (cond) body.sample_condition = cond;
     const okv = mk('qcu-xok'); if (okv) body.condition_ok = okv === 'yes';
@@ -314,15 +328,36 @@
 
   const condChip = (ok) => ok === true ? chip(AL('intact', 'исправно'), 'var(--green)')
     : (ok === false ? chip(AL('compromised', 'нарушено'), 'var(--red)') : '');
+  const who = (id) => (id && GF.PEOPLE && GF.PEOPLE[id] && GF.PEOPLE[id].name) || (id ? AL('Someone', 'Некој') : '');
   const custodyPanel = (sampleId) => {
     const rows = (GF.WWF._qccus.custody[sampleId] || []);
-    const list = rows.map(x => `<tr><td class="mono">${dt(x.transferred_at)}</td><td>${GF.esc(x.transfer_type || '—')}</td><td>${GF.esc(x.to_location || '')}</td><td>${GF.esc(x.transfer_reason || '')}</td><td>${GF.esc(x.sample_condition || '')} ${condChip(x.condition_ok)}</td></tr>`).join('');
+    const list = rows.map(x => `<tr><td class="mono">${dt(x.transferred_at)}</td><td>${GF.esc(x.transfer_type || '—')}</td>
+      <td>${GF.esc(x.from_location || '')}${x.from_user_id ? `<div class="ana-note" style="margin:0">${GF.esc(who(x.from_user_id))}</div>` : ''}</td>
+      <td>${GF.esc(x.to_location || '')}${x.to_user_id ? `<div class="ana-note" style="margin:0">${GF.esc(who(x.to_user_id))}</div>` : ''}</td>
+      <td>${GF.esc(x.transfer_reason || '')}</td><td>${GF.esc(x.sample_condition || '')} ${condChip(x.condition_ok)}</td></tr>`).join('');
+    // The chain is continuous by construction: the next transfer starts where
+    // — and with whom — the last one ended. Both are read from the last entry
+    // (the API returns the chain in transfer order), shown read-only and sent
+    // with the new entry; the server refuses anything else (custody.py).
+    const last = rows.length ? rows[rows.length - 1] : null;
+    const fromLoc = (last && last.to_location) || '';
+    const fromUser = (last && last.to_user_id) || '';
+    const people = Object.keys(GF.PEOPLE || {}).filter(id => !(GF.PEOPLE[id] || {}).inactive);
+    const originRow = last ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
+        <span class="ana-note" style="margin:0">${AL('Collected from', 'Преземено од')}:</span>
+        <input id="qcu-xfrom" value="${GF.esc(fromLoc)}" readonly placeholder="${AL('(no location on file)', '(нема локација)')}" style="background:var(--surface-2)">
+        <input type="hidden" id="qcu-xfromuser" value="${GF.esc(fromUser)}">
+        ${fromUser ? `<span class="chip-opt">${GF.esc(who(fromUser))}</span>` : ''}
+      </div>` : '';
     return `<div style="margin-top:12px" class="ana-pt">${AL('Chain of custody', 'Ланец на чување')}</div>
-      <table class="qcp-table"><thead><tr><th>${AL('When', 'Кога')}</th><th>${AL('Type', 'Тип')}</th><th>${AL('To', 'До')}</th><th>${AL('Reason', 'Причина')}</th><th>${AL('Condition', 'Состојба')}</th></tr></thead>
-      <tbody>${list || `<tr><td colspan="5" class="ana-note">${AL('No custody transfers', 'Нема трансфери')}</td></tr>`}</tbody></table>
-      ${canWrite() ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
+      <table class="qcp-table"><thead><tr><th>${AL('When', 'Кога')}</th><th>${AL('Type', 'Тип')}</th><th>${AL('From', 'Од')}</th><th>${AL('To', 'До')}</th><th>${AL('Reason', 'Причина')}</th><th>${AL('Condition', 'Состојба')}</th></tr></thead>
+      <tbody>${list || `<tr><td colspan="6" class="ana-note">${AL('No custody transfers', 'Нема трансфери')}</td></tr>`}</tbody></table>
+      ${canWrite() ? originRow + `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
         <select id="qcu-xtype"><option value="">${AL('type…', 'тип…')}</option>${XFER.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
-        <input id="qcu-xto" placeholder="${AL('to location', 'до локација')}"><input id="qcu-xreason" placeholder="${AL('reason', 'причина')}" style="flex:1">
+        <input id="qcu-xto" placeholder="${AL('to location', 'до локација')}">
+        <select id="qcu-xtouser"><option value="">${AL('received by…', 'примено од…')}</option>${people.map(id =>
+          `<option value="${GF.esc(id)}">${GF.esc(GF.PEOPLE[id].name || id)}</option>`).join('')}</select>
+        <input id="qcu-xreason" placeholder="${AL('reason', 'причина')}" style="flex:1">
         <input id="qcu-xcond" placeholder="${AL('condition at handoff', 'состојба при предавање')}">
         <select id="qcu-xok"><option value="">${AL('intact?', 'исправно?')}</option><option value="yes">${AL('intact', 'исправно')}</option><option value="no">${AL('compromised', 'нарушено')}</option></select>
         <button class="btn btn-sm" onclick="GF.WWF.qcCusLogTransfer('${sampleId}')">+ ${AL('Log transfer', 'Запиши трансфер')}</button>
