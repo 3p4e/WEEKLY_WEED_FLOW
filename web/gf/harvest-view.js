@@ -369,7 +369,10 @@
       <div class="field"><label>${AL('Wet weight (g)', 'Свежа тежина (g)')}</label>
         <input id="hv-c-wet" type="number" min="0" step="1"></div>
       <div class="field"><label>${AL('Date', 'Датум')}</label>
-        ${GF.dateField('hv-c-date', {})}</div>
+        ${GF.dateField('hv-c-date', { max: GF.facilityToday() })}
+        <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
+          'The pre-harvest interval is judged on this date, so it cannot lie ahead of today — a cut is recorded when it happens.',
+          'Интервалот пред жетва се проценува на овој датум, па не може да е во иднина — жетвата се запишува кога се случува.')}</div></div>
       <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
         <input id="hv-c-note" maxlength="1000"></div>
       <div id="hv-c-override"></div>
@@ -482,13 +485,22 @@
       return;
     }
     const reason = ((GF.$('hv-c-ovr') || {}).value || '').trim();
+    // The gate is evaluated ON the harvest date, so a future date would be a
+    // way past it (review CS-01). The server refuses it too; here it is
+    // refused before the request so the form says why.
+    const when = ((GF.$('hv-c-date') || {}).value || '') || null;
+    if (when && when > GF.facilityToday()) {
+      GF.toast(AL('A cut cannot be dated in the future — the pre-harvest interval is judged on the harvest date',
+                  'Жетвата не може да е со иден датум — интервалот пред жетва се проценува на датумот на жетва'), 'error');
+      return;
+    }
     try {
       await GF.API.harvestCreate({
         batch_id: (GF.$('hv-c-batch') || {}).value,
         lot_code: lot,
         plants_harvested: plants,
         wet_weight_g: wet,
-        harvested_on: ((GF.$('hv-c-date') || {}).value || '') || null,
+        harvested_on: when,
         note: ((GF.$('hv-c-note') || {}).value || '').trim() || null,
         phi_override_reason: reason || null });
       GF.closeModal('hv-cut-modal');

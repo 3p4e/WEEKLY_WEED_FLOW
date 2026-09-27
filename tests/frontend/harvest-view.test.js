@@ -732,3 +732,22 @@ test('a valid interval, including a legitimate 0, still submits (not mistaken fo
     h.close();
   });
 });
+
+/* ── the review of 2026-09-27: CS-01 ─────────────────────────────────────── */
+
+test('a cut dated in the future is refused before the request — the interval is judged on that date', async () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  await w.GF.WWF.harvestForm();
+  assert.match(w.document.getElementById('hv-cut-modal-body').innerHTML, /cannot lie ahead of today/);
+  w.document.getElementById('hv-c-lot').value = 'LOT-1';
+  w.document.getElementById('hv-c-wet').value = '4000';
+  w.document.getElementById('hv-c-date').value = '2026-07-31';
+  await w.GF.WWF.harvestSave();
+  assert.equal(w.__cut, undefined, 'tomorrow is not a harvest date');
+  assert.ok(w.__toasts.some(t => /future/.test(t[0])));
+  w.document.getElementById('hv-c-date').value = '2026-07-29';
+  await w.GF.WWF.harvestSave();
+  assert.equal(w.__cut.harvested_on, '2026-07-29');
+  h.close();
+});

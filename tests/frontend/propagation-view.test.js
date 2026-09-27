@@ -283,7 +283,10 @@ test('the detail block names the next step, whose it is, and the clone run', () 
                 mothers: [{ code: 'GP26_S1M01-1_001' }, { code: 'GP26_S1M02-1_001' }],
                 cuttings_total: 2100, product_code: 'GP_THC26:CBD1', status: 'transplanted' }];
   const html = render(h, [batch({ id: 'b1', phase: 'flower' })]);
-  assert.match(html, /Next: <b[^>]*>Harvest · cure · defoliation<\/b>/);
+  // The owner's order: "harvest, course and defoliating end of GACP" — curing
+  // comes after drying, in the GMP wing, and is not part of this step (INS-11).
+  assert.match(html, /Next: <b[^>]*>Harvest · coarse trim · defoliation<\/b>/);
+  assert.doesNotMatch(html, /Harvest · cure/);
   assert.match(html, /cultivation records the cut, then production takes the lot/);
   assert.match(html, /Cut in clone run GP · 01\.07\.2026\s*· 2 mothers · 2100 cuttings · GP_THC26:CBD1/);
   h.close();
@@ -548,5 +551,105 @@ test('finishing a run sends the outcome and the batch it became', async () => {
   await w.GF.WWF.cloneRunFinishSave('run1');
   assert.deepEqual(JSON.parse(JSON.stringify(w.__runPatched)),
     ['run1', { status: 'transplanted', batch_id: 'b1', note: null }]);
+  h.close();
+});
+
+/* ── the review of 2026-09-27: CS-03, CS-12, AD-19, CS-08 ──────────────── */
+
+test('choosing a parent pre-fills and locks the campaign and mother number; the preview uses the server\'s head', async () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  w.__campaigns = [
+    { id: 'sc1', seq: 1, label: 'S1', started_on: '2026-06-01', material: 'seeds', mothers_count: 3 },
+    { id: 'sc2', seq: 2, label: 'S2', started_on: '2026-07-01', material: 'clones', mothers_count: 0 }];
+  w.GF.WWF._prop.mothers = [
+    { id: 'm3', code: 'GP26_S1M03-1_001', product_id: 'p1', generation: 1, campaign_id: 'sc1',
+      campaign_label: 'S1', mother_no: 3 }];
+  await w.GF.WWF.motherForm();
+  w.document.getElementById('mb-gen').value = '2';
+  await w.GF.WWF._motherSync();
+  const parentCfg = w.__selCfg['mb-parent'];
+  assert.ok(parentCfg.onPick, 'the parent chooser drives the line');
+  w.document.getElementById('mb-parent').value = 'm3';
+  await parentCfg.onPick('m3');
+  assert.equal(w.document.getElementById('mb-campaign').value, 'sc1', "the parent's campaign");
+  assert.equal(w.document.getElementById('mb-mno').value, '3', "the parent's mother number");
+  assert.equal(w.document.getElementById('mb-mno').readOnly, true, 'locked while a parent is named');
+  assert.deepEqual(JSON.parse(JSON.stringify(w.__nextAsked)),
+    { product_id: 'p1', campaign_id: 'sc1', generation: 2, mother_no: '3' });
+  // The preview's head is the acronym the SERVER answered, not a split of the code.
+  w.GF.API.motherNextCode = async (q) => ({ acronym: 'GPX', grade: 26, campaign_seq: 1, mother_no: 3,
+    next_mother_no: 4, generation: 2, next_stock_no: 1, head: 'GPX26_S1M03-2_', suggested: 'GPX26_S1M03-2_001' });
+  await w.GF.WWF._motherSync();
+  assert.equal(w.document.getElementById('mb-preview').textContent, 'GPX26_S1M03-2_001');
+  await w.GF.WWF.motherSave();
+  const sent = JSON.parse(JSON.stringify(w.__motherCreated));
+  assert.equal(sent.parent_id, 'm3');
+  assert.equal(sent.campaign_id, 'sc1');
+  assert.equal(sent.mother_no, 3);
+  assert.equal(sent.generation, 2);
+  // Clearing the parent releases the line again.
+  w.document.getElementById('mb-parent').value = '';
+  await parentCfg.onPick('');
+  assert.equal(w.document.getElementById('mb-mno').readOnly, false);
+  assert.equal(w.document.getElementById('mb-mno').value, '');
+  h.close();
+});
+
+test('a clone run without a date of cloning initiation is refused before the request', async () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  await w.GF.WWF.cloneRunForm();
+  assert.equal(w.document.getElementById('cr-date').value, '2026-07-30', 'the picker opens on today, as the owner asked');
+  w.document.getElementById('cr-count').value = '100';
+  w.document.getElementById('cr-date').value = '';
+  await w.GF.WWF.cloneRunSave();
+  assert.equal(w.__runCreated, undefined, 'no date, no run');
+  assert.ok(w.__toasts.some(t => /date of cloning initiation/i.test(t[0])));
+  w.document.getElementById('cr-date').value = '2026-07-29';
+  await w.GF.WWF.cloneRunSave();
+  assert.equal(w.__runCreated.started_on, '2026-07-29');
+  assert.match(w.document.getElementById('cr-modal-body').innerHTML, /names the official product/,
+    'the run names a product; it no longer claims to snapshot a ladder');
+  h.close();
+});
+
+test('the potency panel shows the strain\'s history with its sources first, then the product subset', async () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  w.__potency = {
+    mother_id: 'm1', code: 'GP26_S1M01-1_001', product_code: 'GP_THC26:CBD1', window: [23.40, 28.59],
+    strain: { n: 3, avg: 22.9, min: 21.8, max: 24.5,
+              values: [{ number: 'CoQ-1', lot_code: 'L-1', total_thc: 24.5, on: '2026-08-01', source: 'coq_product', product_code: 'GP_THC26:CBD1' },
+                       { number: 'CoQ-7', lot_code: 'L-7', total_thc: 22.4, on: '2026-08-10', source: 'coq_cultivar', product_code: null },
+                       { number: 'BG1024-CoA', lot_code: 'BG1024', total_thc: 21.8, on: '2026-05-01', source: 'certificate', product_code: null }] },
+    sources: { coq_product: { n: 1 }, coq_cultivar: { n: 1 }, certificate: { n: 1 } },
+    product: { n: 1, avg: 24.5, min: 24.5, max: 24.5,
+               values: [{ number: 'CoQ-1', lot_code: 'L-1', total_thc: 24.5, on: '2026-08-01', source: 'coq_product', product_code: 'GP_THC26:CBD1' }] },
+    traced: { n: 0, avg: null, min: null, max: null, values: [] } };
+  await w.GF.WWF.motherPotency('m1');
+  const body = w.document.getElementById('mp-modal-body').innerHTML;
+  const strainAt = body.indexOf('tested so far'), productAt = body.indexOf('as this product');
+  assert.ok(strainAt >= 0 && productAt > strainAt, 'strain first, the product subset after it');
+  assert.match(body, /average <b>22\.90 %<\/b>/);
+  assert.match(body, /3 results · 21\.80–24\.50 %/);
+  assert.match(body, /CoQ naming a product of this strain: <b>1<\/b> · CoQ naming the strain only: <b>1<\/b> · certificate result, by batch code: <b>1<\/b>/);
+  assert.match(body, /BG1024-CoA<\/td><td>BG1024<\/td>\s*<td><b>21\.80 %/);
+  h.close();
+});
+
+test('the bank column reads the strain\'s figure and says so when nothing is tested', () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  w.__byCv = [{ cultivar_id: 'cv1', cultivar_code: 'GP', cultivar_name: 'Grape Pie', active: 1, total: 1, phenotypes: [], products: ['GP_THC26:CBD1'] }];
+  const mother = { id: 'm1', code: 'GP26_S1M01-1_001', product_id: 'p1', product_code: 'GP_THC26:CBD1', campaign_label: 'S1',
+    generation: 1, cultivar_id: 'cv1', status: 'active', times_cut: 0, cuttings_total: 0, age_days: null, last_cut_on: null };
+  w.GF.WWF._prop.mothers = [{ ...mother, tested: { n: 4, avg: 23.1 }, tested_product: { n: 2, avg: 24 } }];
+  w.GF.WWF._prop.byCultivar = w.__byCv;
+  let html = render(h, [], 'mothers');
+  assert.match(html, /<b>23\.10 %<\/b> <span class="sub">of 4 · 2 as this product<\/span>/);
+  w.GF.WWF._prop.mothers = [{ ...mother, tested: { n: 0, avg: null }, tested_product: { n: 0, avg: null } }];
+  html = render(h, [], 'mothers');
+  assert.match(html, /strain not tested yet/);
   h.close();
 });

@@ -26,6 +26,17 @@
    counter kept here. A mother with no recorded date has no age, not an age
    of zero; a mother never cut says "never", not "0 generations ago".
 
+   THE ID'S LINE IS INHERITED. Registering a later generation from a parent
+   in the bank takes the campaign and the mother number FROM the parent
+   (GP26_S1M03-1_001 → GP26_S1M03-2_001): the form pre-fills both and locks
+   them the moment a parent is chosen, and the server refuses a body that
+   contradicts the parent. The id's head comes from the server's own answer
+   (next-code's `acronym`), so the preview and the saved id share one source.
+
+   "TESTED SO FAR" IS THE STRAIN'S. The potency panel shows the strain-level
+   history first (all three sources the catalogue defines, one measurement per
+   lot), then the subset naming this product, then what traces to this plant.
+
    Loads after cultivation-view.js (uses GF.WWF.cultSpecLine / cultSpecPanel,
    GF.WWF._ensureModal, GF.selectField, GF.dateField, GF.codeField). */
 
@@ -92,8 +103,9 @@
       <td>${m.last_cut_on ? fmtD(m.last_cut_on) : `<span class="sub">${AL('never', 'никогаш')}</span>`}</td>
       <td>${m.times_cut}${m.cuttings_total ? ` <span class="sub">(${m.cuttings_total} ${AL('cuttings', 'резници')})</span>` : ''}</td>
       <td>${m.tested && m.tested.n
-        ? `<b>${Number(m.tested.avg).toFixed(2)} %</b> <span class="sub">${AL('of', 'од')} ${m.tested.n}</span>`
-        : `<span class="sub">${AL('not tested yet', 'сè уште нетестирано')}</span>`}</td>
+        ? `<b>${Number(m.tested.avg).toFixed(2)} %</b> <span class="sub">${AL('of', 'од')} ${m.tested.n}${
+            m.tested_product && m.tested_product.n ? ` · ${m.tested_product.n} ${AL('as this product', 'како овој производ')}` : ''}</span>`
+        : `<span class="sub">${AL('strain not tested yet', 'сортата сè уште нетестирана')}</span>`}</td>
       <td><span style="color:${sCol(MSTATUS, m.status)}">${GF.esc(sLbl(MSTATUS, m.status))}</span></td>
       <td><button class="btn btn-sm" onclick="GF.WWF.motherPotency('${m.id}')">${AL('Potency', 'Потентност')}</button>${
         canBank() ? `<button class="btn btn-sm" onclick="GF.WWF.motherForm('${m.id}')">${AL('Edit', 'Уреди')}</button>` : ''}</td>
@@ -414,20 +426,57 @@
     if (sEl && !typedS) sEl.placeholder = String(sno);
     const prev = GF.$('mb-preview');
     if (prev) {
-      prev.textContent = GF.WWF.motherCodePreview(
-        prod.product_code.split('_')[0], prod.grade, camp.seq, mno, gen, sno);
+      // The head is the SERVER's (the product code's acronym) — the same
+      // source the saved id is composed from, so the preview cannot differ
+      // from what is written. The split is only the fallback for a request
+      // that failed.
+      const acr = (next && next.acronym) || prod.product_code.split('_')[0];
+      prev.textContent = GF.WWF.motherCodePreview(acr, prod.grade, camp.seq, mno, gen, sno);
     }
-    // A second-generation mother may name the plant it was cut from.
+    // A second-generation mother may name the plant it was cut from. Once a
+    // parent is chosen the LINE is the parent's: the campaign and the mother
+    // number are filled from it and locked (the server refuses a body that
+    // says otherwise), and only the generation and the stock number move on.
     const wrap = GF.$('mb-parent-wrap'), sel = GF.$('mb-parent-sel');
     if (wrap && sel) {
       if (gen > 1) {
         const eligible = (ctx.mothers || []).filter(x => x.product_id === pid && x.generation === gen - 1);
         wrap.style.display = '';
-        sel.innerHTML = GF.selectField('mb-parent', { value: '', title: AL('Mother', 'Мајка'),
+        const cur = ((GF.$('mb-parent') || {}).value || '');
+        sel.innerHTML = GF.selectField('mb-parent', { value: cur, title: AL('Mother', 'Мајка'),
           options: [{ v: '', label: AL('— not in the bank —', '— не е во банката —') }]
-            .concat(eligible.map(x => ({ v: x.id, label: x.code }))) });
-      } else { wrap.style.display = 'none'; sel.innerHTML = ''; }
+            .concat(eligible.map(x => ({ v: x.id, label: x.code, sub: `${x.campaign_label || ''} · M${String(x.mother_no || '').padStart(2, '0')}` }))),
+          onPick: () => GF.WWF._motherParentSync() });
+      } else {
+        wrap.style.display = 'none'; sel.innerHTML = '';
+        // Back to generation 1: no parent, so the line is the form's again.
+        if (GF.WWF._motherLocked) {
+          const cBtn = GF.$('mb-campaign-btn'); if (cBtn) cBtn.disabled = false;
+          if (mEl) { mEl.readOnly = false; mEl.value = ''; }
+          GF.WWF._motherLocked = false;
+        }
+      }
     }
+  };
+
+  // The parent's line, applied to the form: campaign and mother number
+  // pre-filled and locked while a parent is chosen, released when it is
+  // cleared. Then the preview is recomputed from the server's next numbers.
+  GF.WWF._motherParentSync = async () => {
+    const ctx = GF.WWF._motherCtx || {};
+    const pidParent = ((GF.$('mb-parent') || {}).value || '');
+    const parent = pidParent ? (ctx.mothers || []).find(x => x.id === pidParent) : null;
+    const mEl = GF.$('mb-mno'), cEl = GF.$('mb-campaign'), cBtn = GF.$('mb-campaign-btn');
+    if (parent) {
+      if (cEl) cEl.value = parent.campaign_id;
+      if (cBtn) { cBtn.disabled = true; const cur = cBtn.querySelector('.sel-cur'); if (cur) cur.textContent = parent.campaign_label || ''; }
+      if (mEl) { mEl.value = String(parent.mother_no); mEl.readOnly = true; }
+    } else {
+      if (cBtn) cBtn.disabled = false;
+      if (mEl && mEl.readOnly) { mEl.readOnly = false; mEl.value = ''; }
+    }
+    GF.WWF._motherLocked = !!parent;
+    await GF.WWF._motherSync();
   };
 
   GF.WWF.motherSave = (motherId) => GF.once('mb-save', async () => {
@@ -476,13 +525,31 @@
       ${s.n ? `<div style="font-size:13px">${AL('average', 'просек')} <b>${Number(s.avg).toFixed(2)} %</b>
           <span style="color:var(--ink-3)">· ${s.n} ${AL('results', 'резултати')} · ${Number(s.min).toFixed(2)}–${Number(s.max).toFixed(2)} %</span></div>
         <div style="overflow-x:auto;margin-top:4px"><table class="pb-table"><tbody>${s.values.map(v =>
-          `<tr><td>${GF.esc(v.coq_number || '—')}</td><td>${GF.esc(v.lot_code || '—')}</td>
-           <td><b>${Number(v.total_thc).toFixed(2)} %</b></td><td>${fmtD(v.on)}</td></tr>`).join('')}</tbody></table></div>`
+          `<tr><td>${GF.esc(v.number || v.coq_number || '—')}</td><td>${GF.esc(v.lot_code || '—')}</td>
+           <td><b>${Number(v.total_thc).toFixed(2)} %</b></td><td>${fmtD(v.on)}</td>${
+           v.source ? `<td class="sub">${GF.esc(v.product_code || (v.source === 'certificate' ? AL('certificate', 'сертификат') : AL('strain', 'сорта')))}</td>` : ''}</tr>`).join('')}</tbody></table></div>`
         : `<div style="color:var(--ink-3);font-size:12px">${none}</div>`}</div>`;
+    // The three sources the catalogue defines, labelled so a reader knows how
+    // strong each figure is: a CoQ that named the product, a CoQ that named
+    // only the strain, a certificate result attributed by the batch code.
+    const SRC = { coq_product: AL('CoQ naming a product of this strain', 'CoQ со производ на сортата'),
+                  coq_cultivar: AL('CoQ naming the strain only', 'CoQ само со сортата'),
+                  certificate: AL('certificate result, by batch code', 'сертификат, по код на батч'),
+                  coq_traced: AL('CoQ', 'CoQ') };
+    const srcLine = body.sources
+      ? `<div style="font-size:11px;color:var(--ink-3);margin:-6px 0 10px">${Object.keys(SRC).filter(k => body.sources[k]).map(k =>
+          `${SRC[k]}: <b>${body.sources[k].n}</b>`).join(' · ')}</div>`
+      : '';
+    const strain = body.strain
+      ? stat(body.strain, AL('This specification strain — tested so far', 'Оваа спецификациска сорта — тестирано досега'),
+             AL('Nothing has been tested for this strain yet — no approved CoQ names it or a product of it, and no released certificate is attributed to one of its batches.',
+                'Сè уште ништо не е тестирано за оваа сорта — нема одобрен CoQ за неа или нејзин производ, ниту сертификат припишан на нејзин батч.')) + srcLine
+      : '';
     GF.$('mp-modal-body').innerHTML = `
       <div style="font-size:12px;color:var(--ink-3);margin-bottom:10px">${GF.esc(body.product_code)} ·
         ${AL('window', 'прозорец')} ${Number(body.window[0]).toFixed(2)}–${Number(body.window[1]).toFixed(2)} %</div>
-      ${stat(body.product, AL('This specification strain', 'Оваа спецификациска сорта'),
+      ${strain}
+      ${stat(body.product, AL('Of which, as this product', 'Од тоа, како овој производ'),
              AL('No approved Certificate of Quality carries a Total Δ9-THC for this product yet.',
                 'Сè уште нема одобрен сертификат со вкупен Δ9-THC за овој производ.'))}
       ${stat(body.traced, AL('Traceable to this plant', 'Следливо до ова растение'),
@@ -537,8 +604,8 @@
           <input id="cr-note" maxlength="500"></div>
       </div>
       <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
-        'The run records the cutting event and snapshots the cultivar’s approved product specification. Leave a mother’s cuttings blank if not counted per mother — blank means "not counted", not zero.',
-        'Клонирањето го запишува сечењето и ја зачувува одобрената спецификација на сортата. Оставете ги резниците на мајка празни ако не се броени по мајка — празно значи „не е броено“, не нула.')}</div>
+        'The run records the cutting event and names the official product the material is propagated against. The date is yours to set — it has no default. Leave a mother’s cuttings blank if not counted per mother — blank means "not counted", not zero. Link the run to its batch BEFORE the batch’s plant ids are generated: once they exist, the batch’s runs are fixed.',
+        'Клонирањето го запишува сечењето и го наведува официјалниот производ. Датумот го поставувате вие — нема стандардна вредност. Оставете ги резниците на мајка празни ако не се броени по мајка — празно значи „не е броено“, не нула. Поврзете го клонирањето со батчот ПРЕД да се генерираат ID на растенијата: потоа клонирањата на батчот се фиксни.')}</div>
       <div class="row" style="gap:10px">
         <div class="spacer"></div>
         <button class="btn btn-primary" id="cr-save" onclick="GF.WWF.cloneRunSave()">${AL('Start run', 'Започни')}</button>
@@ -601,6 +668,12 @@
                   'Кодот мора да е 1–64 знаци: букви, цифри, _ или -'), 'error');
       return;
     }
+    // "they have to set the date of cloning initiation" (owner) — no default
+    // on the server, so an empty date is refused here rather than as a 422.
+    if (!val('cr-date')) {
+      GF.toast(AL('Set the date of cloning initiation', 'Поставете го датумот на почеток на клонирање'), 'error');
+      return;
+    }
     const mothers = [];
     (typeof document !== 'undefined' ? document.querySelectorAll('#cr-mothers input[type=checkbox]:checked') : []).forEach(cb => {
       const mid = cb.getAttribute('data-mid');
@@ -612,7 +685,7 @@
       await GF.API.cloneRunCreate({
         cultivar_id: val('cr-cultivar'),
         product_id: val('cr-product') || null,
-        started_on: val('cr-date') || null,
+        started_on: val('cr-date'),
         planned_count: count,
         room_id: val('cr-room') || null,
         batch_id: val('cr-batch') || null,

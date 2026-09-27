@@ -23,7 +23,10 @@
   // The as-built register (tasks 0068 + api/facility_layout.py): the building
   // as the architect drew it, loaded lazily the first time the plan is opened.
   GF.WWF._plan = { data: null, loading: false, error: null, mode: 'plan',
-                   zone: '', q: '', zoom: 1, sel: null, room: null };
+                   // `colour` picks what the plan is coloured by — the zone
+                   // (what a room is for) or the cleanliness grade (what
+                   // discipline it is run to); each has its own filter chip.
+                   colour: 'zone', zone: '', grade: '', q: '', zoom: 1, sel: null, room: null };
 
   const PHASES = {
     nursery: { en: 'Nursery',   mk: 'Расадник',   color: '#7FD9C4' },
@@ -170,6 +173,33 @@
                     SUPPORT: { en: 'Support', mk: 'Придружни' } };
   const zLbl = (z) => z && ZONES[z] ? AL(ZONES[z].en, ZONES[z].mk) : AL('Unclassified', 'Некласифицирано');
   const zCol = (z) => (ZONES[z] || {}).color || 'var(--ink-3)';
+
+  /* ── Cleanliness grades: the owner's scheme (2026-09-06), EU GMP grades
+     plus CNC. A room's grade is what the register (or QA) says it is; a room
+     with none is shown by what that MEANS, not as a guess: a GACP room has no
+     grade because GACP defines none, everything else is simply not graded
+     yet. Both are drawn, neither is invented. */
+  const GRADES = {
+    A:    { en: 'Grade A',  mk: 'Класа A', color: '#D62F6E' },
+    B:    { en: 'Grade B',  mk: 'Класа B', color: '#B03CC8' },
+    C:    { en: 'Grade C',  mk: 'Класа C', color: '#5B5BD6' },
+    D:    { en: 'Grade D',  mk: 'Класа D', color: '#1F8BD0' },
+    CNC:  { en: 'CNC — controlled, not classified', mk: 'CNC — контролирано, некласифицирано', color: '#8A8A93' },
+    GACP: { en: 'GACP — no grade applies', mk: 'GACP — без класа', color: '#2EA043' },
+    NONE: { en: 'Not graded yet', mk: 'Сè уште без класа', color: '#C4C4CA' },
+  };
+  const GRADE_ORDER = ['A', 'B', 'C', 'D', 'CNC', 'GACP', 'NONE'];
+  // The grade key a room is coloured and filtered by. A free-text grade the
+  // scheme does not know keeps its own text and the neutral colour.
+  const gradeKey = (r) => {
+    const g = String(r.grade || '').trim().toUpperCase();
+    if (g) return GRADES[g] ? g : g;
+    return r.regime === 'GACP' ? 'GACP' : 'NONE';
+  };
+  const gLbl = (k) => GRADES[k] ? AL(GRADES[k].en, GRADES[k].mk) : k;
+  const gCol = (k) => (GRADES[k] || {}).color || 'var(--ink-3)';
+  // What a room is coloured by right now.
+  const pinCol = (r) => GF.WWF._plan.colour === 'grade' ? gCol(gradeKey(r)) : zCol(r.zone);
   const planName = (r) => (GF.state.lang === 'mk' && r.name_mk) ? r.name_mk : (r.name_en || r.code);
   // Grade and regime are QA's call, not the drawing's — the same roles the
   // server lets through in facility_layout.py's _CLASSIFIERS.
@@ -194,6 +224,8 @@
   };
 
   GF.WWF.planZone = (z) => { GF.WWF._plan.zone = GF.WWF._plan.zone === z ? '' : z; GF.render.all(); };
+  GF.WWF.planGrade = (g) => { GF.WWF._plan.grade = GF.WWF._plan.grade === g ? '' : g; GF.render.all(); };
+  GF.WWF.planColour = (c) => { GF.WWF._plan.colour = c === 'grade' ? 'grade' : 'zone'; GF.render.all(); };
   GF.WWF.planZoom = (d) => {
     const p = GF.WWF._plan;
     p.zoom = Math.min(6, Math.max(1, Math.round((p.zoom + d) * 10) / 10));
@@ -207,21 +239,12 @@
     const list = GF.$('fp-list'); if (list) list.innerHTML = GF.WWF._planRoster();
   };
 
-  const planRooms = () => {
-    const p = GF.WWF._plan;
-    const q = (p.q || '').trim().toLowerCase();
-    return (p.data && p.data.rooms ? p.data.rooms : []).filter(r => {
-      if (p.zone && r.zone !== p.zone) return false;
-      if (!q) return true;
-      return (r.code || '').toLowerCase().includes(q)
-          || (r.name_en || '').toLowerCase().includes(q)
-          || (r.name_mk || '').toLowerCase().includes(q);
-    });
-  };
+  const planRooms = () => (GF.WWF._plan.data && GF.WWF._plan.data.rooms ? GF.WWF._plan.data.rooms : [])
+    .filter(planMatch);
 
   GF.WWF._planMarkers = () => planRooms().filter(r => r.plan_x != null).map(r => `
     <button class="fp-pin${GF.WWF._plan.sel === r.id ? ' on' : ''}"
-      style="left:${(r.plan_x * 100).toFixed(3)}%;top:${(r.plan_y * 100).toFixed(3)}%;--pin:${zCol(r.zone)}"
+      style="left:${(r.plan_x * 100).toFixed(3)}%;top:${(r.plan_y * 100).toFixed(3)}%;--pin:${pinCol(r)}"
       title="${GF.esc(r.code + ' · ' + planName(r))}"
       onclick="event.stopPropagation();GF.WWF.openPlanRoom('${r.id}')">
       <span class="fp-pin-dot"></span><span class="fp-pin-lbl">${GF.esc(r.code)}</span>
@@ -232,7 +255,7 @@
     if (!rows.length) return `<div class="fr-empty" style="padding:10px 0">${AL('No room matches.', 'Нема соба што одговара.')}</div>`;
     return rows.map(r => `
       <div class="fp-row" onclick="GF.WWF.openPlanRoom('${r.id}')">
-        <span class="fp-row-dot" style="background:${zCol(r.zone)}"></span>
+        <span class="fp-row-dot" style="background:${pinCol(r)}"></span>
         <span class="fp-row-code">${GF.esc(r.code)}</span>
         <span class="fp-row-nm">${GF.esc(planName(r))}</span>
         <span class="fp-row-a">${r.area_m2 != null ? r.area_m2.toFixed(2) + ' m²' : '—'}</span>
@@ -282,6 +305,7 @@
     const p = GF.WWF._plan;
     const q = (p.q || '').trim().toLowerCase();
     if (p.zone && r.zone !== p.zone) return false;
+    if (p.colour === 'grade' && p.grade && gradeKey(r) !== p.grade) return false;
     if (!q) return true;
     return (r.code || '').toLowerCase().includes(q)
         || (r.name_en || '').toLowerCase().includes(q)
@@ -291,7 +315,7 @@
   GF.WWF._planShapes = () => {
     const p = GF.WWF._plan;
     const rooms = (p.data && p.data.rooms ? p.data.rooms : []).filter(r => r.box_x != null);
-    const anyFilter = !!(p.zone || (p.q || '').trim());
+    const anyFilter = !!(p.zone || (p.colour === 'grade' && p.grade) || (p.q || '').trim());
     // Biggest first, so a small room inside a hall stays clickable above it.
     return rooms.slice().sort((a, b) => (b.box_w * b.box_h) - (a.box_w * a.box_h))
       .map(r => {
@@ -307,7 +331,7 @@
         const label = (r.box_w * PLAN_VB_W > 26 && r.box_h * PLAN_VB_H > 11)
           ? `<text class="fp-rt" x="${(+x + 2.5).toFixed(2)}" y="${(+y + 8).toFixed(2)}">${GF.esc(r.code)}</text>`
           : '';
-        return `<g class="${cls}" style="--pin:${zCol(r.zone)}"
+        return `<g class="${cls}" style="--pin:${pinCol(r)}"
             onclick="GF.WWF.openPlanRoom('${r.id}')">
             <title>${GF.esc(r.code + ' · ' + planName(r)
               + (r.area_m2 != null ? ' · ' + r.area_m2.toFixed(2) + ' m²' : ''))}</title>
@@ -341,13 +365,38 @@
         style="--pin:${zCol(z)}"><span></span>${zLbl(z)}
         <b>${t.rooms}</b> · ${Math.round(t.area_m2)} m²</button>`;
     };
-    const legend = `<div class="fp-legend">${Object.keys(ZONES).map(chip).join('')}</div>`;
+    // The grade legend is computed here from the rooms, the same way the
+    // server totals zones: rooms and area per grade key, in the scheme's order,
+    // with any free-text grade the scheme does not know listed after it.
+    const byGrade = {};
+    (p.data.rooms || []).forEach(r => {
+      const k = gradeKey(r);
+      const t = byGrade[k] = byGrade[k] || { rooms: 0, area_m2: 0 };
+      t.rooms += 1; t.area_m2 += (r.area_m2 || 0);
+    });
+    const gradeKeys = GRADE_ORDER.filter(k => byGrade[k])
+      .concat(Object.keys(byGrade).filter(k => !GRADE_ORDER.includes(k)).sort());
+    const gchip = (k) => {
+      const t = byGrade[k];
+      return `<button class="fp-chip${p.grade === k ? ' on' : ''}" onclick="GF.WWF.planGrade('${GF.esc(k)}')"
+        style="--pin:${gCol(k)}"><span></span>${GF.esc(gLbl(k))}
+        <b>${t.rooms}</b> · ${Math.round(t.area_m2)} m²</button>`;
+    };
+    const legend = p.colour === 'grade'
+      ? `<div class="fp-legend" id="fp-legend-grade">${gradeKeys.map(gchip).join('')}</div>`
+      : `<div class="fp-legend" id="fp-legend-zone">${Object.keys(ZONES).map(chip).join('')}</div>`;
     const mode = (k, label) => `<button class="fp-mode${p.mode === k ? ' on' : ''}"
       onclick="GF.WWF.planMode('${k}')">${label}</button>`;
+    const colour = (k, label) => `<button class="fp-mode${p.colour === k ? ' on' : ''}"
+      onclick="GF.WWF.planColour('${k}')">${label}</button>`;
     const bar = `<div class="fp-bar">
       <div class="fp-modes">
         ${mode('plan', AL('Plan', 'Основа'))}
         ${mode('drawing', AL('Drawing', 'Цртеж'))}
+      </div>
+      <div class="fp-modes" title="${AL('Colour the rooms by', 'Обои ги собите по')}">
+        ${colour('zone', AL('By zone', 'По зона'))}
+        ${colour('grade', AL('By grade', 'По класа'))}
       </div>
       <input id="fp-q" class="fp-q" placeholder="${AL('Find a room — code or name', 'Најди соба — код или име')}"
              value="${GF.esc(p.q)}" oninput="GF.WWF.planSearch(this.value)">
@@ -426,9 +475,14 @@
     const kv = (l, v) => v == null || v === '' ? ''
       : `<div class="fp-kv"><span>${l}</span><b>${GF.esc(String(v))}</b></div>`;
     const other = GF.state.lang === 'mk' ? r.name_en : r.name_mk;
+    // The grade as recorded; a GACP room says why it has none, any other
+    // ungraded room says it is not classified. Neither invents a grade.
+    const gk = gradeKey(r);
     const grade = r.grade
-      ? GF.esc(r.grade)
-      : `<span style="color:var(--ink-3)">${AL('not classified', 'некласифицирано')}</span>`;
+      ? `<span class="fp-badge" style="--pin:${gCol(gk)}">${GF.esc(r.grade)}</span>`
+      : (gk === 'GACP'
+        ? `<span style="color:var(--ink-3)">${AL('not classified — GACP defines no cleanliness grade', 'некласифицирано — GACP не дефинира класа на чистота')}</span>`
+        : `<span style="color:var(--ink-3)">${AL('not classified', 'некласифицирано')}</span>`);
     const bl = batches == null
       ? `<div class="fr-empty" style="padding:6px 0">${AL('Loading…', 'Се вчитува…')}</div>`
       : (batches.length

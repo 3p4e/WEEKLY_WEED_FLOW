@@ -5,7 +5,19 @@
    WHICH coded batch, made up of WHICH individually numbered plants, and where
    has that batch been. It is the UI over app/api/cultivation.py (migration
    0045): the cultivar master, coded batches (GP072501), the per-plant roster
-   (<clone-date>_<cultivar>_<seq>), and dated whole-batch phase moves.
+   (the mother's clone id GP26_S1M03-2_020-03.147, or the legacy
+   <clone-date>_<batch code>_<seq> when no mother is known), and dated
+   whole-batch phase moves and room changes.
+
+   THE PHASE PATH (mirrors _PATH / _transition in app/api/cultivation.py):
+   clone → nursery → veg → flower → drying → harvested, one stop at a time,
+   nursery and drying optional, destroyed from anywhere. "Move / advance"
+   offers a writer exactly the forward stops; QA authority (ADMIN, executives,
+   QA_MGR) is also offered the earlier ones, as a correction that needs a
+   reason. "Change room" is a separate action because it is a different
+   record: the phase clock does not restart when only the room changes. Every
+   recorded date is bounded by the facility's today, here before the request
+   and on the server regardless.
 
    Read: every role above base USER. Write (register a cultivar, move a
    batch): cultivation manager + executives + ADMIN. REGISTER a batch and
@@ -74,6 +86,23 @@
     { key: 'destroyed', en: 'Destroyed',  mk: 'Уништено',   color: '#E5484D' },
   ];
   const TERMINAL = ['harvested', 'destroyed'];
+  // The production path and its optional stops — mirrors _PATH /
+  // _OPTIONAL_STOPS in app/api/cultivation.py, which is the authority.
+  const PATH = ['clone', 'nursery', 'veg', 'flower', 'drying', 'harvested'];
+  const OPTIONAL = ['nursery', 'drying'];
+  // The forward stops a batch may take next: the next one, and whatever lies
+  // past an optional stop. Mother stock is off the path.
+  const forwardTargets = (phase) => {
+    const i = PATH.indexOf(phase);
+    if (i < 0) return [];
+    const out = [];
+    for (let j = i + 1; j < PATH.length; j++) {
+      out.push(PATH[j]);
+      if (!OPTIONAL.includes(PATH[j])) break;
+    }
+    return out;
+  };
+  const isBackward = (from, to) => PATH.indexOf(to) >= 0 && PATH.indexOf(to) < PATH.indexOf(from);
   const PH = {}; PHASES.forEach(p => { PH[p.key] = p; });
   const phLbl = (p) => AL(PH[p]?.en || p, PH[p]?.mk || p);
   const phCol = (p) => (PH[p] || {}).color || 'var(--ink-3)';
@@ -92,6 +121,9 @@
   // the cultivar master".
   const canWrite = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'QA_MGR'].includes(role());
   const canRegister = canWrite;
+  // Who may move a batch BACKWARDS along the path — a correction of the
+  // record. Mirrors _CORRECTORS in app/api/cultivation.py.
+  const canCorrect = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'QA_MGR'].includes(role());
   // Mirrors CultivarIn.code / BatchIn.code server-side, so a bad code is
   // rejected before a round trip rather than as a bare 422.
   const CODE_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -181,6 +213,13 @@
     if (canWrite() && !terminal) {
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultMoveForm('${b.id}')">
         ${GF.icon('forward', 'icon')}${AL('Move / advance', 'Премести / фаза')}</button>`);
+      // A room change is its own record: the phase clock does not restart.
+      actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultRoomForm('${b.id}')">
+        ${GF.icon('link', 'icon')}${AL('Change room', 'Промени соба')}</button>`);
+      // The product, the clone source and the note may be set after
+      // registration — the catalogue arrives after the batches do.
+      actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultEditForm('${b.id}')">
+        ${GF.icon('settings', 'icon')}${AL('Edit batch', 'Уреди батч')}</button>`);
     }
     // A batch with no cultivar cannot form plant ids at all (the server returns
     // 422). Say that on the card instead of letting the operator find out.
@@ -288,9 +327,12 @@
     { key: 'nursery',    en: 'Nursery',       mk: 'Расадник',     who: 'cultivation' },
     { key: 'veg',        en: 'Vegetation',    mk: 'Вегетација',   who: 'cultivation' },
     { key: 'flower',     en: 'Flowering',     mk: 'Цветање',      who: 'cultivation' },
-    // Harvest, cure and defoliation are one step and one boundary: the end of
-    // GACP and the start of GMP (owner, 2026-09-05).
-    { key: 'cut', en: 'Harvest · cure · defoliation', mk: 'Жетва · сушење · дефолијација',
+    // "harvest, course and defoliating end of GACP" (owner, 2026-09-05): the
+    // cut, the coarse trim and the defoliation are one step and one boundary,
+    // the end of GACP and the start of GMP. Curing comes AFTER drying, in the
+    // GMP wing (Grade D, owner 2026-09-06), so it is not named here; the
+    // owner's exact wording of this step is still to be confirmed (INS-11).
+    { key: 'cut', en: 'Harvest · coarse trim · defoliation', mk: 'Жетва · грубо кастрење · дефолијација',
       sub: 'GACP → GMP', who: 'cultivation', handoff: true },
     { key: 'drying',     en: 'Drying',        mk: 'Сушење',       who: 'production' },
     { key: 'closed',     en: 'Lot closed',    mk: 'Затворена серија', who: 'production' },
@@ -558,6 +600,10 @@
       AL('Batch tasks', 'Задачи на батч') + ' — ' + code;
     GF.WWF._cultRenderTasks();
     GF.openModal('cu-tasks-modal');
+    // The linkable-task list is filled after the modal is on screen, so the
+    // record never waits for it — but it is awaited, so a caller knows when
+    // the form is complete.
+    if (canWrite()) await GF.WWF._cultLoadLinkable();
   };
 
   GF.WWF._cultRenderTasks = () => {
@@ -578,10 +624,49 @@
           GF.esc(AL(s.en || x.status, s.mk || x.status))}</span>
       </div>`;
     }).join('');
-    body.innerHTML = rows || `<div class="ntf-empty">${AL(
-      'No tasks linked to this batch yet — one is created automatically on the next veg/flower move, or link one by hand from the task form.',
-      'Сè уште нема задачи поврзани со овој батч — се создава автоматски при следното преместување во вег/цвет, или поврзете рачно од формата за задача.')}</div>`;
+    // Linking an existing task by hand: a chooser over the org's open tasks
+    // that are not yet linked, sending batch_id through the ordinary task
+    // PATCH (tasks.py owns the link; this only points at the batch).
+    const link = canWrite()
+      ? `<div class="row" style="gap:8px;margin-top:10px;align-items:flex-end">
+          <div class="field" style="flex:1;margin:0"><label>${AL('Link an existing task', 'Поврзи постоечка задача')}</label>
+            <div id="cu-tasks-link-wrap">${GF.selectField('cu-tasks-link', { value: '', title: AL('Task', 'Задача'), searchable: true,
+              options: [{ v: '', label: AL('— choose a task —', '— избери задача —') }] })}</div></div>
+          <button class="btn btn-sm" id="cu-tasks-link-btn" onclick="GF.WWF.cultLinkTask('${t.batchId}')">${AL('Link', 'Поврзи')}</button>
+        </div>`
+      : '';
+    body.innerHTML = (rows || `<div class="ntf-empty">${AL(
+      'No tasks linked to this batch yet — one is created automatically on the next veg/flower move, or link one below.',
+      'Сè уште нема задачи поврзани со овој батч — се создава автоматски при следното преместување во вег/цвет, или поврзете една подолу.')}</div>`) + link;
   };
+
+  // The open tasks a batch may be linked to: everything the caller can see
+  // that carries no batch yet. Loaded after the modal paints so the list
+  // never blocks the record it is added to.
+  GF.WWF._cultLoadLinkable = async () => {
+    const t = GF.WWF._cult.tasks; if (!t) return;
+    let all = [];
+    try { const r = await GF.API.tasks({}); all = Array.isArray(r) ? r : (r.tasks || []); }
+    catch (_) { all = []; }
+    const wrap = GF.$('cu-tasks-link-wrap'); if (!wrap) return;
+    const linked = new Set(t.rows.map(x => x.id));
+    const free = all.filter(x => !x.batch_id && !linked.has(x.id) && x.status !== 'completed');
+    wrap.innerHTML = GF.selectField('cu-tasks-link', { value: '', title: AL('Task', 'Задача'), searchable: true,
+      options: [{ v: '', label: free.length ? AL('— choose a task —', '— избери задача —') : AL('— no open unlinked task —', '— нема отворена неповрзана задача —') }]
+        .concat(free.map(x => ({ v: x.id, label: x.title, sub: x.status }))) });
+  };
+
+  GF.WWF.cultLinkTask = (batchId) => GF.once('cu-tasks-link-btn', async () => {
+    if (!canWrite()) return;
+    const taskId = ((GF.$('cu-tasks-link') || {}).value || '');
+    if (!taskId) { GF.toast(AL('Choose a task to link', 'Изберете задача'), 'error'); return; }
+    try {
+      await GF.API.updateTask(taskId, { batch_id: batchId });
+      GF.toast(AL('Task linked to the batch', 'Задачата е поврзана со батчот'), 'success');
+      const t = GF.WWF._cult.tasks;
+      if (t) await GF.WWF.cultTaskList(t.batchId, t.code);
+    } catch (e) { GF.toast(e.message, 'error'); }
+  });
 
   // ── cultivar registry ─────────────────────────────────────────────────────
 
@@ -764,10 +849,11 @@
       <div class="field"><label>${AL('Plant count', 'Број на растенија')}</label>
         <input id="cu-b-count" type="number" min="0" max="100000" step="1" placeholder="2000"></div>
       <div class="field"><label>${AL('Clone date', 'Датум на клонирање')}</label>
-        ${GF.dateField('cu-b-clone', { value: today(), clearable: false })}
+        ${GF.dateField('cu-b-clone', { value: today(), max: today(), clearable: false,
+                                       onPick: () => GF.WWF._cultBatchCultivarSync() })}
         <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
-          'Plant ids are <clone date>_<cultivar>_<number>, so this date is printed on every plant in the batch.',
-          'ID на растение е <датум>_<сорта>_<број>, па овој датум е на секое растение во батчот.')}</div></div>
+          'The batch number counts cloning batches of this strain in THIS month, and a plant with no known mother is numbered <clone date>_<batch number>_<number> — so the date is printed on those plants and cannot lie in the future.',
+          'Бројот на батч ги брои клонирањата на сортата во ОВОЈ месец, а растение без позната мајка добива ID <датум>_<батч>_<број> — датумот е на тие растенија и не може да е во иднина.')}</div></div>
       <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
         <input id="cu-b-note" maxlength="500"></div>
       <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
@@ -808,9 +894,21 @@
     if (spec) spec.innerHTML = GF.WWF.cultSpecPanel(cv);
     const wrap = GF.$('cu-b-code-wrap');
     if (!wrap || !cv) return;
+    // The suggestion is for the CLONING month — the owner's nn is "the nth
+    // cloning batch of that strain in that month" — so the clone date travels
+    // with the request. GF.API.cultivationBatchCode takes only the cultivar
+    // (api.js is not this view's to change), so the call is made inline.
+    const clone = ((GF.$('cu-b-clone') || {}).value || '');
     let suggested = '';
-    try { suggested = GF.API.cultivationBatchCode ? ((await GF.API.cultivationBatchCode(cv.id)).suggested || '') : ''; }
-    catch (_) { suggested = ''; }
+    try {
+      const r = await GF.API._req('GET', '/cultivation/batch-code?cultivar_id=' + encodeURIComponent(cv.id)
+        + (clone ? '&clone_date=' + encodeURIComponent(clone) : ''));
+      suggested = (r && r.suggested) || '';
+    } catch (e) {
+      suggested = '';
+      // Past 99 the server says so; the code stays editable but the reason is shown.
+      if (e && /99/.test(e.message || '')) GF.toast(e.message, 'error');
+    }
     // The pick may have changed again while the request was out.
     if (((GF.$('cu-b-cultivar') || {}).value) !== cv.id) return;
     wrap.innerHTML = GF.codeField('cu-b-code', { prefix: cv.code, value: suggested, maxlength: 64, placeholder: 'GP072501' });
@@ -828,6 +926,10 @@
       GF.toast(AL('Enter the plant count', 'Внесете број на растенија'), 'error'); return;
     }
     const clone = ((GF.$('cu-b-clone') || {}).value || '') || null;
+    if (clone && clone > today()) {
+      GF.toast(AL('The clone date cannot be in the future', 'Датумот на клонирање не може да е во иднина'), 'error');
+      return;
+    }
     try {
       const created = await GF.API.cultivationBatchCreate({
         code,
@@ -864,11 +966,16 @@
     GF.$('cu-move-modal-title').textContent =
       AL('Move batch', 'Премести батч') + ' — ' + b.code;
     // The batch's current phase is excluded: "move to where you already are" is
-    // not a transition, and recording it would put a meaningless event in the
-    // phase history.
-    const targets = PHASES.filter(p => p.key !== b.phase);
+    // a ROOM CHANGE, which has its own form (cultRoomForm) because it keeps
+    // the phase clock. What is offered is what the path allows: the forward
+    // stops and `destroyed`; QA authority also sees the earlier stops, as a
+    // correction that needs a reason. Mother stock is off the path.
+    const forward = forwardTargets(b.phase);
+    const back = canCorrect() ? PATH.slice(0, PATH.indexOf(b.phase)).filter(k => k !== 'harvested') : [];
+    const keys = b.phase === 'mother' ? ['destroyed'] : [...forward, ...back, 'destroyed'];
+    const targets = keys.map(k => PH[k]).filter(Boolean);
     const roomOpts = [{ v: '', label: AL('unchanged — ', 'без промена — ') + (b.room_name || '—') }]
-      .concat(rooms.map(r => ({ v: r.id, label: r.name })));
+      .concat(rooms.map(r => ({ v: r.id, label: r.name, sub: r.kind })));
     // GF.selectField renders a HIDDEN input and GF.pickSel assigns .value
     // directly — it fires no 'change' event, so a change listener here would
     // never run and the terminal-phase warning would never appear. The chooser's
@@ -888,13 +995,13 @@
       <div class="field"><label>${AL('To room', 'Во соба')}</label>
         ${GF.selectField('cu-m-room', { value: '', title: AL('To room', 'Во соба'), options: roomOpts })}</div>
       <div class="field"><label>${AL('Date', 'Датум')}</label>
-        ${GF.dateField('cu-m-date', { value: today(), clearable: false })}</div>
+        ${GF.dateField('cu-m-date', { value: today(), min: b.phase_since || undefined, max: today(), clearable: false })}</div>
       <div class="field"><label>${AL('Reason / note', 'Причина / забелешка')}</label>
         <input id="cu-m-reason" maxlength="500"></div>
       <div id="cu-m-warn" style="display:none;color:var(--red);font-size:12px;margin-bottom:8px"></div>
       <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
-        'The whole batch moves as one record — one phase event, not one per plant. Individual plants are not re-numbered by a move.',
-        'Целиот батч се движи како еден запис — еден настан за фаза, не по растение. ID на растенијата не се менуваат.')}
+        'The whole batch moves as one record — one phase event, not one per plant. Individual plants are not re-numbered by a move. The plan is walked one stop at a time; to change only the room, use "Change room" — the phase clock keeps running.',
+        'Целиот батч се движи како еден запис — еден настан за фаза, не по растение. ID на растенијата не се менуваат. Планот оди чекор по чекор; за промена само на собата користете „Промени соба“ — фазата продолжува да тече.')}
       </div>
       <div class="row" style="gap:10px">
         <div class="spacer"></div>
@@ -919,6 +1026,16 @@
           `Ова го затвора батчот: сите ${b.plant_count} растенија се означуваат како ${v} и батчот не може повеќе да се движи.`);
       }
       if (btn) btn.className = 'btn btn-orange';
+    } else if (isBackward(b.phase, v)) {
+      // A move backwards along the plan rewrites what the record says
+      // happened. It is recorded as a correction, with the reason on the event.
+      if (warn) {
+        warn.style.display = 'block';
+        warn.textContent = AL(
+          `${phLbl(b.phase)} → ${phLbl(v)} moves the batch backwards along the plan — a correction of the record. State the reason.`,
+          `${phLbl(b.phase)} → ${phLbl(v)} го враќа батчот назад во планот — корекција на записот. Наведете причина.`);
+      }
+      if (btn) btn.className = 'btn btn-orange';
     } else {
       if (warn) warn.style.display = 'none';
       if (btn) btn.className = 'btn btn-primary';
@@ -926,15 +1043,25 @@
   };
 
   GF.WWF.cultMoveSave = (batchId) => GF.once('cu-m-save', async () => {
+    const b = (GF.WWF._cult.batches || []).find(x => x.id === batchId) || {};
     const toPhase = (GF.$('cu-m-phase') || {}).value;
     const toRoom = ((GF.$('cu-m-room') || {}).value || '') || null;
     const when = ((GF.$('cu-m-date') || {}).value || '') || null;
     const reason = ((GF.$('cu-m-reason') || {}).value || '').trim() || null;
     // A terminal move is the one destructive action on this board. It needs a
     // stated reason: "several tonnes destroyed" with no recorded why is not a
-    // record anyone can defend later.
+    // record anyone can defend later. A backward move is a correction and
+    // needs one for the same reason.
     if (TERMINAL.includes(toPhase) && !reason) {
       GF.toast(AL('Closing a batch needs a reason', 'Затворањето на батч бара причина'), 'error');
+      return;
+    }
+    if (isBackward(b.phase, toPhase) && !reason) {
+      GF.toast(AL('A move backwards is a correction and needs a reason', 'Враќањето назад е корекција и бара причина'), 'error');
+      return;
+    }
+    if (when && when > today()) {
+      GF.toast(AL('A move cannot be dated in the future', 'Преместувањето не може да е со иден датум'), 'error');
       return;
     }
     try {
@@ -945,6 +1072,129 @@
         ? AL(`Batch closed as ${phLbl(r.phase)}`, `Батчот е затворен како ${phLbl(r.phase)}`)
         : AL(`Moved to ${phLbl(r.phase)}`, `Преместено во ${phLbl(r.phase)}`),
         TERMINAL.includes(r.phase) ? 'error' : 'success');
+      await GF.WWF.loadCultivation();
+    } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
+  // ── change room ───────────────────────────────────────────────────────────
+  // A different record from a phase move: the batch stays in its phase and
+  // the phase clock keeps running (server: a move to the same phase is a room
+  // change). Offered separately so "we moved F1 → F2" is never recorded as
+  // "flowering started again today".
+
+  GF.WWF.cultRoomForm = async (batchId) => {
+    if (!canWrite()) return;
+    const b = (GF.WWF._cult.batches || []).find(x => x.id === batchId);
+    if (!b) return;
+    let rooms = [];
+    try { rooms = (await GF.API.facility()).rooms || []; }
+    catch (e) { GF.toast(e.message, 'error'); return; }
+    const others = rooms.filter(r => r.id !== b.room_id);
+    if (!others.length) {
+      GF.toast(AL('No other room to move to', 'Нема друга соба'), 'error');
+      return;
+    }
+    GF.WWF._ensureModal('cu-room-modal', '440px');
+    GF.$('cu-room-modal-title').textContent = AL('Change room', 'Промени соба') + ' — ' + b.code;
+    GF.$('cu-room-modal-body').innerHTML = `
+      <div style="color:var(--ink-3);font-size:12px;margin-bottom:10px">
+        ${GF.esc(b.cultivar_code || b.strain || '—')} · ${b.plant_count} ${AL('plants', 'растенија')} ·
+        <span style="color:${phCol(b.phase)}">${GF.esc(phLbl(b.phase))}</span>
+        ${b.phase_since ? ` ${AL('since', 'од')} ${GF.esc(b.phase_since)}` : ''} ·
+        ${AL('now in', 'сега во')} ${GF.esc(b.room_name || '—')}
+      </div>
+      <div class="field"><label>${AL('To room', 'Во соба')}</label>
+        ${GF.selectField('cu-r-room', { value: others[0].id, title: AL('To room', 'Во соба'),
+          options: others.map(r => ({ v: r.id, label: r.name, sub: r.kind })) })}</div>
+      <div class="field"><label>${AL('Date', 'Датум')}</label>
+        ${GF.dateField('cu-r-date', { value: today(), min: b.phase_since || undefined, max: today(), clearable: false })}</div>
+      <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
+        <input id="cu-r-reason" maxlength="500"></div>
+      <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
+        'Only the room changes. The phase and the day it started stay as they are, so the expected window and the harvest window do not restart.',
+        'Се менува само собата. Фазата и денот кога почнала остануваат, па очекуваниот прозорец и прозорецот за жетва не почнуваат одново.')}</div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="cu-r-save" onclick="GF.WWF.cultRoomSave('${batchId}')">${AL('Record room change', 'Запиши')}</button>
+      </div>`;
+    GF.openModal('cu-room-modal');
+  };
+
+  GF.WWF.cultRoomSave = (batchId) => GF.once('cu-r-save', async () => {
+    const b = (GF.WWF._cult.batches || []).find(x => x.id === batchId);
+    if (!b) return;
+    const toRoom = ((GF.$('cu-r-room') || {}).value || '') || null;
+    const when = ((GF.$('cu-r-date') || {}).value || '') || null;
+    const reason = ((GF.$('cu-r-reason') || {}).value || '').trim() || null;
+    if (!toRoom || toRoom === b.room_id) {
+      GF.toast(AL('Pick a different room', 'Изберете друга соба'), 'error');
+      return;
+    }
+    if (when && when > today()) {
+      GF.toast(AL('A room change cannot be dated in the future', 'Промената на соба не може да е со иден датум'), 'error');
+      return;
+    }
+    try {
+      // Same phase = a room change on the server; the phase clock is kept.
+      await GF.API.cultivationMove(batchId, {
+        to_phase: b.phase, to_room_id: toRoom, occurred_on: when, reason });
+      GF.closeModal('cu-room-modal');
+      GF.toast(AL('Room changed', 'Собата е променета'), 'success');
+      await GF.WWF.loadCultivation();
+    } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
+  // ── edit a registered batch ───────────────────────────────────────────────
+  // The target product, the clone source and the note — the three things
+  // PATCH /cultivation/batches/{id} accepts. The code, cultivar, room, phase
+  // and count are the batch's identity and lifecycle and are not offered here.
+
+  GF.WWF.cultEditForm = (batchId) => {
+    if (!canWrite()) return;
+    const st = GF.WWF._cult;
+    const b = (st.batches || []).find(x => x.id === batchId);
+    if (!b) return;
+    const cv = (st.cultivars || []).find(c => c.id === b.cultivar_id);
+    const ps = approvedProducts(cv);
+    GF.WWF._ensureModal('cu-edit-modal', '480px');
+    GF.$('cu-edit-modal-title').textContent = AL('Edit batch', 'Уреди батч') + ' — ' + b.code;
+    GF.$('cu-edit-modal-body').innerHTML = `
+      <div style="color:var(--ink-3);font-size:12px;margin-bottom:10px">
+        ${GF.esc(cv ? cv.code + ' — ' + cv.name : (b.cultivar_code || '—'))} · ${b.plant_count} ${AL('plants', 'растенија')} ·
+        <span style="color:${phCol(b.phase)}">${GF.esc(phLbl(b.phase))}</span></div>
+      <div class="field"><label>${AL('Target product — the ImB specification it is grown to', 'Целен производ — ImB спецификација')}</label>
+        ${GF.selectField('cu-e-product', { value: b.product_id || '', title: AL('Target product', 'Целен производ'),
+          options: [{ v: '', label: AL('— no target product —', '— без целен производ —') }].concat(
+            ps.map(p => ({ v: p.id, label: `${cv.code} · ${cv.name} — ${pLabel(p)}`,
+                           sub: `${pct(p.window_min)}–${pct(p.window_max)} %` }))) })}
+        ${!ps.length ? `<div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
+          'This strain has no APPROVED product page yet — approve one under QC → Product catalogue first.',
+          'Оваа сорта сè уште нема ОДОБРЕНА страница — прво одобрете една во QC → Каталог на производи.')}</div>` : ''}</div>
+      <div class="field"><label>${AL('Clones from', 'Клонови од')}</label>
+        ${GF.selectField('cu-e-source', { value: b.clone_source || '', title: AL('Clones from', 'Клонови од'), options: [
+          { v: '', label: AL('— not stated —', '— не е наведено —') },
+          { v: 'own_stock', label: AL('Own stock', 'Сопствен фонд') },
+          { v: 'imported', label: AL('Imported', 'Увезени') }] })}</div>
+      <div class="field"><label>${AL('Note', 'Забелешка')}</label>
+        <input id="cu-e-note" maxlength="500" value="${GF.esc(b.note || '')}"></div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="cu-e-save" onclick="GF.WWF.cultEditSave('${batchId}')">${GF.t('save')}</button>
+      </div>`;
+    GF.openModal('cu-edit-modal');
+  };
+
+  GF.WWF.cultEditSave = (batchId) => GF.once('cu-e-save', async () => {
+    if (!canWrite()) return;
+    try {
+      // An explicit null CLEARS a field on the server; '' from the chooser
+      // means "none", so it is sent as null rather than as an empty string.
+      await GF.API.cultivationBatchPatch(batchId, {
+        product_id: ((GF.$('cu-e-product') || {}).value || '') || null,
+        clone_source: ((GF.$('cu-e-source') || {}).value || '') || null,
+        note: ((GF.$('cu-e-note') || {}).value || '').trim() || null });
+      GF.closeModal('cu-edit-modal');
+      GF.toast(AL('Batch updated', 'Батчот е ажуриран'), 'success');
       await GF.WWF.loadCultivation();
     } catch (e) { GF.toast(e.message, 'error'); }
   });
@@ -969,7 +1219,7 @@
     GF.$('tc-modal-body').innerHTML = `
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1"><label>${AL('Checked on', 'Датум')}</label>
-          ${GF.dateField('tc-date', { value: today(), clearable: false })}</div>
+          ${GF.dateField('tc-date', { value: today(), max: today(), clearable: false })}</div>
         <div class="field" style="flex:1"><label>${AL('Microscope', 'Микроскоп')}</label>
           ${GF.selectField('tc-instrument', { value: 'digital', title: AL('Microscope', 'Микроскоп'),
             options: [{ v: 'stereo', label: AL('Stereo', 'Стерео') },
@@ -1034,10 +1284,15 @@
         return;
       }
     }
+    const checked = ((GF.$('tc-date') || {}).value || '') || null;
+    if (checked && checked > today()) {
+      GF.toast(AL('A check cannot be dated in the future', 'Проверката не може да е со иден датум'), 'error');
+      return;
+    }
     try {
       await GF.API.trichomeCheck({
         batch_id: batchId,
-        checked_on: ((GF.$('tc-date') || {}).value || '') || null,
+        checked_on: checked,
         instrument: (GF.$('tc-instrument') || {}).value || 'digital',
         magnification: ((GF.$('tc-mag') || {}).value || '').trim() || null,
         sample_sites: num('tc-sites'),

@@ -216,7 +216,7 @@ test('a room with no cleanliness grade says so instead of showing one', () => {
   const card = h.window.GF.WWF._planCard(ROOM(), []);
   assert.match(card, /not classified/);
   const graded = h.window.GF.WWF._planCard(ROOM({ grade: 'D' }), []);
-  assert.ok(!/not classified/.test(graded) && /<b>D<\/b>/.test(graded));
+  assert.ok(!/not classified/.test(graded) && /fp-badge[^>]*>D<\/span><\/b>/.test(graded));
   h.close();
 });
 
@@ -355,5 +355,77 @@ test('an unknown room id selects nothing', () => {
   renderPlan(h, [ROOM()]);
   h.window.GF.WWF.openPlanRoom('nope');
   assert.equal(h.window.GF.WWF._plan.sel, null);
+  h.close();
+});
+
+/* ── colouring by cleanliness grade (INS-07, the owner's scheme of 2026-09-06) ── */
+
+test('"By grade" colours each room by its grade and lists the grades as a legend with counts', () => {
+  const h = load('QA_MGR');
+  const rooms = [
+    ROOM({ id: 'l1', code: 'C180', grade: null, regime: 'GACP', zone: 'cultivation' }),
+    ROOM({ id: 'l2', code: 'F104', grade: 'D', regime: 'GMP', zone: 'post_harvest', box_x: 0.5, plan_x: 0.5 }),
+    ROOM({ id: 'l3', code: 'C74', grade: 'CNC', regime: 'SUPPORT', zone: 'circulation', box_x: 0.6, plan_x: 0.6 }),
+    ROOM({ id: 'l4', code: 'T69', grade: null, regime: 'SUPPORT', zone: 'technical', box_x: 0.7, plan_x: 0.7 }),
+  ];
+  const w = h.window;
+  let html = renderPlan(h, rooms);
+  assert.match(html, /planColour\('grade'\)/, 'the colour toggle is offered');
+  assert.match(html, /id="fp-legend-zone"/, 'zone is the default colouring');
+  w.GF.WWF.planColour('grade');
+  html = w.GF.views.facility();
+  assert.match(html, /id="fp-legend-grade"/);
+  // The legend: D, CNC, GACP (no grade applies), not graded — with counts.
+  assert.match(html, /Grade D\s*<b>1<\/b>/);
+  assert.match(html, /CNC — controlled, not classified\s*<b>1<\/b>/);
+  assert.match(html, /GACP — no grade applies\s*<b>1<\/b>/);
+  assert.match(html, /Not graded yet\s*<b>1<\/b>/);
+  // Each room's shape carries its grade colour, not its zone colour.
+  const shape = (code) => new RegExp('style="--pin:(#[0-9A-Fa-f]{6})"[^>]*>\\s*<title>' + code);
+  const d = html.match(shape('F104')), cnc = html.match(shape('C74'));
+  const gacp = html.match(shape('C180')), none = html.match(shape('T69'));
+  assert.ok(d && cnc && gacp && none, 'every room is drawn');
+  assert.equal(d[1], '#1F8BD0'); assert.equal(cnc[1], '#8A8A93');
+  assert.equal(gacp[1], '#2EA043'); assert.equal(none[1], '#C4C4CA');
+  assert.notEqual(d[1], '#D27814', 'not the post-harvest zone colour');
+  h.close();
+});
+
+test('a grade chip filters the plan to that grade, and the zone filter is left alone', () => {
+  const h = load('QA_MGR');
+  const rooms = [
+    ROOM({ id: 'l1', code: 'C180', grade: null, regime: 'GACP' }),
+    ROOM({ id: 'l2', code: 'F104', grade: 'D', regime: 'GMP', zone: 'post_harvest', box_x: 0.5 }),
+  ];
+  const w = h.window;
+  renderPlan(h, rooms);
+  w.GF.WWF.planColour('grade');
+  w.GF.WWF.planGrade('D');
+  let html = w.GF.views.facility();
+  assert.match(html, /class="fp-r off"[^>]*>\s*<title>C180/, 'the GACP room is dimmed, not removed');
+  assert.match(html, /class="fp-r"[^>]*>\s*<title>F104/);
+  assert.equal(w.GF.WWF._plan.zone, '');
+  w.GF.WWF.planGrade('D');
+  html = w.GF.views.facility();
+  assert.doesNotMatch(html, /fp-r off/, 'the chip toggles back off');
+  // Back to zone colouring, the grade filter no longer applies.
+  w.GF.WWF.planGrade('D');
+  w.GF.WWF.planColour('zone');
+  html = w.GF.views.facility();
+  assert.doesNotMatch(html, /fp-r off/);
+  h.close();
+});
+
+test('the room card says why a GACP room has no grade, and shows a recorded grade as a badge', () => {
+  const h = load();
+  renderPlan(h, [ROOM()]);
+  const gacp = h.window.GF.WWF._planCard(ROOM({ grade: null, regime: 'GACP' }), []);
+  assert.match(gacp, /GACP defines no cleanliness grade/);
+  const graded = h.window.GF.WWF._planCard(ROOM({ grade: 'D', notes: 'Officially CNC; operated as Grade D' }), []);
+  assert.match(graded, /fp-badge[^>]*>D</);
+  assert.match(graded, /Officially CNC; operated as Grade D/, 'the note that records the classification of record');
+  const plain = h.window.GF.WWF._planCard(ROOM({ grade: null, regime: 'SUPPORT' }), []);
+  assert.match(plain, /not classified</);
+  assert.doesNotMatch(plain, /GACP defines/);
   h.close();
 });
