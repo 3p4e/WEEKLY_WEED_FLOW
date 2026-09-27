@@ -221,6 +221,41 @@ async def test_qc01_retest_does_not_overturn_a_confirmed_oos(client, admin_heade
     assert r.status_code == 409 and "REJECT" in r.json()["detail"], r.text
 
 
+async def test_qr03_single_certificate_coq_refuses_a_rejected_or_confirmed_batch(
+        client, admin_headers, monkeypatch):
+    """QR-03 (QC-01 residual): POST /qc/certificates/{id}/coq issued a
+    "Conforms to Specification" document for a batch whose investigation
+    closed with the QP disposition REJECT, and over a test a closed,
+    non-invalidated OOS on the batch had CONFIRMED; only an OPEN OOS was
+    checked. Same gates as the aggregation path now."""
+    _stub_de(monkeypatch, {"document_id": "DE-QR03", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp, material="QR03-A", batch="B-QR03-A")
+    # a CLOSED OOS on the batch (raised on another test) with disposition REJECT
+    await _closed_oos(client, admin_headers, qp, batch="B-QR03-A", test_name="Water content",
+                      invalidated=False, disposition="REJECT")
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409 and "REJECT" in r.json()["detail"], r.text
+    # a CLOSED, non-invalidated OOS naming a test of this certificate → CONFIRMED
+    coa_b = await _released_coa(client, admin_headers, qp, material="QR03-B", batch="B-QR03-B")
+    await _closed_oos(client, admin_headers, qp, batch="B-QR03-B", test_name="total thc",
+                      invalidated=False, disposition="RELEASE")
+    r = await client.post(f"/qc/certificates/{coa_b['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409 and "CONFIRMED" in r.json()["detail"], r.text
+    # an INVALIDATED one (laboratory error) covers it: the certificate issues
+    coa_c = await _released_coa(client, admin_headers, qp, material="QR03-C", batch="B-QR03-C")
+    await _closed_oos(client, admin_headers, qp, batch="B-QR03-C", test_name="Total THC",
+                      invalidated=True, disposition="RELEASE")
+    r = await client.post(f"/qc/certificates/{coa_c['id']}/coq", headers=admin_headers)
+    assert r.status_code == 201, r.text
+    # a closed OOS on ANOTHER test of the batch does not touch this certificate
+    coa_d = await _released_coa(client, admin_headers, qp, material="QR03-D", batch="B-QR03-D")
+    await _closed_oos(client, admin_headers, qp, batch="B-QR03-D", test_name="Moisture",
+                      invalidated=False, disposition="RELEASE")
+    r = await client.post(f"/qc/certificates/{coa_d['id']}/coq", headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
 async def test_qc01_only_an_invalidating_oos_covers_a_masked_failure(client, admin_headers):
     _, qp = await _actor(client, admin_headers, "QP")
     spec, pa, pb = await _coq_spec_two_params(client, admin_headers, material="QC01-OK")
@@ -449,7 +484,32 @@ async def test_qc08_header_window_must_match_the_total_thc_parameter(client, adm
     _, qp = await _actor(client, admin_headers, "QP")
     coa = await _release_with_components(client, admin_headers, qp, spec, pa, pb, "B-QC08")
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)).status_code == 201
-    assert "THC 10–30%" in _FakeDE.last_markdown and "Grade II" in _FakeDE.last_markdown
+    # the limits print at two decimals (QR-06), as the catalogue prints a window
+    assert "THC 10.00–30.00%" in _FakeDE.last_markdown and "Grade II" in _FakeDE.last_markdown
+
+
+async def test_qr06_a_float_bound_limit_prints_at_two_decimals(client, admin_headers, monkeypatch):
+    """QR-06: a total_thc parameter whose limits were bound as Python floats
+    (every one created before 04b83ee) holds the float's binary expansion in
+    its numeric column — 23.4 reads back as 23.399999999999998578… — and the
+    CoQ Potency row printed the whole tail. Staged through the admin pool the
+    way asyncpg wrote such rows; the row prints "THC 23.40–28.59%"."""
+    _stub_de(monkeypatch, {"document_id": "X", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec, pa, pb, pt = await _computed_spec(client, admin_headers, material="QR06-SPEC")
+    pool = await _admin_pool()
+    await pool.execute("UPDATE qc_spec_parameters SET lower_limit=$1, upper_limit=$2 WHERE id=$3",
+                       23.4, 28.59, pt["id"])
+    stored = await pool.fetchval("SELECT lower_limit::text FROM qc_spec_parameters WHERE id=$1", pt["id"])
+    assert len(stored) > 15, f"the fixture must hold a binary tail, got {stored}"
+    # 2.0 + 0.877 × 25.06 = 23.98 — inside the window
+    coa = await _release_with_components(client, admin_headers, qp, spec, pa, pb, "B-QR06",
+                                         a_val=2.0, b_val=25.06)
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 201, r.text
+    md = _FakeDE.last_markdown
+    assert "THC 23.40–28.59%" in md, md
+    assert "23.39999" not in md and "28.5899" not in md
 
 
 # ── QC-09: latest result = latest measurement ───────────────────────────────
@@ -614,6 +674,44 @@ async def test_qc15_initial_and_retest_coqs_coexist(client, admin_headers):
     r = await client.post("/qc/coq", json={"batch_id": "B-QC15", "specification_id": spec["id"],
                                            "source_coa_ids": [coq1["id"]]}, headers=admin_headers)
     assert r.status_code == 422
+
+
+async def test_qr04_a_retest_coq_prints_its_period_and_the_register_shows_it(
+        client, admin_headers, monkeypatch):
+    """QR-04 (QC-15 seam): the INITIAL and the 6-month RETEST CoQ of one batch
+    are both live; the document and the register must say which is which."""
+    _stub_de(monkeypatch, {"document_id": "DE-QR04", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    _, qc = await _actor(client, admin_headers, "QC_MGR")
+    spec, pa, pb = await _coq_spec_two_params(client, admin_headers, material="QR04-MAT")
+    await _approved_coa(client, admin_headers, qp, spec["id"], "B-QR04", [
+        {"parameter_id": pa["id"], "test_name": "Total THC", "result_numeric": 24.0, "result_date": "2026-01-10"},
+        {"parameter_id": pb["id"], "test_name": "Moisture", "result_numeric": 8.0, "result_date": "2026-01-10"}])
+    coq1 = (await client.post("/qc/coq", json={"batch_id": "B-QR04", "specification_id": spec["id"]},
+                              headers=admin_headers)).json()
+    assert (await client.post(f"/qc/coq/{coq1['id']}/review", headers=qc)).status_code == 200
+    assert (await client.post(f"/qc/coq/{coq1['id']}/render", headers=admin_headers)).status_code == 201
+    md = _FakeDE.last_markdown
+    assert "# Сертификат за квалитет|Certificate of Quality\n" in md, "an INITIAL CoQ keeps the plain title"
+    assert "Период на тестирање~~Testing period ||| Првично пуштање / Initial release" in md
+    retest = await _approved_coa(client, admin_headers, qp, spec["id"], "B-QR04", [
+        {"parameter_id": pa["id"], "test_name": "Total THC", "result_numeric": 22.5, "result_date": "2026-07-10"},
+        {"parameter_id": pb["id"], "test_name": "Moisture", "result_numeric": 9.0, "result_date": "2026-07-10"}])
+    coq2 = (await client.post("/qc/coq", json={"batch_id": "B-QR04", "specification_id": spec["id"],
+                                               "purpose": "RETEST", "timepoint": "6M",
+                                               "source_coa_ids": [retest["id"]]},
+                              headers=admin_headers)).json()
+    assert (await client.post(f"/qc/coq/{coq2['id']}/review", headers=qc)).status_code == 200
+    assert (await client.post(f"/qc/coq/{coq2['id']}/render", headers=admin_headers)).status_code == 201
+    md = _FakeDE.last_markdown
+    assert "en_title: Certificate of Quality — Re-test 6M" in md
+    assert "# Сертификат за квалитет — Ретест 6M|Certificate of Quality — Re-test 6M\n" in md
+    assert "Период на тестирање~~Testing period ||| Ретест 6M / Re-test 6M" in md
+    rows = {r["coa_number"]: r for r in
+            (await client.get("/qc/register", headers=admin_headers)).json()
+            if r["record"] == "coq"}
+    assert rows[coq1["coq_number"]]["purpose"] == "INITIAL" and rows[coq1["coq_number"]]["timepoint"] is None
+    assert rows[coq2["coq_number"]]["purpose"] == "RETEST" and rows[coq2["coq_number"]]["timepoint"] == "6M"
 
 
 # ── QC-18 / QC-19 / QC-21 ───────────────────────────────────────────────────

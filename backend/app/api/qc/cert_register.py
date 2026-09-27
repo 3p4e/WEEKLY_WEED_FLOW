@@ -123,6 +123,7 @@ async def certificate_register(
             "superseded_by": superseded_by.get(str(r["id"])),
             "open_oos": oos_open.get(r["batch_id"], 0),
             "coq_document_id": r["coq_document_id"],
+            "purpose": None, "timepoint": None,
             "record": "certificate",
         })
     for r in coq_rows:
@@ -137,6 +138,9 @@ async def certificate_register(
             "archive_ref": None, "supersedes_id": None, "superseded_by": None,
             "open_oos": oos_open.get(r["batch_id"], 0),
             "coq_document_id": r["coq_document_id"],
+            # QC-15 / QR-04: an INITIAL and a RETEST CoQ of one batch are two
+            # register rows that must be told apart.
+            "purpose": r["purpose"] or "INITIAL", "timepoint": r["timepoint"],
             "record": "coq",
         })
     out.sort(key=lambda x: x["coa_number"], reverse=True)

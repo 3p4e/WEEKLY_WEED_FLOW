@@ -87,6 +87,21 @@ def _evaluate(value, lo, hi):
     return ok, ("pass" if ok else "fail")
 
 
+_LIMIT_PLACES = Decimal("0.01")
+
+
+def fmt_limit(value) -> str | None:
+    """A specification limit as a certificate prints it: two decimal places,
+    read through _dec so a `numeric` column that a float was bound into
+    (review 2026-09-27 QR-06: `23.4` stored as 23.399999999999998578…, and the
+    CoQ Potency row printed the whole 47-digit tail) prints as the number the
+    specification author wrote. None stays None — an absent limit is absent."""
+    d = _dec(value)
+    if d is None:
+        return None
+    return f"{d.quantize(_LIMIT_PLACES, rounding=ROUND_HALF_UP)}"
+
+
 # Ph. Eur. 3028: total = neutral + 0.877 × acid. The 0.877 factor is the molar
 # mass ratio THC/THCA (314.5 / 358.5). Held as a Decimal so the sum is exact.
 ACID_FACTOR = Decimal("0.877")
@@ -200,6 +215,82 @@ def reconcile_numeric(raw_value, numeric_value, decimal_separator: str = ".",
                  f" '{str(raw_value).strip()}' (reads as {parsed} under the laboratory's"
                  f" '{decimal_separator}' decimal separator)")
     return parsed
+
+
+def norm_test(name: str | None) -> str:
+    """Fold a test name for comparison — same idiom as ecoa._norm_label /
+    laboratories._norm. Both sides of an OOS-to-result match are free text
+    typed by different people at different times (qc_results.test_name on the
+    analytical result, qc_oos_records.test_name on the investigation), so an
+    investigation filed as "total  thc" still has to cover a "Total THC"
+    failure. Only case and internal whitespace are folded — nothing else, so
+    "Total THC" and "Total CBD" stay distinct."""
+    return " ".join((name or "").split()).lower()
+
+
+# SQL fragments shared by every OOS gate on a Certificate of Quality — the
+# aggregation CoQ (coq_aggregation: compile / review / render) and the
+# single-certificate CoQ (coq_docx.generate_coq). Batch ids are compared
+# case-insensitively (QC-27) for rows written before batch_id was normalised
+# on write.
+OPEN_OOS_SQL = ("SELECT count(*) FROM qc_oos_records"
+                " WHERE upper(batch_id)=upper($1) AND status <> 'CLOSED'")
+# The open OOS rows themselves (number + test name), for the gates that
+# exempt the out-of-grade investigation (review 2026-09-27 INS2-01).
+OPEN_OOS_ROWS_SQL = ("SELECT oos_number, test_name FROM qc_oos_records"
+                     " WHERE upper(batch_id)=upper($1) AND status <> 'CLOSED'"
+                     " ORDER BY created_at")
+# A CLOSED investigation whose Qualified-Person disposition REJECTED the batch
+# (review 2026-09-27 QC-01): no Certificate of Quality is compiled, approved
+# or issued for a rejected batch, whatever a later re-test shows.
+REJECTED_OOS_SQL = ("SELECT oos_number FROM qc_oos_records"
+                    " WHERE upper(batch_id)=upper($1) AND status='CLOSED'"
+                    " AND disposition='REJECT' ORDER BY closed_at LIMIT 1")
+CLOSED_OOS_ROWS_SQL = ("SELECT result_id, test_name, oos_number, invalidated FROM qc_oos_records"
+                       " WHERE org_id=$1 AND upper(batch_id)=upper($2) AND status='CLOSED'")
+
+
+async def assert_batch_not_rejected(c, batch_id: str) -> None:
+    rejected = await c.fetchval(REJECTED_OOS_SQL, batch_id)
+    if rejected:
+        raise HTTPException(
+            409, f"OOS {rejected} closed with the batch disposition REJECT — a Certificate of"
+                 f" Quality is not compiled for a rejected batch ({batch_id}); a re-test does"
+                 " not overturn a confirmed investigation (QCSOP 012 §6.4.1)")
+
+
+def confirmed_oos_tests(oos_rows, results) -> set:
+    """QC-01 for a set of results that a certificate is about to certify: the
+    tests among them that a CLOSED investigation on the batch named — by the
+    result's own id or by test name — WITHOUT invalidating the result (Phase I
+    found no assignable laboratory error). Such an investigation CONFIRMED the
+    failure it was opened for; a later passing figure for the same test does
+    not replace it, so the certificate must not be issued over it (review
+    2026-09-27 QR-03: the single-certificate CoQ route lacked this gate).
+    `results` carry `id` and `test_name`; `oos_rows` come from
+    CLOSED_OOS_ROWS_SQL. Pure, so both CoQ paths can share it."""
+    named_ids = {str(o["result_id"]) for o in oos_rows if o["result_id"] and not o["invalidated"]}
+    named_tests = {norm_test(o["test_name"]) for o in oos_rows
+                   if o["test_name"] and not o["invalidated"]}
+    out = set()
+    for r in results:
+        if str(r.get("id")) in named_ids or norm_test(r.get("test_name")) in named_tests:
+            out.add(r.get("test_name") or "?")
+    return out
+
+
+async def assert_no_confirmed_oos(c, org_id, batch_id: str, results) -> None:
+    """Refuse (409) when a CLOSED, non-invalidated OOS on the batch names one
+    of the tests the certificate is about to certify — see confirmed_oos_tests."""
+    rows = await c.fetch(CLOSED_OOS_ROWS_SQL, org_id, batch_id)
+    confirmed = confirmed_oos_tests(rows, results)
+    if confirmed:
+        names = ", ".join(sorted(confirmed)[:5])
+        raise HTTPException(
+            409, f"{len(confirmed)} test(s) ({names}) were the subject of a closed OOS"
+                 " investigation on this batch that CONFIRMED the result (it was not"
+                 " invalidated by an assignable laboratory error) — a passing figure does not"
+                 " replace a confirmed failure (QCSOP 012 §6.4.1)")
 
 
 def norm_batch(value):
