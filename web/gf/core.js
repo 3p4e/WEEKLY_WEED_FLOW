@@ -315,10 +315,15 @@ GF.facilityToday = () => {
 GF.fmtDateTime = (ts, opts) => {
   if (ts == null || ts === '') return '';
   const s = String(ts);
+  const o = opts || {};
+  // A bare calendar day (a report_date, a due date) has no instant: it is
+  // printed as it is, and has no time. Appending 'Z' and formatting it in
+  // the facility zone printed "2026-07-30 02:00" for a date-only certificate
+  // result (review 2026-09-27, R2-FE-16) — fmtDate already took this branch.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return o.date === false ? '' : s;
   const withZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(s) ? s : s + 'Z';
   const d = new Date(withZone);
   if (isNaN(d.getTime())) return s;
-  const o = opts || {};
   const tz = GF.facilityTZ();
   const spec = {
     hour: '2-digit', minute: '2-digit', hour12: false,

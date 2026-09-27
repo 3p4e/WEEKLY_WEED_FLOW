@@ -14,7 +14,9 @@
 
    Read = elevated roles; AUTHORING = ADMIN/OWNER/QP/QA_MGR (backend gate is
    authoritative — the UI only mirrors it). Same graceful-unavailable
-   contract: no docengine deployed → proxy answers 503 "DocEngine unavailable". */
+   contract: no docengine deployed → proxy answers 503 "DocEngine unavailable";
+   a DocEngine that is up but still answering → 504 (docengine.py), and the
+   chat / build paths sit on api.js's 190 s _SLOW_PATHS deadline for it. */
 
 (function () {
   const AUTHOR_ROLES = ['ADMIN', 'OWNER', 'QP', 'QA_MGR'];

@@ -41,6 +41,11 @@ test('fmtDateTime / fmtTime / fmtDate render a UTC stamp in the facility zone', 
   assert.equal(GF.fmtDate('2026-07-30'), '2026-07-30', 'a bare date is returned as it is');
   assert.equal(GF.fmtDateTime(''), '');
   assert.equal(GF.fmtDateTime(null), '');
+  // A bare date is a day, not an instant: printed as it is, with no time
+  // (a date-only certificate result used to read "2026-07-30 02:00" — R2-FE-16).
+  assert.equal(GF.fmtDateTime('2026-07-30'), '2026-07-30');
+  assert.equal(GF.fmtTime('2026-07-30'), '');
+  assert.equal(GF.fmtDate('2026-07-30'), '2026-07-30');
   h.close();
 });
 
