@@ -42,15 +42,21 @@ registered / propagated against.
 |---|---|---|---|---|---|
 | Register a batch, generate its plant ids | ✅ | ✅ | ✅ | ✅ | — |
 | Initiate / finish a clone run | ✅ | ✅ | ✅ | ✅ | — |
-| Move a batch through its phases | ✅ | ✅ | ✅ | — | — |
-| Cultivar master | ✅ | ✅ | ✅ | — | — |
-| Register / edit a mother plant (the bank) | ✅ | ✅ | ✅ | — | — |
+| Move a batch forward through its phases, change its room | ✅ | ✅ | ✅ | ✅ | — |
+| Move a batch **backwards** (a correction, reason required) | ✅ | ✅ | — | ✅ | — |
+| Cultivar master | ✅ | ✅ | ✅ | ✅ | — |
+| Register / edit a mother plant (the bank) | ✅ | ✅ | ✅ | ✅ | — |
 | Read all of it | every role above USER | | | | |
 
 `_REGISTRARS` in `cultivation.py` and `_INITIATORS` in `propagation.py` are the
-same set: a clone run is how a batch begins, so whoever registers one initiates
-the other. QA registers and initiates; it does not run the floor (moves,
-master data, the bank stay `_WRITERS`).
+same set as `_WRITERS`: a clone run is how a batch begins, so whoever registers
+one initiates the other, and the owner (2026-09-05) put QA on the floor for all
+of it — "QA should be able to move a batch through its phases or edit the
+cultivar master". The one asymmetry is the backward move: it rewrites what the
+record says happened, so it is QA authority's (`_CORRECTORS` in
+`cultivation.py`: ADMIN, the executives, QA_MGR), with a reason on the event.
+(The table above used to deny QA the moves, the master data and the bank — that
+was stale against the code since 2026-09-05; review CS-20.)
 
 ### Registering from the specification
 
@@ -94,44 +100,84 @@ master data, the bank stay `_WRITERS`).
   and the pot / location), `started_on` (established; age is derived from it),
   `source`, `status` active / retired / destroyed, `note`.
 - `clone_runs` — one cutting event: `cultivar_id`, `started_on` (**the date of
-  cloning initiation**, defaults to the facility's today), `planned_count`,
-  `room_id`, `batch_id` (the registered batch it feeds, SET NULL), `code`
-  (optional), `potency_spec_id` (the APPROVED ladder snapshotted at
-  initiation — the propagation-material specification), `status` started /
+  cloning initiation** — required, no default: the owner said the initiator
+  "has to set" it), `planned_count`, `room_id`, `batch_id` (the registered
+  batch it feeds, SET NULL), `code` (optional), `product_id` (the official
+  ImB product the material is propagated against, since 0066/0067; the
+  ladder snapshot `potency_spec_id` of 0065 is gone), `status` started /
   transplanted / failed, `finished_on`, `note`.
 - `clone_run_mothers` — which mothers the run was cut from, `cuttings` per
-  mother (nullable = not counted per mother).
+  mother (nullable = not counted per mother) and `cutting_no`, the xx of the
+  clone id, stamped when the run is created.
 
-**Derived, never stored:** a mother's `age_days`, `last_cut_on`,
-`generations` (runs it was cut in) and `cuttings_total` are computed from
-`started_on` and `clone_run_mothers` on every read. A stored counter would
-drift from its evidence.
+**Derived, never stored:** a mother's `age_days`, `last_cut_on`, `times_cut`
+(runs it was cut in) and `cuttings_total` are computed from `started_on` and
+`clone_run_mothers` on every read. A stored counter would drift from its
+evidence. So is "tested so far": the strain's potency history from the three
+sources the product catalogue defines (CoQs naming a product of the cultivar,
+CoQs naming only the cultivar, certificate results attributed by the batch
+code's head), one measurement per lot, with the subset that named the mother's
+own product beside it (`GET /mothers/{id}/potency`; review CS-08).
 
 Rules the server enforces: a run's mothers must be active and of the run's
 cultivar; the batch a run feeds must be open and of the same cultivar; a
 duplicate mother ID is a 409; a destroyed mother is not reinstated; a finished
-run does not change again.
+run does not change again; **a batch's runs are frozen once it has plant ids**
+(linking, relinking or unlinking a run is a 409 — the clone ids were numbered
+from the runs laid end to end, and a change would rename plants that exist;
+review CS-05); a run that failed contributes no clone ids.
 
 Routes (all under `/cultivation`): `GET/POST /mothers`, `GET /mothers/next-code`,
-`PATCH /mothers/{id}`, `GET/POST /clone-runs`, `PATCH /clone-runs/{id}`.
+`PATCH /mothers/{id}`, `GET /mothers/{id}/potency`, `GET/POST /clone-runs`,
+`PATCH /clone-runs/{id}`, `GET/POST/PATCH /campaigns`.
 
 ## Conventions — settled by the owner (2026-09-05/06)
 
 - **Batch number.** `GP072501` = strain abbreviation + `MMYY` + sequence, the
-  nth cloning batch of that strain in that month. Confirmed as built.
+  nth cloning batch of that strain in that month. `MMYY` is the month of the
+  **cloning date** (the form re-asks the server when the date changes), the
+  sequence is max + 1 over the codes already on file for that head and month
+  (never a count), 99 is the last, and the head is enforced on save: a batch
+  code must start with its cultivar's code (review CS-09).
 - **Mother ID.** `GP26_S1M03-2_020`: strain abbreviation + potency grade (the
   product) · `S1` the selection campaign, numbered **facility-wide** · `M03`
   mother plant number of that campaign · `-2` the mother's own generation ·
   `_020` its clone number in stock. Composed by the server from columns
-  (migration 0067), not typed.
+  (migration 0067), not typed. The abbreviation is the product code's acronym
+  (`GP` of `GP_THC26:CBD1`), and the form previews from the same server
+  answer. **M03 names one line per campaign, whatever the strain** (migration
+  0070): an OPM mother cannot take a number a GP line holds, and a later
+  generation registered from a parent inherits the parent's campaign and
+  mother number — only `-2` advances (review CS-03, CS-04).
 - **Clone ID.** `GP26_S1M03-2_020-03.147`: the mother's id + the cutting
   number (01–99) + the clone within that cutting (001–999). A mother is cut
-  6–9+ times at 200–300 clones each.
+  6–9+ times at 200–300 clones each. **Cuttings count from 01** — the owner
+  wrote "xx = 00–99"; whether the floor labels its first cutting 00 or 01 is
+  `[NEEDS INPUT]`, and the CHECK on `clone_run_mothers.cutting_no` is the one
+  place that changes if it is 00 (review CS-11).
+- **Plant ID with no known mother.** `<clone-date>_<batch number>_<seq>`
+  (`20260927_GP092601_0001`) — the batch number, not the cultivar, so two
+  batches of one strain cloned on the same day never compute the same id
+  (review CS-02). Production held no plants when the format changed.
 - **Phase durations.** Cloning 7–14 days, with imported clones allowed up to 7
   days more for quarantine and acclimatisation (they leave at roughly the same
   time); vegetation 14–17 days; flowering 42–63 days, ended by trichome
   maturation tracked under a stereo or digital microscope with documented
-  records. Harvest, cure and defoliation are the GACP → GMP boundary.
+  records. Harvest, coarse trim and defoliation are the GACP → GMP boundary
+  (the owner's "harvest, course and defoliating"; the journey step used to
+  read "cure", which comes after drying in the GMP wing — INS-11, wording
+  `[NEEDS INPUT]`).
+- **The phase path.** clone → nursery → veg → flower → drying → harvested,
+  one stop at a time; nursery and drying are optional stops, destroyed is
+  reachable from anywhere, mother stock is off the path. A move to the same
+  phase is a **room change** and keeps the phase clock; a move backwards is a
+  correction (QA authority, reason required); a terminal move needs a reason;
+  flowering is only in a `flower` room; every move takes a row lock on the
+  batch and is dated no later than the facility's today and no earlier than
+  the batch's latest phase event (review CS-01, CS-06, CS-16, CS-17).
+- **Closing a batch.** The plants a waste manifest declared destroyed are
+  settled as `destroyed` (counted off the end of the batch, the manifest named
+  in the reason); the rest of the active plants as `harvested` (review CS-07).
 - **Potency grades.** The official ImB product pages — see
   `docs/PRODUCT-CATALOGUE-2026-09.md`.
 - **Phenotype.** Still free text on the mother; the app carries no verified

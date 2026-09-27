@@ -153,17 +153,41 @@ conditions, and documentation. Cleanroom classification begins where GMP begins,
 which is exactly the harvest → cure → defoliation boundary already recorded above.
 The owner asked directly whether GACP sets any limits; it does not.
 
-**Recording trimming and drying.** Two facts, and the register should carry both
-rather than collapse them: the **classification of record is CNC**, and the site
-**operates them to Grade D discipline**. Putting `D` in `grade` would make the
-register assert a classification the validation master plan does not grant; the
-recommendation is `grade = "CNC"` with the operating standard in `notes`, so an
-auditor sees the tighter practice as a strength rather than a contradiction.
+**Recording trimming and drying.** Two facts, and the register carries both
+rather than collapsing them: the **classification of record is CNC**, and the
+site **operates and records them as Grade D** — the owner's instruction ("we
+consider it as Grade D and we act like it is, regardless"). So `grade = "D"`,
+with the note quoting the rule, on every trimming, de-bucking and drying room
+(F96, F104–F106, E80, E81, C153). An earlier draft of this section recommended
+`grade = "CNC"` with the operating standard in `notes`; that was the agent's
+call against the owner's words (review AD-15 / INS-07) and is withdrawn.
 `facility_rooms.grade` is nullable free text with no CHECK, so any scheme fits
 without a migration.
 
-**[NEEDS INPUT] — still open, three gaps in the rules above.** The rules cover the
-`E` and `F` wings; they do not reach:
+**What the packaged register now seeds (2026-09-27).** 34 rooms carry a grade,
+each with a `notes` line quoting the rule that placed it:
+
+| Rule | Grade | Rooms |
+| --- | --- | --- |
+| Extraction department | D | E27, E35, E36, E37, E83 (production), E38, E44 (packaging), E40, E78 (IPC labs), E46, E47, E48, E53, E57, E66, E66B (warehouses) |
+| Curing and packaging | D | E90, F108 (curing), F113, F114, F129 (packaging) |
+| Trimming, de-bucking and drying — officially CNC, operated as D | D | E80, E81, F96, F104, F105, F106, C153 |
+| Corridors around cultivation | CNC | C74, C146, C152, C155, C169, C170 |
+
+Everything else stays null: the cultivation rooms (GACP defines no grade — the
+plan draws them as "GACP — no grade applies", which is a statement about GACP,
+not an invented grade), the technical, main and washing wings, the E/F wardrobes,
+sampling rooms, air locks, waste and egress rooms, the F-wing IPC labs and
+warehouses (the owner's F rule names trimming, drying, curing and packaging
+only), the staircases and lifts, and the E/F corridors (interior vs perimeter is
+not derivable from the drawing). A re-import fills a grade or note only where
+none is set, so a classification QA made is never overwritten. The Floor plan
+tab colours the plan **by zone** or **by grade**, with a legend that counts
+rooms and area per grade and doubles as a filter.
+
+**[NEEDS INPUT] — still open, three gaps in the rules above** (these rooms are
+left null in the register). The rules cover the `E` and `F` wings; they do not
+reach:
 
 - **`T…` technical** (19 rooms: AHU plant, ethanol warehouse, compressed air)
 - **`M…` main** (15 rooms: entrance, security, cantina, personnel)

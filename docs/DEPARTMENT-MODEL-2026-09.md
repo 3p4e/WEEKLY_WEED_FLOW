@@ -130,7 +130,9 @@ actor's own department. Executives, QP and ADMIN are org-wide as before.
 
 | Capability | ADMIN | OWNER/CEO/COO | CU_MGR | PR_MGR | IR_MGR | QA_MGR | others |
 |---|---|---|---|---|---|---|---|
-| Create cultivar / batch / plants, move phase | ✅ | ✅ | ✅ | — | — | — | — |
+| Create cultivar / batch / plants, move phase forward, change room | ✅ | ✅ | ✅ | — | — | ✅ (owner, 2026-09-05) | — |
+| Move a batch backwards (a correction, reason required) | ✅ | ✅ | — | — | — | ✅ | — |
+| Mother bank, selection campaigns, clone runs, trichome checks | ✅ | ✅ | ✅ | — | — | ✅ | — |
 | Record IPM application | ✅ | ✅ | ✅ | — | — | — | — |
 | Record the harvest **cut** | ✅ | ✅ | ✅ | — | — | ✅ (PHI release) | — |
 | Record **dry weights**, **close** the lot | ✅ | ✅ | — | ✅ | — | — | — |
@@ -163,7 +165,9 @@ actor's own department. Executives, QP and ADMIN are org-wide as before.
   module: the owner's call.
 - **Post-harvest beyond the close** (curing, trimming, packaging) is not
   modelled; `production`'s task template lists those steps as attributes only.
-- **Room ↔ phase coupling.** Nothing stops a `flower` batch being created in a
-  `dry` room. Worth a validation once rooms carry departments everywhere.
+- **Room ↔ phase coupling.** Closed for flowering on 2026-09-27: a batch
+  cannot be registered in, or moved to, `flower` in a room whose kind is not
+  `flower` (the owner: "in one of the 6 available flowering rooms"). The other
+  phases are not tied to a kind, because the owner gave no such rule for them.
 - **Sub-department task templates** inherit Cultivation's; Cloning may want
   its own fields (cutting count, mother batch) once someone runs it.

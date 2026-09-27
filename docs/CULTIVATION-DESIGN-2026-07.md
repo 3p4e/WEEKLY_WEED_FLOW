@@ -222,9 +222,16 @@ came directly from the owner:
   is a single cultivar and therefore a single batch; occasionally a room holds
   several cultivars, and then **each cultivar in that room is its own batch.**
 - **~2000 plants per flowering room.**
-- **Batch code** like `GP072501` — site prefix + period + sequence.
-- **Plant ID** `<clone-date>_<cultivar>_<seq>`, `seq` incrementing from 1 within
-  the batch.
+- **Batch code** like `GP072501` — cultivar abbreviation + `MMYY` of the
+  cloning month + sequence (the owner's 2026-09-05 wording; the head is
+  enforced on save and the sequence is max + 1, capped at 99 — see
+  `docs/PROPAGATION-2026-09.md`).
+- **Plant ID** `<clone-date>_<batch code>_<seq>`, `seq` incrementing from 1
+  within the batch, for a plant with no known mother. The middle segment was
+  the cultivar until 2026-09-27 (review CS-02): two batches of one cultivar
+  cloned on the same day computed the same ids and the second fill collided
+  on `plants_org_id_plant_code_key`. A plant cut from a known mother carries
+  the owner's clone id `<mother>-<cutting>.<clone>` instead (migration 0066).
 
 Migration `0045_cultivation_identity_lifecycle` implements the shape:
 
