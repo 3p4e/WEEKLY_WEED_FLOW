@@ -207,6 +207,15 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       // commercial identities (commercial.py), the ladder import
       // (potency_import.py) and the facility layout import (facility_layout.py).
       case 'coq_signed':         return AL(`${a} signed a certificate of quality (${p.meaning})`, `${a} потпиша сертификат за квалитет (${p.meaning})`);
+      // A direct Studio build registers a controlled document without the
+      // §6A audit (DECISIONS F-2); the sentence says so rather than implying one.
+      case 'studio_build': {
+        const doc = [p.code, p.version].filter(Boolean).join(' v') || AL('a document', 'документ');
+        const t = p.title_en ? ` — ${p.title_en}` : '';
+        const note = p.audited ? '' : AL(' (not audited)', ' (без ревизија)');
+        return AL(`${a} built ${doc}${t} in Document Studio${note}`,
+                  `${a} изгради ${doc}${t} во Document Studio${note}`);
+      }
       case 'commercial_identity_upserted': return AL(`${a} set the commercial identity of ${p.batch_code}${p.neu_name ? ': ' + p.neu_name : ''}`,
                                                      `${a} го постави комерцијалниот идентитет на ${p.batch_code}${p.neu_name ? ': ' + p.neu_name : ''}`);
       case 'portfolio_master_imported': return AL(`${a} imported the portfolio master: ${p.imported} commercial identities`,
@@ -262,6 +271,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     trichome_checked: { en: 'Trichome checks', mk: 'Проверки на трихоми' },
     trichome_corrected: { en: 'Trichome checks corrected', mk: 'Поправени проверки на трихоми' },
     coq_signed: { en: 'CoQs signed', mk: 'Потпишани CoQ' },
+    studio_build: { en: 'Studio builds', mk: 'Изградени документи' },
     commercial_identity_upserted: { en: 'Commercial identities set', mk: 'Поставени комерцијални идентитети' },
     portfolio_master_imported: { en: 'Portfolio masters imported', mk: 'Внесени портфолио регистри' },
     potency_catalogue_imported: { en: 'Potency ladders imported', mk: 'Внесени скали на потентност' },
