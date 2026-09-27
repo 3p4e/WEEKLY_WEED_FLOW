@@ -1374,7 +1374,7 @@
       note: ((GF.$('tc-note') || {}).value || '').trim() || null };
     try {
       if (checkId) {
-        await GF.API._req('PATCH', '/cultivation/trichome-checks/' + encodeURIComponent(checkId), body);
+        await GF.API.trichomeCheckPatch(encodeURIComponent(checkId), body);
       } else {
         await GF.API.trichomeCheck({ batch_id: batchId, ...body });
       }

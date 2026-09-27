@@ -73,9 +73,9 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | --- | --- | --- |
 | C-1 | Out-of-grade rule as built (corrected in fix round 2 to the owner's "NO for now"): the regrade target is the product whose window holds the value (none in a dead band); a deviation notification goes to every CU_MGR and PR_MGR at compile; the CoQ carries a visible `regrade_oos_pending` flag until a formal OOS naming Total Δ9-THC exists on the batch, and the document prints the regrade and the OOS state; neither approval nor rendering is blocked by the regrade, and the regrade's own open OOS does not trigger the §6.4.1 open-OOS gate (other open OOS still do). | QC-04, INS-01, INS-04, INS2-01 |
 | C-2 | `nearest` tie-break: the lower nominal wins (never over-label); outside every window, the nearest edge, lower nominal on a tie. | AD-12 |
-| C-3 | Version-level supersession: approving the first product of a new `doc_version` retires the strain's products of the old version — a strain's fitted set should be approved in one sitting. | INS-03 |
+| C-3 | Version-level supersession, forward only: approving the first product of a newer `doc_version` retires the strain's products of older versions, and approving (or importing the ImB pages as) an OLDER version than the strain's newest is refused (409). Versions order by the digits in the string (`v.03` < `v.04` < `fitted 2026-09-15`), so the owner should name the fitted version so it sorts after v.03. A strain's fitted set should be approved in one sitting. | INS-03, QR-02 |
 | C-4 | The ±10 % ceiling applies to fitted products too: refused, not flagged. | INS-13 |
-| C-5 | Names: PUM → "Pure Michigen" and CLE → "Clemosa A Bud" applied and renamed on import; JD / GRC / SJ / WC keep the August spelling and both spellings resolve to one cultivar until the owner picks. | INS-05 |
+| C-5 | Names: PUM → "Pure Michigen" and CLE → "Clemosa A Bud" applied and renamed on import; JD / GRC / SJ / WC keep the August spelling and both spellings resolve to one cultivar until the owner picks (SJ's "Sleepy Joy" through `disputed_spellings`, fix round 2). | INS-05, INS2-03 |
 | C-6 | The A4 product page prints only the recorded author and approver, with role and date; the legacy ladder page prints the recorded approver and says the QA review is not captured. No locked names anywhere. | QC-16, QC-22 |
 | C-7 | Ladder import is refused org-wide once any product is APPROVED; ladder create/approve refused per cultivar with an APPROVED product. | QC-04 |
 | C-8 | The fitted import treats service ids that are not plain acronyms (`V_*`, the partner catalogue) as not this facility's strains. | INS-14 |
@@ -102,6 +102,10 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | B-11 | A water verdict is set once; a wrong verdict is corrected by a new record. | QC-24 |
 | B-12 | No ADMIN exemption for third-party custody entries: the recorder must be the giver or the receiver. | QC-29 |
 | B-13 | Eight `qc_*_id_seq` sequences dropped by tasks 0071 (0062 precedent). | QC-28 |
+| B-14 | (Fix round 2) The regrade's own formal OOS is the one opened at or after the CoQ's compile, raised on a result it aggregated, or cited as its `oos_reference`; an open OOS naming Total Δ9-THC is exempt from the §6.4.1 gate only on a REGRADED CoQ — on a conforming CoQ it still blocks. | INS2-01, QR-07 |
+| B-15 | (Fix round 2) The single-certificate CoQ applies the same investigation gates as the aggregated one, keyed on test name or `result_id` — stricter than the aggregation path, which checks masked failures only. | QR-03 |
+| B-16 | (Fix round 2) The 0071 downgrade keeps COMPILED signatures and reseeds the retired sequences past each series' maximum; it refuses before touching anything when RETEST CoQs or two APPROVED CoQs of one batch/spec exist. | QR-12, INV-10 |
+| B-17 | (Fix round 2) Certificate-level potency history is kept and fixed rather than deleted: Total Δ9-THC derived from the components, matched on the batch-code head or an exact registered code, experiment lots (`＊`) skipped per the owner's 2026-09-16 rule. | QR-11 |
 | A-1 | The login limiter trusts the X-Forwarded-For header only on the Traefik-side interface (172.16.31.20); a sibling container's header is dropped. A successful login clears the account's budget. | BC-01 |
 | A-2 | PR_MGR records waste manifests and runs decon / gowning for `dry` rooms; witnessing, swabs and release stay QA's. | BC-12 |
 | A-3 | A department's head is maintained by the roster: the first department-scoped manager provisioned into or moved into it becomes head; an existing head is never displaced; ADMIN may set it. | BC-04 |
@@ -116,7 +120,7 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | A-12 | The production password floor is 12; `PASSWORD_POLICY_OVERRIDE=true` lowers it deliberately and is warned at startup. | BC-23 |
 | A-13 | A work session is at most 24 h (422 on entry; the capture importer skips a longer one with a reason). Snapshot labels and pin titles are Monday-based from now on — a one-time visible change. | BC-24, BC-16 |
 | E-1 | QC batch-id fields carry the cultivar code as their constant head (as on the cultivation form). | INS-12 |
-| E-2 | WITHDRAWN (fix round 2): it contradicted B-12 — the recorder of a custody hop must be the giver or the receiver, and the form now offers only what the server accepts. | FE-02, QC-29 |
+| E-2 | Replaced in fix round 2 (it contradicted B-12): the form still sends the previous recipient as the giver for continuity, but the recorder must be the giver or the receiver — when someone else holds the sample the receiver defaults to the recorder, and "Log transfer" is disabled with the server's sentence while the recorder is neither. | FE-02, QC-29, R2-FE-05 |
 | E-3 | The SOP Registry / Knowledge stub views (which only printed "retired") are deleted from the shell. | FE-21 |
 | E-4 | The biosecurity board loads the 200 most recent events unfiltered (a backend `pending_only` filter would be cleaner). | FE-10 |
 | E-5 | The "handoffs to your department" list is derived from notifications (a backend `GET /handoffs?to_dept=mine` would be cleaner). | FE-06 |

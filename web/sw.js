@@ -9,7 +9,7 @@
    tests/frontend/fixtures/shell-hash.json and fails when the shell changed
    under an unchanged VERSION (regenerate the fixture with
    `node tests/frontend/helpers/shell-hash.js --write`). */
-const VERSION = 'wwf-shell-v3.106.0';
+const VERSION = 'wwf-shell-v3.107.0';
 
 const SHELL = [
   '/',

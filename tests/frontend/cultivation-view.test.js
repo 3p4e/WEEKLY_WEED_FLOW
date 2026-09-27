@@ -909,6 +909,8 @@ test('correcting a check pre-fills the row the board named and PATCHes it — no
   w.GF.API.trichomeChecks = async (q) => { asked.push(q); return { checks: rows }; };
   const reqs = [];
   w.GF.API._req = async (m, p, b) => { reqs.push([m, p, b]); return { id: 'tc2' }; };
+  // The view saves through the api.js wrapper; mirror it onto the stubbed _req.
+  w.GF.API.trichomeCheckPatch = (id, b) => w.GF.API._req('PATCH', '/cultivation/trichome-checks/' + id, b);
   w.GF.API.trichomeCheck = async () => { w.__posted = true; return { id: 'tc-new' }; };
   w.GF.WWF.loadCultivation = async () => {};
 
