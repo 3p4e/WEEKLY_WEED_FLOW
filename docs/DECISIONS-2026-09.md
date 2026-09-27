@@ -33,19 +33,19 @@ From `docs/review-2026-09-27/instructions.md` §3. Each is in the code today.
 | --- | --- | --- |
 | AD-1 | Imported clones get up to 7 extra quarantine days on the cloning leg. | "some days more" |
 | AD-2 | Nursery shares the cloning leg's 7–14-day window. | no nursery duration given |
-| AD-3 | Stock number counts per (campaign, product, mother number, generation). | "alternative naming convention provided" |
-| AD-4 | Cuttings are numbered from 01. | "xx = 00–99" |
+| AD-3 | (Corrected 2026-09-27, tasks 0070: a mother number names ONE plant line per campaign; stock number counts per campaign, mother number and generation; the product is derived from the line.) | "alternative naming convention provided" |
+| AD-4 | Cuttings are numbered from 01 (kept on 2026-09-27; see §2b D-1). | "xx = 00–99" |
 | AD-5 | Clone numbers `.nnn` restart per cutting, not per mother. | wording ambiguous |
 | AD-6 | Caps: generation ≤ 9, mother number ≤ 99, ≤ 999 clones per cutting. | — |
 | AD-7 | (Corrected 2026-09-27: batch-code month is now the cloning month.) | mmyy = cloning month |
 | AD-8 | Journey step label wording for the GACP→GMP step. | "harvest, cure and defoliation" |
-| AD-9 | The production manager may open only `dry` rooms; no room kinds for trimming, curing, packaging. | — |
+| AD-9 | The production manager may open only `dry` rooms; no room kinds for trimming, curing, packaging. (2026-09-27: production also records waste, decon and gowning for `dry` rooms — §2b A-2.) | — |
 | AD-10 | Trichome verdict vocabulary (immature / approaching / ready / overripe); clear+cloudy+amber must sum to 98–102; never a gate. | "documented records" |
 | AD-11 | Harvest moisture-loss plausibility band 60–92 %, reported not refused. | — |
-| AD-12 | With overlapping windows, the product that contains the value is the match; if none, the closest window above or below. | "the next grade above or below, suitably" |
+| AD-12 | (Refined 2026-09-27: the product whose window holds the value is the match, the closest nominal if several, the lower nominal on a tie; outside every window, the nearest window edge — §2b C-1/C-2.) | "the next grade above or below, suitably" |
 | AD-13 | A batch or clone run may target only an APPROVED product; a mother requires one. | — |
 | AD-14 | Approving a strain's first product supersedes its ladder. | ladders superseded (09-05) |
-| AD-15 | Trimming/drying recommended as CNC in the layout doc. | "treat as Grade D" — corrected to D on 2026-09-27 |
+| AD-15 | (Withdrawn 2026-09-27: trimming/drying/de-bucking rooms carry grade D in the register with the note "officially CNC, operated as D".) | "treat as Grade D" |
 | AD-16 | QA is the classification authority on the facility register. | — |
 | AD-17 | RAGflow dataset named `DB3_PP_CURRENT_unified`; the Drive folder is `DB3_PP_CURRENT`. | name never chosen |
 | AD-18 | The weekly GMP document stays per department, exact match. | — |
@@ -58,8 +58,66 @@ Open questions the code already answers, unanswered by the owner:
 | Security manager write access to decon / waste | read-only |
 | Should the DocEngine regulatory check block a document? | advisory |
 | Are the six repeated ImB pages reprints? | yes — 42 products |
-| May QC compile a CoQ against a product other than the batch's target? | allowed, unenforced |
+| May QC compile a CoQ against a product other than the batch's target? | allowed, unenforced (the compile form offers every APPROVED product of the strain) |
 | Where does the CoQ workbook sync land, with which credential, how is stability handled? | nothing built |
+| Which document code / version are the fitted specifications issued under? | `POST /qc/products/import-fitted` refuses to run without one |
+
+## 2b. Decisions made by the 2026-09-27 fix workstreams — need the owner's yes or a correction
+
+Each is in the code today. The letter is the workstream (A backend core,
+B QC, C product catalogue, D cultivation, E frontend, F DocEngine/infra); the
+finding ids are those of `docs/REVIEW-2026-09-27.md`.
+
+| # | What the code does now | Findings |
+| --- | --- | --- |
+| C-1 | Out-of-grade rule as built: the regrade target is the product whose window holds the value (none in a dead band); a deviation notification goes to every CU_MGR and PR_MGR at compile; approval is refused (409) until a formal OOS naming Total Δ9-THC exists on the batch, then the existing §6.4.1 gate holds until it is CLOSED; issuance is not blocked. | QC-04, INS-01, INS-04 |
+| C-2 | `nearest` tie-break: the lower nominal wins (never over-label); outside every window, the nearest edge, lower nominal on a tie. | AD-12 |
+| C-3 | Version-level supersession: approving the first product of a new `doc_version` retires the strain's products of the old version — a strain's fitted set should be approved in one sitting. | INS-03 |
+| C-4 | The ±10 % ceiling applies to fitted products too: refused, not flagged. | INS-13 |
+| C-5 | Names: PUM → "Pure Michigen" and CLE → "Clemosa A Bud" applied and renamed on import; JD / GRC / SJ / WC keep the August spelling and both spellings resolve to one cultivar until the owner picks. | INS-05 |
+| C-6 | The A4 product page prints only the recorded author and approver, with role and date; the legacy ladder page prints the recorded approver and says the QA review is not captured. No locked names anywhere. | QC-16, QC-22 |
+| C-7 | Ladder import is refused org-wide once any product is APPROVED; ladder create/approve refused per cultivar with an APPROVED product. | QC-04 |
+| C-8 | The fitted import treats service ids that are not plain acronyms (`V_*`, the partner catalogue) as not this facility's strains. | INS-14 |
+| D-1 | Cuttings count 01–99 (owner wrote "00–99"); if the floor labels the first cutting 00, the two check constraints are the one place to change. | AD-4 |
+| D-2 | Backward phase moves are a correction right of ADMIN, the executives and QA_MGR, with a reason (the task said "ADMIN/QA"). | CS-06 |
+| D-3 | Forward moves are strictly one stop at a time; nursery and drying are the only skippable stops; clone→flower is refused. | CS-06 |
+| D-4 | PHI is evaluated on `harvested_on` (which must be ≤ today), not on max(cut, today); a backdated cut is judged on its own day. | CS-01 |
+| D-5 | Grades: cultivation rooms stay ungraded (GACP has no class); F-wing IPC labs, sampling rooms, wardrobes and corridors stay null because the owner's rule did not name them; trimming/drying recorded as D with the "officially CNC" note. | INS-07 |
+| D-6 | Journey step reads "Harvest · coarse trim · defoliation" (owner wrote "course"). | INS-11 |
+| D-7 | Closing a batch as harvested settles the manifest's destroyed plant count off the END of the batch (the manifest names no plants); the reason text says so. | CS-07 |
+| B-1 | Only an OOS whose Phase I `invalidated=true` licenses a re-test; a CLOSED OOS with disposition REJECT blocks any CoQ for the batch. | QC-01 |
+| B-2 | Voiding a cited certificate, or releasing a revision of one, requires voiding the DRAFT/APPROVED CoQ first (then recompile). | QC-02 |
+| B-3 | A FAIL-dispositioned source compiles a non-conforming CoQ record (not a 409); PASS cannot be recorded on a certificate with no results — WATER/OTHER certificates included. | QC-06 |
+| B-4 | The COQ certificate type is retired for creation; legacy COQ rows are approved by HoQC; the single-certificate CoQ render is kept for the UI (retire vs register-numbering still open). | QC-07 |
+| B-5 | The header THC window must equal the total_thc parameter's limits for QA approval; the CoQ prints the parameter's window. | QC-08 |
+| B-6 | Promote refuses an eCoA without `report_date`; an undated legacy result sorts by its facility day of entry. | QC-09 |
+| B-7 | Electronic signatures are enforcement: the role of record must sign; ADMIN is not exempt. | QC-12 |
+| B-8 | CoQ purpose INITIAL/RETEST + free-text timepoint + explicit `source_coa_ids`; no date-window selection. | QC-15 |
+| B-9 | The date printed for the ladder page's QC signatory is `effective_date` (no `approved_at` column). | QC-16 |
+| B-10 | Result units must match the parameter's unit exactly (normalised); no conversion table. | QC-17 |
+| B-11 | A water verdict is set once; a wrong verdict is corrected by a new record. | QC-24 |
+| B-12 | No ADMIN exemption for third-party custody entries: the recorder must be the giver or the receiver. | QC-29 |
+| B-13 | Eight `qc_*_id_seq` sequences dropped by tasks 0071 (0062 precedent). | QC-28 |
+| A-1 | The login limiter trusts the X-Forwarded-For header only on the Traefik-side interface (172.16.31.20); a sibling container's header is dropped. A successful login clears the account's budget. | BC-01 |
+| A-2 | PR_MGR records waste manifests and runs decon / gowning for `dry` rooms; witnessing, swabs and release stay QA's. | BC-12 |
+| A-3 | A department's head is maintained by the roster: the first department-scoped manager provisioned into or moved into it becomes head; an existing head is never displaced; ADMIN may set it. | BC-04 |
+| A-4 | Org-wide weekly AI pins (`weekly_snapshot`, `weekly_report`, subject-less) are readable by org-wide elevated roles only. | BC-02 |
+| A-5 | A work session is split at 06:00, 08:00, 17:00, 22:00 and midnight and each segment bucketed by its own start; a session is at most 24 h. | BC-24 |
+| A-6 | The weekly window is named after the Monday it contains (`W40 2026`, never `W53`). | BC-16 |
+| A-7 | `GET /audit` pages on an opaque per-chain cursor; `before` stays as the documented lossy legacy until the audit view switches. | BC-08 |
+| E-1 | QC batch-id fields carry the cultivar code as their constant head (as on the cultivation form). | INS-12 |
+| E-2 | The custody form sends `from_user_id` = previous recipient, so a QC writer can log a hop on the custodian's behalf. | FE-02 |
+| E-3 | The SOP Registry / Knowledge stub views (which only printed "retired") are deleted from the shell. | FE-21 |
+| E-4 | The biosecurity board loads the 200 most recent events unfiltered (a backend `pending_only` filter would be cleaner). | FE-10 |
+| E-5 | The "handoffs to your department" list is derived from notifications (a backend `GET /handoffs?to_dept=mine` would be cleaner). | FE-06 |
+| E-6 | Executives land in the Analytics module (executive overview) on a fresh browser. | FE-12 |
+| F-1 | Canon D5 content floor: a revision with fewer words/characters than its source fails, so the "tighten" / "simplify" presets usually fail with a D5 message — accept, or relax D5 for wording-only edits. | DI-07 |
+| F-2 | Direct `/build` documents stay unaudited (`audited=false` recorded) rather than running the §6A audit synchronously. | DI-06 |
+| F-3 | DocEngine is fail-closed on organisation scope: backend and docengine must ship together. | DI-13 |
+| F-4 | The deploy workflow refuses a commit whose workflow files differ from the default branch's (merge first). | DI-02 |
+| F-5 | DI-02 remediation choice: separate runner VM vs required PR approval (`ops/README.md`). | DI-02 |
+| F-6 | Revision version bumping `1.0→1.1`, `01→02`. | DI-07 |
+| F-7 | The capture import acts as the account named by `CAPTURE_IMPORT_USER` only; no fallback name in code. | DI-22 |
 
 ## 3. Temporary relaxations (must be reverted or made permanent deliberately)
 

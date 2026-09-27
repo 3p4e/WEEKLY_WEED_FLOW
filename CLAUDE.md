@@ -212,9 +212,21 @@ would have re-used a live tag and burned the rollback anchor.
 
 Postgres 16 cluster on `localhost:5432` (start with `sudo pg_ctlcluster 16 main
 start` — it gets reaped on idle, so restart it if a run hits
-`ConnectionRefusedError`; connect as `sudo -u postgres psql`, since `postgres`
-has no password over TCP). Test DBs `wwf_users_test` / `wwf_tasks_test` and roles
-`app_user` / `app_admin` survive a container rebuild. The venv at `/tmp/wwf-venv`
+`ConnectionRefusedError`; connect as `sudo -u postgres psql`, or over TCP as
+`postgres:postgres` — the local role got that password on 2026-09-27 so alembic
+can run as the table owner, exactly as CI does). Test DBs `wwf_users_test` /
+`wwf_tasks_test` and roles `app_user` / `app_admin` survive a container rebuild;
+the test DBs are owned by `postgres`, so **migrate them as `postgres`**
+(`env TASKS_MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_tasks_test
+alembic -c backend/alembic.ini -n tasks upgrade head`; `-n users` likewise).
+Four more pairs `wwf_{users,tasks}_test_{a,b,c,d}` exist for parallel agents.
+
+**The Playwright e2e suite runs locally** (proven 2026-09-27): `sudo apt-get
+install nginx`, `ln -s /tmp/wwf-venv backend/.venv`, `npm ci` in `web/e2e`, then
+`PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test` from
+`web/e2e` (~2.5 min, uses the original test DB pair at alembic head). Run it
+before pushing anything that touches the shell, the rail or a seeded flow — the
+jsdom suite does not catch what it catches. The venv at `/tmp/wwf-venv`
 survives too — but **`qctest.sh` does not**, and it is only a wrapper that exports
 the env vars (which don't persist between Bash calls). Rebuild it from
 `.github/workflows/ci.yml`; the passwords are in that file:
