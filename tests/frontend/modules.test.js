@@ -32,8 +32,11 @@ test('tasks module: roles=null, correct keys', () => {
   const { GF, close } = loadModules();
   const mod = GF.moduleById('tasks');
   assert.equal(mod.roles, null);
+  // `approvals` moved here from `audit` (review 2026-09-27, R2-FE-01): the
+  // handoffs list is addressed to every manager role, and the audit module
+  // admits only QA/QC/QP.
   const expectedKeys = ['depthome','mywork','board','timeline','calendar','myday','team',
-    'coord','dash','report','inbox','search','import','intake'];
+    'coord','approvals','dash','report','inbox','search','import','intake'];
   assert.deepEqual(toJS(mod.keys), expectedKeys);
   close();
 });
@@ -70,7 +73,7 @@ test('audit module: correct roles and keys', () => {
   const { GF, close } = loadModules();
   const mod = GF.moduleById('audit');
   assert.deepEqual(toJS(mod.roles), ['QA_MGR','QC_MGR','QP']);
-  assert.deepEqual(toJS(mod.keys), ['audit','auditprep','approvals']);
+  assert.deepEqual(toJS(mod.keys), ['audit','auditprep']);
   close();
 });
 

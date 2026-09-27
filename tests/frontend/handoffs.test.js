@@ -149,7 +149,9 @@ const PRE_NOTIF = `
   window.GF.PEOPLE = { ex: { name: 'Olga' } };
   window.GF.icon = function () { return ''; };
   window.GF.avatar = function () { return ''; };
-  window.GF.API = { token: 'tok', user: { id: 'pm', facility_tz: 'Europe/Skopje' } };
+  // 'pm' is the receiving department's manager (PR_MGR) — openNotif routes a
+  // handoff ping to Approvals only for a role that can open it (R2-FE-01).
+  window.GF.API = { token: 'tok', user: { id: 'pm', role: 'PR_MGR', facility_tz: 'Europe/Skopje' } };
   window.GF.render = { all: function () {}, sidebar: function () {} };
   window.GF.viewHead = function () { return ''; };
 `;

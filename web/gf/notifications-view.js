@@ -431,6 +431,20 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     } catch (e) { GF.toast(AL('Load failed: ', 'Неуспешно вчитување: ') + e.message, 'error'); }
   };
 
+  // Can the signed-in user land on the Approvals view? Mirrors the two gates
+  // _registerFullPageView ANDs together for it: its module must be accessible
+  // for the role (modules.js — `approvals` is a task-module key, so every
+  // signed-in role passes) and the view's own guard (role !== 'USER').
+  GF.WWF.canOpenApprovals = () => {
+    const role = (GF.API && GF.API.user && GF.API.user.role) || '';
+    if (!role || role === 'USER') return false;
+    // Without the module registry (modules.js) there is no module gate to
+    // fail — the same optional-chaining _registerFullPageView uses.
+    if (!GF.moduleForKey || !GF.moduleAccessibleFor) return true;
+    const mod = GF.moduleForKey('approvals');
+    return !!mod && GF.moduleAccessibleFor(mod, role);
+  };
+
   GF.WWF.openNotif = async (id, taskId) => {
     // Mirror notifDone/notifReadAll: a failed write must abort BEFORE the
     // optimistic local mutation below, not after — otherwise a network blip
@@ -445,8 +459,12 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     // manager cannot see the task on their own board (it still sits in the
     // source department). The place to act on it is the Approvals list of
     // handoffs to their department, not a board jump that lands nowhere
-    // (review 2026-09-27, FE-06).
-    if (n && n.verb === 'handoff' && GF.setView) { GF.setView('approvals'); return; }
+    // (review 2026-09-27, FE-06). Only when that view is OPENABLE for this
+    // user, though: every task participant gets the same ping, and a USER
+    // assignee (the Approvals guard is role !== 'USER') used to be sent to a
+    // view render.all() bounces straight back to My Week — with no message.
+    // They keep the task jump they had before (R2-FE-01).
+    if (n && n.verb === 'handoff' && GF.setView && GF.WWF.canOpenApprovals()) { GF.setView('approvals'); return; }
     if (taskId && GF.WWF.xrJump) {
       const t = GF.task && GF.task(taskId);
       GF.WWF.xrJump(taskId, (t && t.week_start) || '');

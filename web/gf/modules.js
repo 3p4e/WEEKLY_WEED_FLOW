@@ -18,8 +18,16 @@ GF.MODULES = [
     desc:  () => _AL('Weekly work, boards, timelines, reports', 'Неделна работа, табли, временски рамки, извештаи'),
     roles: null,   // null = every signed-in role
     defaultView: () => (GF.hasDeptHome && GF.hasDeptHome()) ? 'depthome' : 'mywork',
+    // `approvals` is a TASK view: acknowledgments, team sign-offs and the
+    // "Handoffs to your department" list are addressed to every manager role
+    // (PR_MGR is the canonical receiver of a cultivation → production handoff)
+    // and to anyone who can be assigned. It used to be keyed under `audit`
+    // (QA/QC/QP only), so six of the eight department managers could never
+    // open it and the handoff notification bounced them to My Week (review
+    // 2026-09-27, R2-FE-01). The view's own guard (role !== 'USER') still
+    // keeps it off the operator rail.
     keys: ['depthome','mywork','board','timeline','calendar','myday','team',
-           'coord','dash','report','inbox','search','import','intake'],
+           'coord','approvals','dash','report','inbox','search','import','intake'],
   },
   {
     id: 'qc', icon: 'flask',
@@ -53,10 +61,10 @@ GF.MODULES = [
   {
     id: 'audit', icon: 'clipboard-check',
     label: () => _AL('Audit & Compliance', 'Ревизија и усогласеност'),
-    desc:  () => _AL('Audit trail, readiness, approvals', 'Ревизиска трага, подготвеност, одобрувања'),
+    desc:  () => _AL('Audit trail, readiness', 'Ревизиска трага, подготвеност'),
     roles: ['QA_MGR', 'QC_MGR', 'QP'],
     defaultView: () => 'audit',
-    keys: ['audit', 'auditprep', 'approvals'],
+    keys: ['audit', 'auditprep'],
   },
   {
     id: 'analytics', icon: 'bar-chart',
