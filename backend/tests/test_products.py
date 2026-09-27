@@ -559,3 +559,120 @@ async def test_import_renames_a_cultivar_still_carrying_a_retired_spelling(clien
     assert next(p for p in rows if p["product_code"] == "PUM_THC14:CBD1")["cultivar_id"] == pum["id"]
     assert all(p["cultivar_id"] == jd["id"] for p in rows if p["product_code"].startswith("JD_"))
     assert len({p["cultivar_id"] for p in rows}) == 22
+
+
+# ── Fix round 2 (review 2026-09-27): the version rule, single-product overlap,
+#    the SJ alias and the certificate-level history ───────────────────────────
+
+async def test_an_older_version_is_never_approved_over_the_live_set(client, admin_headers):
+    """QR-02 (owner 2026-09-18): once a strain's fitted set is APPROVED, a
+    retired v.03 ImB page for that strain cannot be approved — it would have
+    superseded the whole fitted set — and the packaged v.03 import is refused
+    for that strain (a dry run reports it). Same and newer versions still go."""
+    cj = await _cultivar(client, admin_headers, code="CJ", name="Cap Junky")
+    fitted = {}
+    for n, t in CJ_FITTED:
+        fitted[n] = await _approved(client, admin_headers, cj["id"], f"CJ_THC{n}:CBD1", n,
+                                    window=_fitted_window(n, t), doc_version="v.04")
+    old = await _product(client, admin_headers, cj["id"], "CJ_THC28:CBD1", 28)   # v.03 page
+    _, qc2 = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.post(f"/qc/products/{old['id']}/approve", headers=qc2)
+    assert r.status_code == 409 and "v.04" in r.json()["detail"], r.text
+    live = {p["product_code"] for p in
+            (await client.get(f"/qc/products?cultivar_id={cj['id']}&status=APPROVED",
+                              headers=admin_headers)).json()}
+    assert live == {f"CJ_THC{n}:CBD1" for n, _ in CJ_FITTED}, "the fitted set is untouched"
+    # the same version joins; a newer version supersedes
+    v4b = await _approved(client, admin_headers, cj["id"], "CJ_THC30:CBD1", 30,
+                          window=(29.61, 30.5), doc_version="v.04")
+    assert v4b["status"] == "APPROVED"
+    v5 = await _approved(client, admin_headers, cj["id"], "CJ_THC20:CBD1", 20,
+                         window=(18.4, 21.59), doc_version="v.05")
+    assert v5["status"] == "APPROVED"
+    live = {p["product_code"] for p in
+            (await client.get(f"/qc/products?cultivar_id={cj['id']}&status=APPROVED",
+                              headers=admin_headers)).json()}
+    assert live == {"CJ_THC20:CBD1"}
+    # the v.03 pages: reported on a dry run, refused for real
+    r = await client.post("/qc/products/import", json={"dry_run": True}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert "CJ (v.05)" in r.json()["refused"] and "CJ (v.04)" in r.json()["refused"]
+    r = await client.post("/qc/products/import", json={"dry_run": False}, headers=admin_headers)
+    assert r.status_code == 409 and "CJ (v.05)" in r.json()["detail"], r.text
+    assert not [p for p in (await client.get(f"/qc/products?cultivar_id={cj['id']}",
+                                             headers=admin_headers)).json()
+                if p["doc_version"] == "v.03" and p["id"] != old["id"]], "nothing was written"
+
+
+async def test_a_single_product_may_not_overlap_its_siblings_of_the_same_version(client, admin_headers):
+    """QR-09 / INS2-06 (owner 2026-09-06 "ranges not overlapping"): POST and
+    PATCH check the product as a set with the strain's DRAFT/APPROVED siblings
+    of the same doc_version, as /ladder does. The issued v.03 pages are exempt
+    (they overlap as printed — test_several_products_of_one_strain_coexist_…)."""
+    cv = await _cultivar(client, admin_headers)
+    a = await _approved(client, admin_headers, cv["id"], "GP_THC26:CBD1", 26,
+                        window=(23.40, 28.59), doc_version="v.04")
+    r = await client.post("/qc/products", json={
+        "cultivar_id": cv["id"], "product_code": "GP_THC24:CBD1", "grade": 24,
+        "window_min": 21.60, "window_max": 26.39, "doc_version": "v.04"}, headers=admin_headers)
+    assert r.status_code == 422 and "overlap" in r.json()["detail"], r.text
+    b = await _product(client, admin_headers, cv["id"], "GP_THC22:CBD1", 22,
+                       window=(20.0, 23.39), doc_version="v.04")
+    assert b["window_max"] == 23.39
+    r = await client.patch(f"/qc/products/{b['id']}", json={"window_max": 24.0}, headers=admin_headers)
+    assert r.status_code == 422 and "overlap" in r.json()["detail"], r.text
+    r = await client.patch(f"/qc/products/{b['id']}", json={"window_max": 23.0}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    # a ladder body for the same version is checked against the singles too
+    r = await client.post("/qc/products/ladder", json={
+        "cultivar_id": cv["id"], "doc_version": "v.04",
+        "grades": [{"grade": 20, "window_min": 18.0, "window_max": 21.0}]}, headers=admin_headers)
+    assert r.status_code == 422 and "overlap" in r.json()["detail"], r.text
+    # another version is not this version's business
+    c = await _product(client, admin_headers, cv["id"], "GP_THC24:CBD1", 24,
+                       window=(21.60, 26.39), doc_version="v.05")
+    assert c["status"] == "DRAFT"
+    assert a["status"] == "APPROVED"
+
+
+async def test_import_fitted_resolves_sleepy_joy_to_sleepy_joe(client, admin_headers):
+    """INS2-03: the per-strain folder spells SJ "Sleepy Joy", the merged
+    master (and the cultivar master) "Sleepy Joe". A fitted export naming
+    "Sleepy Joy" must land on the one SJ cultivar, not report a conflict."""
+    sj = await _cultivar(client, admin_headers, code="SJ", name="Sleepy Joe")
+    export = _service_export(("SJ", "Sleepy Joy", "finished", [(8, 0.8), (10, 1.0)]))
+    r = await client.post("/qc/products/import-fitted",
+                          json={**export, "doc_version": "fitted 2026-09-15"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["conflicts"] == [] and r.json()["cultivars_created"] == []
+    rows = (await client.get(f"/qc/products?cultivar_id={sj['id']}", headers=admin_headers)).json()
+    assert {p["product_code"] for p in rows} == {"SJ_THC8:CBD1", "SJ_THC10:CBD1"}
+    assert all(p["cultivar_name"] == "Sleepy Joe" for p in rows), "an alias, never a rename"
+
+
+async def test_certificate_level_history_is_derived_by_the_batch_code_head(client, admin_headers):
+    """QR-11 (QC-10 residual): the certificate-level "tested so far" source
+    derives each certificate's Total Δ9-THC from its component results (a
+    transcribed total is refused everywhere) and attributes the certificate
+    to the strain by the batch code's head (^GP[0-9]), case-insensitively —
+    GPX… is another strain, and a code with no head is not attributed."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    cv = await _cultivar(client, admin_headers)
+    await _cultivar(client, admin_headers, code="GPX", name="Grape Pie X")
+    prod = await _approved(client, admin_headers, cv["id"])
+    spec, pa, pb, pt = await _computed_spec(client, admin_headers, material="PROD-CERTH")
+    # 2.0 + 0.877 × 25.06 = 23.98 on a GP-headed lot; 1.0 + 0.877 × 20.0 = 18.54 on a GPX lot
+    await _release_with_components(client, admin_headers, qp, spec, pa, pb, "gp092601",
+                                   a_val=2.0, b_val=25.06)
+    await _release_with_components(client, admin_headers, qp, spec, pa, pb, "GPX092601",
+                                   a_val=1.0, b_val=20.0)
+    await _release_with_components(client, admin_headers, qp, spec, pa, pb, "L-NOHEAD",
+                                   a_val=1.0, b_val=22.0)
+    hist = (await client.get(f"/qc/products/{prod['id']}/potency-history", headers=admin_headers)).json()
+    lvl = hist["certificate_level"]
+    assert lvl["n"] == 1 and round(lvl["avg"], 2) == 23.98, lvl
+    assert lvl["values"][0]["lot_code"] == "GP092601" and lvl["values"][0]["conforms"] is True
+    # A registered batch always carries the head (create_batch refuses any
+    # other code), so the exact plant_batches match serves legacy rows only;
+    # a head-less lot is never attributed by guesswork.
+    assert "L-NOHEAD" not in {v["lot_code"] for v in lvl["values"]}

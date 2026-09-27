@@ -304,7 +304,11 @@ async def update_potency_spec(spec_id: str, body: PotencySpecPatch,
             args.append(val); fields.append(f"{col}=${len(args)}")
         if "n_batches" in patch and patch["n_batches"] is not None:
             args.append(patch["n_batches"] >= 3); fields.append(f"data_supported=${len(args)}")
-        if fields:
+        # Review 2026-09-27 QR-05 (QC-11 for ladders): a ranges-only PATCH
+        # rewrites the tiers, which is authorship — the parent row is stamped
+        # updated_by even when no header field changed, so approve refuses
+        # the person who wrote the tiers.
+        if fields or ("ranges" in patch and body.ranges is not None):
             args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
             args.append(spec_id)
             try:
@@ -340,10 +344,16 @@ async def approve_potency_spec(spec_id: str, user: dict = Depends(require_role(*
         if cur["status"] != "DRAFT":
             raise HTTPException(409, f"Only a DRAFT ladder can be approved (is {cur['status']})")
         await _refuse_when_products_live(c, cur["cultivar_id"])
-        if str(user["id"]) in (str(cur["created_by"]), str(cur["updated_by"])):
+        # QR-05: the author of the parent row, whoever last updated it, and
+        # whoever wrote any of its tiers (rows written before a ranges-only
+        # PATCH stamped the parent) are all "the author" here.
+        tier_authors = {str(x) for r in await c.fetch(
+            "SELECT created_by, updated_by FROM qc_potency_spec_ranges WHERE potency_spec_id=$1",
+            spec_id) for x in (r["created_by"], r["updated_by"]) if x}
+        if str(user["id"]) in ({str(cur["created_by"]), str(cur["updated_by"])} | tier_authors):
             raise HTTPException(
                 403, "The person approving a potency ladder must be different from the person who"
-                     " authored it (segregation of duties, PP-QC-SPEC-001)")
+                     " authored it or wrote its tiers (segregation of duties, PP-QC-SPEC-001)")
         # Supersede the current APPROVED ladder for this cultivar FIRST — the
         # partial unique index allows only one APPROVED row per (org, cultivar)
         # and is checked at statement end, not deferred.

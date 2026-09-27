@@ -978,3 +978,38 @@ async def test_qc31_oos_register_is_append_only_at_the_db(client, admin_headers,
         assert tag == "DELETE 0"
     reg = (await client.get(f"/qc/oos/{oos['id']}", headers=admin_headers)).json()["register"]
     assert reg and reg[0]["action"] == "opened"
+
+
+# ── QR-12 / INV-10: the 0071 downgrade preserves records ───────────────────
+
+def test_qr12_the_0071_downgrade_preserves_records_and_refuses_what_it_cannot_hold():
+    """The downgrade must not delete COMPILED e-signatures (Annex 11
+    evidence), must not recreate the retired sequences at 1 (the pre-0071
+    minting would collide with numbers already issued), and must refuse —
+    before touching anything — data the old schema cannot hold (RETEST CoQs,
+    two APPROVED CoQs of one batch/spec across periods)."""
+    import importlib.util
+    import pathlib
+    import re as _re
+    path = pathlib.Path(__file__).resolve().parents[1] / "alembic_tasks" / "versions" / "0071_qc_review_fixes.py"
+    src = path.read_text(encoding="utf-8")
+    assert "DELETE FROM public.qc_signatures" not in src
+    assert not _re.search(r"START WITH 1\b", src), "sequences are seeded past the series max"
+    assert "NOT VALID" in src and "RuntimeError" in src
+    spec = importlib.util.spec_from_file_location("mig0071", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    # every retired sequence maps to the series it fed, and those columns exist
+    schema = (path.parents[2] / "schema.tasks.sql").read_text(encoding="utf-8")
+    assert set(mod.SERIES) == set(mod._DEAD_SEQUENCES)
+    for table, column in mod.SERIES.values():
+        block = schema[schema.index(f"CREATE TABLE public.{table} ("):]
+        block = block[:block.index("\n);")]
+        assert f"    {column} " in block, f"{table}.{column}"
+    assert mod.recreate_sequence_sql("qc_spec_id_seq", 17) == (
+        "CREATE SEQUENCE public.qc_spec_id_seq AS integer START WITH 18 INCREMENT BY 1")
+    assert mod.recreate_sequence_sql("qc_wt_id_seq", 0).endswith("START WITH 1 INCREMENT BY 1")
+    assert "regexp_match(spec_id, '-([0-9]+)$')" in mod.series_max_sql("qc_specifications", "spec_id")
+    assert mod.unrepresentable(0, 0) == []
+    msgs = mod.unrepresentable(2, 1)
+    assert len(msgs) == 2 and "RETEST" in msgs[0] and "qc_coq_one_approved_idx" in msgs[1]

@@ -35,9 +35,13 @@ table, and the ladders stay exactly as they are, read-only, so that CoQs issued
 before the catalogue keep printing the grade they were issued with. Approving a
 cultivar's first product supersedes that cultivar's APPROVED ladder — from then
 on the strain is graded from the official page — and approving a product of a
-NEW document version supersedes the cultivar's products of the old version, so
-one specification version is live per strain at a time (two live schemes would
-be two answers to one question).
+NEWER document version supersedes the cultivar's products of the old version,
+so one specification version is live per strain at a time (two live schemes
+would be two answers to one question) — and only in that direction: a product
+of an OLDER version than the strain's live one is refused approval, and the
+packaged v.03 pages are not imported for a strain that holds a later version
+(review 2026-09-27 QR-02). A single product may not overlap its siblings of the
+same version (QR-09), the v.03 pages excepted (they overlap as issued).
 
 Access model, the same shape the ladders use:
   read      — every role above base USER (ELEVATED_ROLES);
@@ -57,6 +61,7 @@ blended, because they are different strengths of evidence:
 Nothing is invented: a lot with no measured total contributes nothing.
 """
 import json
+import re
 from pathlib import Path
 
 from fastapi import Depends, HTTPException, Query
@@ -70,7 +75,8 @@ from app.plantids import product_code as compose_product_code
 from app.roles import ELEVATED_ROLES
 from app.worktime import SITE_TODAY_SQL
 
-from .common import _HOQC, _WRITERS, _uuid_or_404, _uuid_or_422, router
+from .common import (_HOQC, _WRITERS, _uuid_or_404, _uuid_or_422, check_derived_total_units,
+                     derived_total, router)
 from .potency import _EPS
 from .potency_import import resolve_or_create_cultivar
 
@@ -326,6 +332,62 @@ def _validate_grade_set(items: list[dict], label: str) -> None:
                      " must not overlap (owner, 2026-09-06)")
 
 
+def _version_key(doc_version: str | None) -> tuple:
+    """Order document versions by the numbers they carry: "v.03" < "v.04" <
+    "fitted 2026-09-15" ((3,) < (4,) < (2026, 9, 15)). A version with no
+    digits sorts first. Two spellings of one number ("v.3", "v.03") are the
+    same version for ordering, though the table keeps them distinct."""
+    nums = tuple(int(x) for x in re.findall(r"\d+", doc_version or ""))
+    return nums
+
+
+async def _newest_version(c, cultivar_id) -> str | None:
+    """The newest document version this cultivar has ever had APPROVED (or
+    that has since been SUPERSEDED) — the version rule's reference point
+    (review 2026-09-27 QR-02). DRAFTs do not count: nothing was ever live
+    under them."""
+    rows = await c.fetch(
+        "SELECT DISTINCT doc_version FROM qc_products WHERE cultivar_id=$1"
+        " AND status IN ('APPROVED','SUPERSEDED')", cultivar_id)
+    if not rows:
+        return None
+    return max((r["doc_version"] for r in rows), key=_version_key)
+
+
+def _reference_version() -> str:
+    """The packaged ImB pages' document version (QCSP 001 v.03) — the issued
+    v.03 pages overlap by issue (documented in PRODUCT-CATALOGUE), so a
+    single page authored under that version is exempt from the sibling
+    non-overlap rule that every later version obeys."""
+    try:
+        return _load_catalogue().get("doc_version", "v.03")
+    except HTTPException:
+        return "v.03"
+
+
+async def _assert_no_sibling_overlap(c, cultivar_id, doc_version: str, item: dict,
+                                     label: str, exclude_id=None) -> None:
+    """Owner 2026-09-06 "ranges not overlapping" for ONE product at a time
+    (review 2026-09-27 QR-09 / INS2-06): the new or edited product is checked
+    as a set with the cultivar's DRAFT/APPROVED siblings of the same
+    doc_version, exactly as /ladder and import-fitted check a whole set.
+    The packaged reference version (v.03) is exempt: those pages overlap as
+    issued."""
+    if doc_version == _reference_version():
+        return
+    siblings = await c.fetch(
+        "SELECT id, product_code, grade, nominal_pct, window_min, window_max FROM qc_products"
+        " WHERE cultivar_id=$1 AND doc_version=$2 AND status<>'SUPERSEDED'"
+        " AND ($3::uuid IS NULL OR id<>$3)", cultivar_id, doc_version, exclude_id)
+    if not siblings:
+        return
+    items = [{"grade": float(r["grade"]), "nominal_pct": float(r["nominal_pct"]),
+              "window_min": float(r["window_min"]), "window_max": float(r["window_max"])}
+             for r in siblings]
+    items.append(item)
+    _validate_grade_set(items, label)
+
+
 _PRODUCT_SQL = (
     "SELECT p.*, cv.code AS cultivar_code, cv.name AS cultivar_name"
     " FROM qc_products p JOIN cultivars cv ON cv.id = p.cultivar_id")
@@ -381,20 +443,48 @@ async def _potency_history(c, product) -> dict:
         f" ({_TOTAL_LINE}) AS total_thc FROM qc_coq q"
         " WHERE q.product_id IS NULL AND q.cultivar_id=$1 AND q.status='APPROVED'"
         " ORDER BY q.compiled_at", product["cultivar_id"])
-    # Certificates of this cultivar's own batches. plant_batches.code is the CU
-    # batch (GP072501); a certificate names its batch as free text, so match the
-    # certificate's cultivation_batch or its batch_id against those codes.
+    # Certificates of this cultivar's own batches (review 2026-09-27 QR-11).
+    # The Total Δ9-THC of a certificate is DERIVED here from its two
+    # component results (Ph. Eur. 3028, the one derived_total every CoQ path
+    # uses) — a transcribed total is refused everywhere since QC-10, so a
+    # join on stored total rows was structurally empty for every certificate
+    # issued from then on. The batch is attributed to the strain by the
+    # batch-code HEAD (`^<CV>[0-9]`, the facility convention GP072501) on the
+    # certificate's batch_id or cultivation_batch, case-insensitively, or by
+    # an exact match against the cultivar's registered batch codes. A text
+    # join, and it says so.
+    head_re = f"^{product['cultivar_code'].upper()}[0-9]" if str(product["cultivar_code"]).isalnum() else None
     certs = await c.fetch(
         "SELECT ct.id, ct.coa_number, ct.batch_id, ct.cultivation_batch, ct.report_date,"
-        " r.result_numeric AS total_thc"
+        " sp.test_name_en, sp.test_name_mk, sp.unit AS p_unit,"
+        " ra.result_numeric AS a_val, ra.unit AS a_unit, rb.result_numeric AS b_val, rb.unit AS b_unit"
         " FROM qc_certificates ct"
-        " JOIN qc_results r ON r.coa_id = ct.id"
-        " JOIN qc_spec_parameters sp ON sp.id = r.parameter_id"
-        " WHERE sp.computed_kind='total_thc' AND r.result_numeric IS NOT NULL"
-        "   AND ct.status = ANY(ARRAY['APPROVED','RELEASED'])"
-        "   AND (ct.batch_id IN (SELECT code FROM plant_batches WHERE cultivar_id=$1 AND code IS NOT NULL)"
-        "     OR ct.cultivation_batch IN (SELECT code FROM plant_batches WHERE cultivar_id=$1 AND code IS NOT NULL))"
-        " ORDER BY ct.report_date NULLS LAST", product["cultivar_id"])
+        " JOIN qc_spec_parameters sp ON sp.spec_id = ct.specification_id"
+        "   AND sp.computed_kind='total_thc'"
+        " JOIN LATERAL (SELECT result_numeric, unit FROM qc_results WHERE coa_id=ct.id"
+        "   AND parameter_id=sp.component_a_id AND result_numeric IS NOT NULL"
+        "   ORDER BY result_date DESC NULLS LAST, created_at DESC LIMIT 1) ra ON true"
+        " JOIN LATERAL (SELECT result_numeric, unit FROM qc_results WHERE coa_id=ct.id"
+        "   AND parameter_id=sp.component_b_id AND result_numeric IS NOT NULL"
+        "   ORDER BY result_date DESC NULLS LAST, created_at DESC LIMIT 1) rb ON true"
+        " WHERE ct.status = ANY(ARRAY['APPROVED','RELEASED'])"
+        "   AND (($2::text IS NOT NULL AND (upper(ct.batch_id) ~ $2::text"
+        "                                   OR upper(ct.cultivation_batch) ~ $2::text))"
+        "     OR upper(ct.batch_id) IN (SELECT upper(code) FROM plant_batches"
+        "                                WHERE cultivar_id=$1 AND code IS NOT NULL)"
+        "     OR upper(ct.cultivation_batch) IN (SELECT upper(code) FROM plant_batches"
+        "                                         WHERE cultivar_id=$1 AND code IS NOT NULL))"
+        " ORDER BY ct.report_date NULLS LAST", product["cultivar_id"], head_re)
+    cert_rows = []
+    for ct in certs:
+        try:
+            check_derived_total_units(
+                {"unit": ct["p_unit"], "test_name_en": ct["test_name_en"],
+                 "test_name_mk": ct["test_name_mk"]},
+                {"unit": ct["a_unit"]}, {"unit": ct["b_unit"]})
+        except HTTPException:
+            continue        # mixed units: no meaningful total to report
+        cert_rows.append({**dict(ct), "total_thc": derived_total(ct["a_val"], ct["b_val"])})
 
     def _stats(values):
         vals = [float(v) for v in values if v is not None]
@@ -413,8 +503,8 @@ async def _potency_history(c, product) -> dict:
                    "values": _rows(stated, "coq_number", "compiled_at")},
         "cultivar_level": {**_stats([r["total_thc"] for r in cultivar_level]),
                            "values": _rows(cultivar_level, "coq_number", "compiled_at")},
-        "certificate_level": {**_stats([r["total_thc"] for r in certs]),
-                              "values": _rows(certs, "coa_number", "report_date")},
+        "certificate_level": {**_stats([r["total_thc"] for r in cert_rows]),
+                              "values": _rows(cert_rows, "coa_number", "report_date")},
     }
 
 
@@ -524,6 +614,11 @@ async def create_product(body: ProductIn, user: dict = Depends(require_role(*_WR
             user["org_id"], code, body.doc_version)
         if dup:
             raise HTTPException(409, f"{code} {body.doc_version} already exists")
+        await _assert_no_sibling_overlap(
+            c, cv["id"], body.doc_version,
+            {"grade": float(body.grade), "nominal_pct": nominal,
+             "window_min": body.window_min, "window_max": body.window_max},
+            f"{cv['code']} {body.doc_version}")
         pid = await _insert_product(c, user, cv["id"], code, body.grade, nominal,
                                     body.window_min, body.window_max, body.doc_code,
                                     body.doc_version, body.source, body.notes)
@@ -566,6 +661,9 @@ async def update_product(product_id: str, body: ProductPatch,
         _tie_code_to_grade(cur["product_code"], cur["cultivar_code"],
                            merged["grade"], merged["nominal_pct"])
         _check_window(merged["nominal_pct"], merged["window_min"], merged["window_max"])
+        await _assert_no_sibling_overlap(c, cur["cultivar_id"], cur["doc_version"], merged,
+                                         f"{cur['cultivar_code']} {cur['doc_version']}",
+                                         exclude_id=cur["id"])
         args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
         args.append(product_id)
         await c.execute(
@@ -580,10 +678,17 @@ async def update_product(product_id: str, body: ProductPatch,
 async def approve_product(product_id: str, user: dict = Depends(require_role(*_HOQC))):
     """DRAFT → APPROVED. One specification is live per strain: approving a
     product supersedes the same code's current APPROVED row, the cultivar's
-    APPROVED products of any OTHER document version (a new fitted set retires
+    APPROVED products of an OLDER document version (a new fitted set retires
     the ImB pages it replaces), and — the moment a cultivar's first product is
     approved — that cultivar's APPROVED potency ladder. Two live schemes would
-    be two answers to one question."""
+    be two answers to one question.
+
+    The supersession runs one way only (review 2026-09-27 QR-02, owner
+    2026-09-18 "±10 % flat is not gonna work"): a product whose doc_version
+    is OLDER than the newest version the strain has had APPROVED (or
+    SUPERSEDED since) is refused with 409 naming the live version — approving
+    a retired v.03 ImB page must never retire a strain's fitted set. The same
+    version joins it; a newer version supersedes it."""
     _uuid_or_404(product_id, "Product")
     async with rls(user) as c:
         cur = await c.fetchrow(_PRODUCT_SQL + " WHERE p.id=$1", product_id)
@@ -595,6 +700,13 @@ async def approve_product(product_id: str, user: dict = Depends(require_role(*_H
             raise HTTPException(
                 403, "The person approving a product specification must be different from the"
                      " person who authored it (segregation of duties, PP-QC-SPEC-001)")
+        newest = await _newest_version(c, cur["cultivar_id"])
+        if newest is not None and _version_key(cur["doc_version"]) < _version_key(newest):
+            raise HTTPException(
+                409, f"{cur['product_code']} {cur['doc_version']} is an older document version"
+                     f" than {cur['cultivar_code']}'s live specification ({newest}) — approving"
+                     " it would retire the newer set; author the grade under the live version"
+                     " instead (owner 2026-09-18: the fitted specification applies everywhere)")
         # Supersede the sitting APPROVED rows FIRST — qc_products_one_approved_idx
         # is checked at statement end, so the order matters.
         await c.execute(
@@ -674,6 +786,17 @@ async def create_ladder(body: LadderIn, user: dict = Depends(require_role(*_WRIT
             raise HTTPException(
                 409, f"{', '.join(r['product_code'] for r in taken)} {body.doc_version}"
                      " already exist — nothing was written")
+        # Singles already authored under this version are part of the set
+        # (QR-09): the whole version must not overlap, not just this body.
+        same_version = await c.fetch(
+            "SELECT product_code, grade, nominal_pct, window_min, window_max FROM qc_products"
+            " WHERE cultivar_id=$1 AND doc_version=$2 AND status<>'SUPERSEDED'",
+            cv["id"], body.doc_version)
+        if same_version and body.doc_version != _reference_version():
+            _validate_grade_set(
+                items + [{"grade": float(r["grade"]), "nominal_pct": float(r["nominal_pct"]),
+                          "window_min": float(r["window_min"]), "window_max": float(r["window_max"])}
+                         for r in same_version], f"{cv['code']} {body.doc_version}")
         siblings = await c.fetch(
             "SELECT product_code, doc_version, status, window_min, window_max FROM qc_products"
             " WHERE cultivar_id=$1 AND status<>'SUPERSEDED' AND doc_version<>$2",
@@ -706,8 +829,13 @@ def _load_catalogue() -> dict:
 
 def _spellings(row: dict) -> tuple[str, ...]:
     """Every spelling the packaged catalogue knows for a row's strain: the
-    canonical name, the one the page prints, and the retired ones."""
-    names = [row.get("strain"), row.get("strain_printed"), *row.get("retired_spellings", [])]
+    canonical name, the one the page prints, the retired ones (renamed on
+    import) and the disputed ones (INS2-03: the per-strain folder's "Sleepy
+    Joy" against the merged master's "Sleepy Joe" — an alias, so a fitted
+    import naming either resolves to the one cultivar; never a rename, the
+    owner has not picked)."""
+    names = [row.get("strain"), row.get("strain_printed"), *row.get("retired_spellings", []),
+             *row.get("disputed_spellings", [])]
     return tuple(dict.fromkeys(n.strip() for n in names if n))
 
 
@@ -764,6 +892,23 @@ async def import_products(body: ProductImportIn,
     seen_cultivars: set[str] = set()
     last_id = None
     async with rls(user) as c:
+        # Review 2026-09-27 QR-02 (owner 2026-09-18): once a strain holds a
+        # product of a LATER document version — its fitted set — the retired
+        # v.03 pages are not loaded for it again. The import is refused as a
+        # whole (409) naming those strains; a dry run reports them instead.
+        acronyms = sorted({row["acronym"] for row in cat.get("products", [])})
+        later = await c.fetch(
+            "SELECT DISTINCT cv.code, p.doc_version FROM qc_products p"
+            " JOIN cultivars cv ON cv.id = p.cultivar_id"
+            " WHERE p.org_id=$1 AND cv.code = ANY($2::text[]) AND p.doc_version<>$3",
+            user["org_id"], acronyms, version)
+        refused = sorted({f"{r['code']} ({r['doc_version']})" for r in later
+                          if _version_key(r["doc_version"]) > _version_key(version)})
+        if refused and not body.dry_run:
+            raise HTTPException(
+                409, f"the {version} pages are retired for {', '.join(refused)} — a later"
+                     " specification version exists for the strain(s); the fitted"
+                     " specification is what the facility grades on (owner 2026-09-18)")
         for row in cat.get("products", []):
             strain, acr, code = row["strain"], row["acronym"], row["product_code"]
             _check_window(float(row["nominal_pct"]), float(row["window_min"]),
@@ -813,7 +958,8 @@ async def import_products(body: ProductImportIn,
                                     "conflicts": len(conflicts)})
     return {"dry_run": body.dry_run, "doc_code": doc_code, "doc_version": version,
             "created": created, "skipped": skipped, "conflicts": conflicts,
-            "cultivars_created": cultivars_created, "cultivars_renamed": renamed}
+            "cultivars_created": cultivars_created, "cultivars_renamed": renamed,
+            "refused": refused}
 
 
 @router.post("/products/import-fitted")

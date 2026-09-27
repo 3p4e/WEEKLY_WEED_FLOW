@@ -168,7 +168,12 @@ async def spec_document(spec_id: str, tier: int = Query(ge=1, le=6),
                       else f"{_e(acr)}_THC{nominal:g}:CBD1"),
         nominal_txt=f"{nominal:.2f}% ± {width:.2f}%", range_txt=f"{rmin:.2f} – {rmax:.2f}%",
         watermark="" if approved else "Draft — not approved",
-        sig1=_sig("Prepared &amp; Approved by", "Изготвил и одобрил", "QC Manager", "Менаџер за КК",
+        # Review 2026-09-27 QR-10: the slot prints the person the app recorded
+        # as APPROVING the ladder, and approve_potency_spec forbids the
+        # approver being the author — so it is labelled "Approved by", never
+        # "Prepared & Approved by", which asserted an act the system knows
+        # did not happen (the CoQ's H5 rule).
+        sig1=_sig("Approved by", "Одобрил", "QC Manager", "Менаџер за КК",
                   _e(approver_name) if approver_name else "—", date_txt),
         sig2=_sig("Reviewed by", "Прегледал", "QA Manager", "Менаџер за ОК",
                   "— (QA review not captured)", "—"),

@@ -32,10 +32,28 @@ rolled-back insert — the M7 defect class fixed for eCoA (0056) and OOS (0062).
 app/api/qc/common.mint_series_number now mints each per-(org, year) from the
 org's own max, so the eight sequences are dead and dropped, as 0062 did.
 Existing numbers are untouched; each org continues from its current maximum.
+
+DOWNGRADE (review 2026-09-27 QR-12 / INV-10) — records are preserved, never
+destroyed, and what the old schema cannot represent is refused up front:
+
+  * it REFUSES (RuntimeError, nothing touched) while any RETEST CoQ exists:
+    `purpose`/`timepoint` have no column before 0071, and the old
+    one-APPROVED-per-(org, batch, spec) index cannot be recreated over an
+    INITIAL and a RETEST CoQ approved for one batch. Void the RETEST CoQs
+    deliberately (a Head-of-QC act with a reason) before downgrading, or do
+    not downgrade;
+  * the COMPILED e-signatures are KEPT (Annex 11 records are evidence — a
+    downgrade must not erase them); the pre-0071 meaning CHECK is re-added
+    NOT VALID, so new rows are checked and the existing COMPILED rows stay;
+  * the eight sequences are recreated seeded past each series' current
+    maximum (the org-wide max of the trailing number, exactly what the old
+    nextval() minting would have needed next), not at 1 — otherwise the
+    pre-0071 code would re-mint PP-SPEC-2026-0001 into a unique violation.
 """
 from typing import Sequence, Union
 
 from alembic import op
+from sqlalchemy import text
 
 revision: str = "0071"
 down_revision: Union[str, None] = "0070"
@@ -46,6 +64,51 @@ depends_on: Union[str, Sequence[str], None] = None
 _DEAD_SEQUENCES = ("qc_spec_id_seq", "qc_sample_id_seq", "qc_sampling_plan_id_seq",
                    "qc_lab_id_seq", "qc_sfr_id_seq", "qc_wt_id_seq", "qc_stb_id_seq",
                    "qc_trn_id_seq")
+
+# Which identifier series each retired sequence fed (table, column) — the
+# pre-0071 minting was '<PREFIX>-<year>-' || lpad(nextval(seq), 4, '0'), so
+# the trailing number of the column is the sequence's own value.
+SERIES = {
+    "qc_spec_id_seq": ("qc_specifications", "spec_id"),
+    "qc_sample_id_seq": ("qc_samples", "sample_id"),
+    "qc_sampling_plan_id_seq": ("qc_sampling_plans", "plan_id"),
+    "qc_lab_id_seq": ("qc_laboratories", "lab_code"),
+    "qc_sfr_id_seq": ("qc_sample_field_records", "sfr_number"),
+    "qc_wt_id_seq": ("qc_water_tests", "water_test_id"),
+    "qc_stb_id_seq": ("qc_stability_studies", "study_id"),
+    "qc_trn_id_seq": ("qc_sample_transports", "transport_id"),
+}
+
+_OLD_MEANING_CHECK = (
+    "CHECK ((meaning = ANY (ARRAY['AUTHORED'::text, 'REVIEWED'::text, 'APPROVED'::text,"
+    " 'RELEASED'::text, 'VERIFIED'::text, 'COQ_ISSUED'::text])))")
+
+
+def series_max_sql(table: str, column: str) -> str:
+    """The highest trailing number the series has minted so far (0 when the
+    table is empty) — the seed the recreated sequence must start past.
+    `table`/`column` come from SERIES, never from input."""
+    return (f"SELECT coalesce(max((regexp_match({column}, '-([0-9]+)$'))[1]::int), 0)"
+            f" FROM public.{table}")
+
+
+def recreate_sequence_sql(seq: str, current_max: int) -> str:
+    """CREATE SEQUENCE seeded past the series' current maximum, never at 1."""
+    return (f"CREATE SEQUENCE public.{seq} AS integer START WITH {int(current_max) + 1}"
+            " INCREMENT BY 1")
+
+
+def unrepresentable(retest_rows: int, approved_period_dups: int) -> list[str]:
+    """What the pre-0071 schema cannot hold, as refusal lines (empty = safe)."""
+    out = []
+    if retest_rows:
+        out.append(f"{retest_rows} RETEST CoQ row(s) exist: qc_coq.purpose/timepoint have no"
+                   " column before 0071 and would be lost — void them deliberately first")
+    if approved_period_dups:
+        out.append(f"{approved_period_dups} (org, batch, specification) group(s) hold more than"
+                   " one APPROVED CoQ across testing periods: the pre-0071 unique index"
+                   " qc_coq_one_approved_idx cannot be recreated over them")
+    return out
 
 
 def upgrade() -> None:
@@ -84,20 +147,28 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    for seq in _DEAD_SEQUENCES:
-        op.execute(f"CREATE SEQUENCE public.{seq} AS integer START WITH 1 INCREMENT BY 1")
+    bind = op.get_bind()
+    retest = bind.execute(text("SELECT count(*) FROM public.qc_coq WHERE purpose='RETEST'")).scalar()
+    dups = bind.execute(text(
+        "SELECT count(*) FROM (SELECT 1 FROM public.qc_coq WHERE status='APPROVED'"
+        " GROUP BY org_id, batch_id, specification_id HAVING count(*) > 1) d")).scalar()
+    problems = unrepresentable(int(retest or 0), int(dups or 0))
+    if problems:
+        raise RuntimeError("0071 downgrade refused — the database holds data the pre-0071"
+                           " schema cannot represent: " + "; ".join(problems))
+    for seq, (table, column) in SERIES.items():
+        current = bind.execute(text(series_max_sql(table, column))).scalar()
+        op.execute(recreate_sequence_sql(seq, int(current or 0)))
     op.execute("DROP POLICY org_isolation_insert ON public.qc_oos_register")
     op.execute("DROP POLICY org_isolation_select ON public.qc_oos_register")
     op.execute("CREATE POLICY org_isolation ON public.qc_oos_register"
                " USING ((org_id = app.current_org_id()))"
                " WITH CHECK ((org_id = app.current_org_id()))")
-    op.execute("DELETE FROM public.qc_signatures WHERE meaning = 'COMPILED'")
+    # The COMPILED signatures stay (Annex 11 evidence); the old CHECK goes
+    # back NOT VALID so it binds new rows without judging the existing ones.
     op.execute("ALTER TABLE public.qc_signatures DROP CONSTRAINT qc_signatures_meaning_check")
-    op.execute(
-        "ALTER TABLE public.qc_signatures ADD CONSTRAINT qc_signatures_meaning_check"
-        " CHECK ((meaning = ANY (ARRAY['AUTHORED'::text, 'REVIEWED'::text, 'APPROVED'::text,"
-        " 'RELEASED'::text, 'VERIFIED'::text, 'COQ_ISSUED'::text])))"
-    )
+    op.execute("ALTER TABLE public.qc_signatures ADD CONSTRAINT qc_signatures_meaning_check "
+               + _OLD_MEANING_CHECK + " NOT VALID")
     op.execute("DROP INDEX public.qc_coq_one_approved_idx")
     op.execute(
         "CREATE UNIQUE INDEX qc_coq_one_approved_idx ON public.qc_coq"

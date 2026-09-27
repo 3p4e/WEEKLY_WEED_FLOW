@@ -74,6 +74,10 @@ async def test_spec_document_approved_drops_watermark_and_dates(client, admin_he
     # the QC signatory is the person the app recorded as approving (QC-16)
     assert "Test User" in doc and "Blagoj Nikolov" not in doc
     assert "QA review not captured" in doc
+    # … and is labelled as the approver only (QR-10): approve refuses the
+    # author, so "Prepared & Approved by" asserted an act that did not happen
+    assert "Approved by" in doc and "Одобрил" in doc
+    assert "Prepared &amp; Approved by" not in doc and "Изготвил и одобрил" not in doc
 
 
 async def _named_actor(client, admin_headers, role, full_name):
