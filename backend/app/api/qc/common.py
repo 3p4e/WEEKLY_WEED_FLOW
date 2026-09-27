@@ -59,7 +59,11 @@ def _dec(value) -> Decimal | None:
             return Decimal(repr(float(value)))
         return value
     if isinstance(value, float):
-        return Decimal(repr(value))
+        d = Decimal(repr(value))
+        # 10.0 is the number 10: keep an integral float integral, so a limit
+        # of 10 stores and prints as "10", as it did when asyncpg encoded the
+        # float itself, not as "10.0".
+        return d.to_integral_value() if d == d.to_integral_value() else d
     return Decimal(str(value))
 
 
