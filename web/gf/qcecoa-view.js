@@ -597,7 +597,8 @@
         const rows = files.map(f => `<div class="qms-row" style="gap:8px;align-items:center">
           <span class="qms-title">${GF.esc(f.filename)} <span class="ana-note">${GF.esc(String(Math.round((f.size_bytes || 0) / 1024)))} KB</span></span>
           <span class="ana-note mono" title="SHA-256">${GF.esc((f.sha256 || '').slice(0, 12))}…</span>
-          <button class="btn btn-sm" onclick="GF.WWF.qcEcoaDlOriginal('${f.id}','${GF.esc((f.filename || 'original').replace(/'/g, ''))}')">${AL('Download', 'Преземи')}</button>
+          <button class="btn btn-sm" data-id="${GF.esc(f.id)}" data-name="${GF.esc(f.filename || 'original')}"
+            onclick="GF.WWF.qcEcoaDlOriginal(this.dataset.id, this.dataset.name)">${AL('Download', 'Преземи')}</button>
         </div>`).join('');
         return `<div class="ana-panel" style="margin-top:10px;padding:10px">
           <div class="ana-pt" style="margin-bottom:6px">${AL('Original documents (SHA-256 custody)', 'Оригинални документи (SHA-256 старателство)')}</div>

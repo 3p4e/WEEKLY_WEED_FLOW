@@ -707,10 +707,17 @@
     GF.WWF._ensureModal('dc-swablist-modal', '520px');
     GF.$('dc-swablist-modal-title').textContent = AL('Swab results', 'Резултати од брисеви');
     const COL = { negative: '#2BE8A0', positive: '#E5484D', pending: '#E0A73E', inconclusive: '#E0A73E' };
+    // Record data never goes inside an inline handler. GF.esc is HTML
+    // escaping, and the browser decodes it back BEFORE the handler text is
+    // parsed as JavaScript — so a swab code carrying a quote broke out of the
+    // JS string and ran with the reader's token (review 2026-09-27, FE-04:
+    // a QA writer could run script in an ADMIN's session). The button carries
+    // the id and the code as data- attributes, which stay HTML-escaped data,
+    // and one delegated listener on the modal body reads them back.
     const rows = mine.map(x => {
       const act = x.result === 'pending'
-        ? `<button class="btn btn-sm" onclick="GF.WWF.deconSwabResultForm('${x.id}','${GF.esc(x.swab_code)}')">${AL('Enter result', 'Внеси резултат')}</button>`
-        : `<span style="color:var(--ink-3);font-size:11px">${x.ct_value != null ? 'Ct ' + x.ct_value : ''}</span>`;
+        ? `<button class="btn btn-sm" data-act="swab-result" data-id="${GF.esc(x.id)}" data-code="${GF.esc(x.swab_code)}">${AL('Enter result', 'Внеси резултат')}</button>`
+        : `<span style="color:var(--ink-3);font-size:11px">${x.ct_value != null ? 'Ct ' + GF.esc(String(x.ct_value)) : ''}</span>`;
       return `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)">
         <strong style="min-width:110px">${GF.esc(x.swab_code)}</strong>
         <span style="flex:1;color:var(--ink-3);font-size:11px">${GF.esc(x.location_desc || '—')}</span>
@@ -718,8 +725,16 @@
         ${act}
       </div>`;
     }).join('');
-    GF.$('dc-swablist-modal-body').innerHTML = rows
+    const body = GF.$('dc-swablist-modal-body');
+    body.innerHTML = rows
       || `<div class="ntf-empty">${AL('No swabs for this cycle yet', 'Нема брисеви за овој циклус')}</div>`;
+    // Assigned rather than addEventListener'd: the modal body persists across
+    // opens, and a listener added per open would stack one call per visit.
+    body.onclick = (ev) => {
+      const b = ev.target && ev.target.closest ? ev.target.closest('[data-act="swab-result"]') : null;
+      if (!b || !body.contains(b)) return;
+      GF.WWF.deconSwabResultForm(b.dataset.id, b.dataset.code);
+    };
     GF.openModal('dc-swablist-modal');
   };
 

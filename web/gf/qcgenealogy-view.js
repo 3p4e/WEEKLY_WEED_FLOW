@@ -56,7 +56,11 @@
   GF.WWF.qcGenGo = (batch) => { GF.WWF.loadQcGenealogy(batch); };
 
   const relChip = (r) => `<span class="chip-opt" style="border-color:var(--accent);color:var(--accent)">${GF.esc(r || 'GENERIC')}</span>`;
-  const batchLink = (b) => `<a href="#" class="mono" onclick="GF.WWF.qcGenGo('${GF.esc((b || '').replace(/'/g, ''))}');return false">${GF.esc(b)}</a>`;
+  // The batch id rides as a data- attribute and the handler reads it back.
+  // Stripping quotes before interpolating into the JS string still left a
+  // backslash able to break the handler, and it navigated to a different code
+  // than the one printed (review 2026-09-27, FE-04 audit).
+  const batchLink = (b) => `<a href="#" class="mono" data-batch="${GF.esc(b || '')}" onclick="GF.WWF.qcGenGo(this.dataset.batch);return false">${GF.esc(b)}</a>`;
 
   const graphPanel = (d) => {
     const edgeRow = (e, dir) => `<div class="qms-row" style="gap:8px;align-items:center">
@@ -65,7 +69,7 @@
       ${e.quantity != null ? `<span class="ana-note">${GF.esc(String(e.quantity))} ${GF.esc(e.unit || '')}</span>` : ''}
       ${canWrite() ? `<button class="btn btn-sm" onclick="GF.WWF.qcGenDelEdge('${e.id}')">✕</button>` : ''}
     </div>`;
-    const list = (arr) => arr.length ? arr.map(a => `<span class="chip-opt" style="cursor:pointer" onclick="GF.WWF.qcGenGo('${GF.esc((a.batch_id || '').replace(/'/g, ''))}')">${GF.esc(a.batch_id)} <span class="ana-note">·${a.depth}</span></span>`).join(' ') : `<span class="ana-note">${AL('none', 'нема')}</span>`;
+    const list = (arr) => arr.length ? arr.map(a => `<span class="chip-opt" style="cursor:pointer" data-batch="${GF.esc(a.batch_id || '')}" onclick="GF.WWF.qcGenGo(this.dataset.batch)">${GF.esc(a.batch_id)} <span class="ana-note">·${GF.esc(String(a.depth))}</span></span>`).join(' ') : `<span class="ana-note">${AL('none', 'нема')}</span>`;
     return `<div class="panel ana-panel" style="margin-bottom:12px">
       <div class="ana-pt">${AL('Ancestors (up the chain)', 'Предци (нагоре)')}</div>
       <div style="margin:4px 0 10px">${list(d.ancestors)}</div>
