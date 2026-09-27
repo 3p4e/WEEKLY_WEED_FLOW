@@ -49,7 +49,7 @@ From `docs/review-2026-09-27/instructions.md` §3. Each is in the code today.
 | AD-16 | QA is the classification authority on the facility register. | — |
 | AD-17 | RAGflow dataset named `DB3_PP_CURRENT_unified`; the Drive folder is `DB3_PP_CURRENT`. | name never chosen |
 | AD-18 | The weekly GMP document stays per department, exact match. | — |
-| AD-19 | (Corrected 2026-09-27: the clone-run date has no default; the initiator sets it.) | "has to set" |
+| AD-19 | (Corrected 2026-09-27, both sides: the clone-run date has no default on the server and the form opens empty with today only highlighted; the initiator sets it.) | "has to set" |
 
 Open questions the code already answers, unanswered by the owner:
 
@@ -83,9 +83,12 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | D-2 | Backward phase moves are a correction right of ADMIN, the executives and QA_MGR, with a reason (the task said "ADMIN/QA"). | CS-06 |
 | D-3 | Forward moves are strictly one stop at a time; nursery and drying are the only skippable stops; clone→flower is refused. | CS-06 |
 | D-4 | PHI is evaluated on `harvested_on` (which must be ≤ today), not on max(cut, today); a backdated cut is judged on its own day. | CS-01 |
-| D-5 | Grades: cultivation rooms stay ungraded (GACP has no class); F-wing IPC labs, sampling rooms, wardrobes and corridors stay null because the owner's rule did not name them; trimming/drying recorded as D with the "officially CNC" note, and de-bucking C153 / E80 / E81 graded D by analogy (the owner named trimming and drying) — confirm. The E-wing rooms the owner's "E = Grade D" covers are graded in fix round 2 (CS2-06). | INS-07 |
+| D-5 | Grades (after fix round 2): cultivation rooms stay ungraded (GACP has no class); the whole named E wing is D by the owner's "E = Grade D" (air locks, wardrobes, utility, waste and egress, sampling rooms, the halls), the unnamed polygon E34 stays null; F-wing IPC labs, wardrobes and corridors stay null because no rule named them; trimming/drying recorded as D with the "officially CNC" note, and de-bucking C153 / E80 / E81 graded D by analogy — confirm. | INS-07, CS2-06 |
 | D-6 | Journey step reads "Harvest · coarse trim · defoliation" (owner wrote "course"). | INS-11 |
 | D-7 | Closing a batch as harvested settles the manifest's destroyed plant count off the END of the batch (the manifest names no plants); the reason text says so. | CS-07 |
+| D-8 | (Fix round 2) A harvested close settles "destroyed" plants only from SEALED waste-manifest lines and is refused (409) while a DRAFT line still names the batch; a destroyed close never reads manifests. | CS2-03 |
+| D-9 | (Fix round 2) A mother line is its product CODE, not a catalogue row: a later generation or a new stock plant registers against the live APPROVED page of that code, and the line's mothers still pointing at a retired page are re-pointed to the live one (audited) when that happens. | CS2-01 |
+| D-10 | (Fix round 2) The plant fill and every run-linking path take one advisory lock per batch, and the first chunk is written inside the locked plan transaction, so a run cannot join between the plan read and the insert. | CS2-04 |
 | B-1 | Only an OOS whose Phase I `invalidated=true` licenses a re-test; a CLOSED OOS with disposition REJECT blocks any CoQ for the batch. | QC-01 |
 | B-2 | Voiding a cited certificate, or releasing a revision of one, requires voiding the DRAFT/APPROVED CoQ first (then recompile). | QC-02 |
 | B-3 | A FAIL-dispositioned source compiles a non-conforming CoQ record (not a 409); PASS cannot be recorded on a certificate with no results — WATER/OTHER certificates included. | QC-06 |
@@ -118,6 +121,10 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | E-4 | The biosecurity board loads the 200 most recent events unfiltered (a backend `pending_only` filter would be cleaner). | FE-10 |
 | E-5 | The "handoffs to your department" list is derived from notifications (a backend `GET /handoffs?to_dept=mine` would be cleaner). | FE-06 |
 | E-6 | Executives land in the Analytics module (executive overview) on a fresh browser. | FE-12 |
+| E-7 | (Fix round 2) Approvals lives in the Tasks module's Management group and is reachable by every manager role; a handoff notification opens it only for a role that can, a plain assignee jumps to the task. | R2-FE-01 |
+| E-8 | (Fix round 2) The production manager's waste/decon/biosecurity actions mirror the server's `dry`-room rule client-side and FAIL OPEN when the room registry cannot be read — the server's 403 stays the gate. | R2-FE-03 |
+| E-9 | (Fix round 2) `GET /audit`'s legacy `before` parameter has no client any more (the view pages by cursor); the backend may retire it. | R2-BC-02 |
+| E-10 | (Fix round 2) A changed shell file without a service-worker VERSION bump fails the frontend suite (hash fixture in `tests/frontend/fixtures/shell-hash.json`). | FE-13 |
 | F-1 | Canon D5 content floor: a revision with fewer words/characters than its source fails, so the "tighten" / "simplify" presets usually fail with a D5 message — accept, or relax D5 for wording-only edits. | DI-07 |
 | F-2 | Direct `/build` documents stay unaudited (`audited=false` recorded) rather than running the §6A audit synchronously. | DI-06 |
 | F-3 | DocEngine is fail-closed on organisation scope: backend and docengine must ship together. | DI-13 |
