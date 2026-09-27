@@ -187,6 +187,18 @@ async def test_static_capture_token_acts_as_configured_user(client, admin_header
     assert r.status_code == 401
 
 
+async def test_import_skips_a_session_longer_than_a_day(client, admin_headers, org):
+    """BC-24 on the capture path: 80 captured for 8.0 was one 80-hour session
+    in one bucket of the Thursday report. The task is skipped with a reason,
+    like every other per-task validation failure here."""
+    payload = _payload(ref="long-1")
+    payload["tasks"][0]["sessions"] = [{"started_at": "2026-07-06T09:00:00", "hours": 80}]
+    r = await client.post("/capture/import", json=payload, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["created"] == 0
+    assert any("24 hours" in s["reason"] for s in r.json()["skipped"]), r.json()
+
+
 # 48 hex characters — what `openssl rand -hex 24` (the documented generator) yields.
 _REAL_TOKEN = "3f1c9e7a5b2d4c8e6a0f1b3d5c7e9a2b4d6f8c0e1a3b5d7f"
 

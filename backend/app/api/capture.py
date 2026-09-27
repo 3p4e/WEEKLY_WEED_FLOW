@@ -28,7 +28,7 @@ from app.api.weekwindow import ensure_week
 from app.config import capture_import_token
 from app.db import rls, rls_users, users_admin_pool
 from app.deps import dept_scope, require_password_set
-from app.worktime import TZ
+from app.worktime import MAX_SESSION_HOURS, TZ
 
 router = APIRouter(prefix="/capture", tags=["capture"])
 _log = logging.getLogger("app.capture")
@@ -178,6 +178,14 @@ def _validate(t: CaptureTask) -> str | None:
         return f"invalid recurrence_hint '{t.recurrence_hint}'"
     if t.status == "completed" and not t.completed_date:
         return "completed without completed_date"
+    # One sitting of work is at most a day (tasks.SessionIn carries the same
+    # bound): a session over it is a typo, and it would be bucketed whole
+    # into the Thursday report's off-hours evidence (BC-24).
+    for s in t.sessions:
+        span_h = s.hours if s.hours is not None else (
+            (s.ended_at - s.started_at).total_seconds() / 3600.0 if s.ended_at else None)
+        if span_h is not None and span_h > MAX_SESSION_HOURS:
+            return f"session longer than {MAX_SESSION_HOURS} hours"
     return None
 
 

@@ -76,12 +76,46 @@ def test_build_digest_has_citations_blockers_and_aging():
     assert "Completion: 50% (1/2)" in md
 
 
-def test_iso_week_label_derives_from_friday_matching_reports_endpoint():
+def test_iso_week_label_matches_the_reports_endpoint_convention():
     """A Fri->Thu window straddles two ISO weeks every week; the label must
-    use the FRIDAY's ISO week (reports.py convention) or the pinned AI report
-    disagrees with the in-app report's period label by one, every week."""
+    use the window's MONDAY (weekwindow.window_iso_week — the /reports/weekly
+    and compiled-document convention) or the pinned AI report disagrees with
+    the in-app report's period label by one, every week. This derived it from
+    the Friday and did exactly that (review 2026-09-27, BC-16)."""
+    from app.api.weekwindow import window_iso_week
     lbl = w.iso_week_label(date(2026, 6, 26), date(2026, 7, 2))
-    assert lbl.startswith("W26 2026")       # fri 2026-06-26 is ISO W26; thu would say W27
+    assert lbl.startswith("W27 2026"), lbl   # Mon 2026-06-29 is ISO W27; the Friday alone is W26
+    assert window_iso_week(date(2026, 6, 26)) == (2026, 27)
+    # a Dec/Jan window takes the Monday's ISO year: W1 2027, never "W53 2027"
+    assert w.iso_week_label(date(2027, 1, 1), date(2027, 1, 7)).startswith("W1 2027")
+
+
+async def test_gather_uses_the_shared_activity_predicate(client, admin_headers, org):
+    """Review 2026-09-27, BC-09: the snapshot carried a hand-copied five-term
+    week predicate that did not count comments, assignments, acknowledgements
+    or rejected handoffs — a task whose only activity in the week was a
+    comment was on /reports/weekly and in the locked document but absent from
+    the digest, the AI report and the RAG upload. gather() now imports
+    weekwindow.activity_window_sql, the one definition."""
+    import uuid as _uuid
+    from app.db import tasks_admin_pool, users_admin_pool
+    org_uuid = _uuid.UUID(org["org_id"])
+    r = await client.post("/tasks", json={"title": "Commented-only task", "status": "ongoing"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    tid = r.json()["id"]
+    r = await client.post(f"/tasks/{tid}/comments", json={"content": "still on it"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    # Move the task's own stamps out of the window, leave only the comment in it.
+    await tasks_admin_pool().execute(
+        "UPDATE tasks SET created_at='2026-01-05 10:00+00', updated_at='2026-01-05 10:00+00' WHERE id=$1", tid)
+    await tasks_admin_pool().execute(
+        "UPDATE task_comments SET created_at='2026-07-06 10:00+00' WHERE task_id=$1", tid)
+    async with tasks_admin_pool().acquire() as conn, users_admin_pool().acquire() as uconn:
+        snap = await w.gather(conn, uconn, org_uuid, "Org", (date(2026, 7, 3), date(2026, 7, 9)),
+                              (date(2026, 7, 10), date(2026, 7, 16)))
+    assert "Commented-only task" in [t["title"] for t in snap["report_tasks"]]
+    assert snap["comments_count"] >= 1
 
 
 def test_digest_split_marker_survives_hostile_titles():

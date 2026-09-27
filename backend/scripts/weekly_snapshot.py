@@ -41,7 +41,8 @@ import httpx
 import planner_prompts
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from app.worktime import TZ, classify, session_hours  # noqa: E402  (pure helpers, no config import)
+from app.api.weekwindow import activity_window_sql, window_iso_week  # noqa: E402  (pure string/date helpers)
+from app.worktime import TZ, session_buckets, session_hours  # noqa: E402
 
 
 # ── Config from env (no app.config dependency) ──────────────────────────────
@@ -83,11 +84,14 @@ def compute_windows(ref: date) -> tuple[tuple[date, date], tuple[date, date]]:
 
 
 def iso_week_label(fri: date, thu: date) -> str:
-    # Week number from the FRIDAY, matching app.api.reports.weekly_report's
-    # period label — a Fri->Thu window always straddles two ISO weeks, so
-    # deriving from the Thursday would disagree with the in-app report by
-    # one week, every week.
-    return f"W{fri.isocalendar()[1]} {fri.year} ({fri.isoformat()} → {thu.isoformat()})"
+    # The week number and year are weekwindow.window_iso_week's — the window's
+    # MONDAY, the same rule /reports/weekly and the compiled document label
+    # by. This derived them from the Friday and named a different week than
+    # the report every week (and "W53 2027" for a week that does not exist)
+    # (review 2026-09-27, BC-16). The ISO-date span stays: it is what the RAG
+    # digest and the pin titles are keyed on.
+    iso_year, iso_week = window_iso_week(fri)
+    return f"W{iso_week} {iso_year} ({fri.isoformat()} → {thu.isoformat()})"
 
 
 def carry_over_weeks(created_at, window_end: date) -> int:
@@ -336,19 +340,20 @@ async def gather(conn, uconn, org_id, org_name, report_win, plan_win) -> dict:
     # offset and need no conversion.
     tz = TZ.key
 
+    # Week membership is weekwindow.activity_window_sql — the ONE definition
+    # /reports/weekly and the compiled document use. A hand-copied five-term
+    # predicate lived here and drifted: it did not count comments,
+    # assignments, acknowledgements or rejected/cancelled handoffs, so a task
+    # whose only activity in the week was one of those was on the report
+    # screen and in the locked document but absent from this digest, the AI
+    # weekly report and the RAG upload (review 2026-09-27, BC-09).
     report_tasks = await conn.fetch(
         "SELECT t.id, t.title, t.status, t.priority, t.department, t.week_start,"
         " t.estimated_hours, t.actual_hours, t.completed_date, t.created_at,"
         " t.user_id, t.task_type, t.due_date, t.blocker_reason"
         " FROM tasks t"
-        " WHERE t.org_id=$1 AND t.is_deleted=false AND ("
-        "   ((t.created_at AT TIME ZONE $4) >= $2::date AND (t.created_at AT TIME ZONE $4) < ($3::date + 1))"
-        "   OR ((t.updated_at AT TIME ZONE $4) >= $2::date AND (t.updated_at AT TIME ZONE $4) < ($3::date + 1))"
-        "   OR (t.completed_date >= $2 AND t.completed_date <= $3)"
-        "   OR EXISTS (SELECT 1 FROM task_progress tp WHERE tp.task_id=t.id"
-        "              AND (tp.created_at AT TIME ZONE $4) >= $2::date AND (tp.created_at AT TIME ZONE $4) < ($3::date + 1))"
-        "   OR EXISTS (SELECT 1 FROM work_sessions ws WHERE ws.task_id=t.id"
-        "              AND (ws.started_at AT TIME ZONE $4) >= $2::date AND (ws.started_at AT TIME ZONE $4) < ($3::date + 1)))"
+        " WHERE t.org_id=$1 AND t.is_deleted=false AND "
+        + activity_window_sql("$2", "$3", "$4") +
         " ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,"
         " t.priority DESC, t.created_at",
         org_id, r_fri, r_thu, tz)
@@ -413,9 +418,10 @@ async def gather(conn, uconn, org_id, org_name, report_win, plan_win) -> dict:
         uname = names.get(str(sess["user_id"]), "—")
         b = hours_by_person.setdefault(
             uname, {"regular": 0.0, "overtime": 0.0, "night": 0.0, "weekend": 0.0, "total": 0.0})
-        h = session_hours(sess)
-        b[classify(sess["started_at"])] += h
-        b["total"] += h
+        # Split across bucket boundaries, the same way the live report does (BC-24).
+        for cls, part in session_buckets(sess).items():
+            b[cls] += part
+        b["total"] += session_hours(sess)
 
     # Resolve — and auto-provision — the calendar week for each window.
     # Nothing else in the app creates calendar_weeks rows ahead of time, so a

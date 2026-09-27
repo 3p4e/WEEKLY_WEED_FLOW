@@ -27,6 +27,28 @@ def fri_thu(ref: date) -> tuple[date, date]:
     return fri, fri + timedelta(days=6)
 
 
+def window_iso_week(fri: date) -> tuple[int, int]:
+    """(iso_year, iso_week) a Fri→Thu window is labelled with.
+
+    A Fri→Thu window straddles two ISO (Mon→Sun) weeks. Of its five business
+    days, the four Mon–Thu fall in the ISO week its MONDAY belongs to; only
+    the leading Friday is in the earlier one — so the window is named after
+    its Monday (fri + 3), with that Monday's ISO year so a Dec/Jan-crossing
+    window stays self-consistent. The live report did this, the compiled
+    document and the weekly snapshot still used the Friday's week and year:
+    "W39 2026" on the document for the week /reports/weekly called "W40
+    2026", and "W53 2027" for a week that does not exist (review 2026-09-27,
+    BC-16). One function, three readers."""
+    iso_year, iso_week, _ = (fri + timedelta(days=3)).isocalendar()
+    return iso_year, iso_week
+
+
+def week_label(fri: date, thu: date) -> str:
+    """The period label the report screen and the compiled document share."""
+    iso_year, iso_week = window_iso_week(fri)
+    return f"W{iso_week} {iso_year} ({fri.strftime('%a %b %d')} → {thu.strftime('%a %b %d')})"
+
+
 async def ensure_week(conn, org_id, day: date):
     """id of the ISO (Mon->Sun) calendar week containing *day*, creating the
     row if the org hasn't seeded that far ahead. ON CONFLICT DO UPDATE is a

@@ -21,7 +21,7 @@ from app.db import rls, users_admin_pool
 from app.deps import dept_family, dept_scope, require_password_set, require_role
 from app.notify import participants, safe_emit, savepointed
 from app.roles import ADMIN, ELEVATED_ROLES
-from app.worktime import facility_today, classify, session_hours
+from app.worktime import MAX_SESSION_HOURS, facility_today, classify, session_hours
 
 _log = logging.getLogger("app.tasks")
 
@@ -884,7 +884,10 @@ async def add_progress(task_id: str, body: ProgressIn, user: dict = Depends(requ
 class SessionIn(BaseModel):
     started_at: datetime
     ended_at: datetime | None = None
-    hours: Decimal | None = Field(default=None, gt=0)
+    # One sitting of work is at most a day: 80 typed for 8.0 was accepted as
+    # an 80-hour session in one bucket and fed the Thursday report's
+    # off-hours evidence (BC-24). The same bound applies to ended_at below.
+    hours: Decimal | None = Field(default=None, gt=0, le=MAX_SESSION_HOURS)
     note: str | None = Field(default=None, max_length=10_000)
     source: Literal["manual", "timer", "capture"] = "manual"
 
@@ -920,6 +923,8 @@ async def add_session(task_id: str, body: SessionIn, user: dict = Depends(requir
         raise HTTPException(422, "Provide ended_at or hours")
     if body.ended_at is not None and body.ended_at <= body.started_at:
         raise HTTPException(422, "ended_at must be after started_at")
+    if body.ended_at is not None and body.ended_at - body.started_at > timedelta(hours=MAX_SESSION_HOURS):
+        raise HTTPException(422, f"a session is at most {MAX_SESSION_HOURS} hours — split a longer one")
     async with rls(user) as c:
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:

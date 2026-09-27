@@ -3,7 +3,7 @@ fields, recurrence materialization, and the report's per-person time-class
 buckets. The classification rules themselves live in app/worktime.py."""
 from datetime import datetime, timedelta
 
-from app.worktime import TZ, classify
+from app.worktime import TZ, classify, split_hours
 
 
 def test_classification_rules():
@@ -16,6 +16,27 @@ def test_classification_rules():
     assert classify(at(2026, 7, 7, 2)) == "night"       # Tue 02:00
     assert classify(at(2026, 7, 4, 14)) == "weekend"    # Sat
     assert classify(at(2026, 7, 5, 2)) == "weekend"     # Sun 02:00 — weekend wins over night
+
+
+def test_a_session_is_split_across_the_bucket_boundaries_it_crosses():
+    """Review 2026-09-27, BC-24: a session was classified whole by its start
+    hour — a 07:30–16:00 weekday shift was 8.5 h of OVERTIME, a 16:00–24:00
+    shift 8 h of REGULAR time. The buckets follow the rules the module
+    docstring states, boundary by boundary, and always sum to the total."""
+    def at(y, m, d, h, mi=0):
+        return datetime(y, m, d, h, mi, tzinfo=TZ)
+    early = split_hours(at(2026, 7, 6, 7, 30), 8.5)              # Mon 07:30–16:00
+    assert early == {"regular": 8.0, "overtime": 0.5, "night": 0.0, "weekend": 0.0}
+    late = split_hours(at(2026, 7, 6, 16), 8)                    # Mon 16:00–24:00
+    assert late == {"regular": 1.0, "overtime": 5.0, "night": 2.0, "weekend": 0.0}
+    into_weekend = split_hours(at(2026, 7, 3, 22), 4)            # Fri 22:00 – Sat 02:00
+    assert into_weekend == {"regular": 0.0, "overtime": 0.0, "night": 2.0, "weekend": 2.0}
+    inside = split_hours(at(2026, 7, 6, 10), 2.25)               # never crosses a boundary
+    assert inside == {"regular": 2.25, "overtime": 0.0, "night": 0.0, "weekend": 0.0}
+    assert split_hours(at(2026, 7, 6, 10), 0) == {b: 0.0 for b in ("regular", "overtime", "night", "weekend")}
+    # DST: Sun 2026-03-29 02:00→03:00 is skipped in Europe/Skopje; the sum
+    # must still be the real elapsed hours
+    assert abs(sum(split_hours(at(2026, 3, 29, 1), 3).values()) - 3) < 1e-9
 
 
 async def _task(client, headers, **extra):
@@ -148,6 +169,33 @@ async def test_recurrence_materializes_next_instance_on_completion(client, admin
     # Bad recurrence rejected up front.
     r = await client.post("/tasks", json={"title": "x", "recurrence": {"freq": "hourly"}}, headers=admin_headers)
     assert r.status_code == 422
+
+
+async def test_session_hours_are_capped_at_a_day(client, admin_headers, org):
+    """BC-24: 80 typed for 8.0 was accepted as one 80-hour session."""
+    t = await _task(client, admin_headers)
+    r = await client.post(f"/tasks/{t['id']}/sessions",
+                          json={"started_at": "2026-07-06T09:00:00", "hours": 80}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+    r = await client.post(f"/tasks/{t['id']}/sessions",
+                          json={"started_at": "2026-07-06T09:00:00", "ended_at": "2026-07-08T09:00:00"},
+                          headers=admin_headers)
+    assert r.status_code == 422, r.text
+    r = await client.post(f"/tasks/{t['id']}/sessions",
+                          json={"started_at": "2026-07-06T09:00:00", "hours": 24}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
+async def test_report_hours_by_person_split_a_shift_across_buckets(client, admin_headers, org):
+    """BC-24 end to end: the Thursday report's per-person buckets are the split,
+    not the start-hour classification."""
+    t = await _task(client, admin_headers)
+    r = await client.post(f"/tasks/{t['id']}/sessions",
+                          json={"started_at": "2026-07-06T07:30:00", "hours": 8.5}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    body = (await client.get("/reports/weekly?ref_date=2026-07-08", headers=admin_headers)).json()
+    b = body["hours_by_person"][0]
+    assert b["overtime"] == 0.5 and b["regular"] == 8.0 and b["total"] == 8.5
 
 
 async def test_report_hours_by_person_and_overdue(client, admin_headers, org):
