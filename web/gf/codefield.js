@@ -132,6 +132,20 @@ window.GF = window.GF || {};
     if (el.focus) el.focus();
   };
 
+  // Fill a rendered strain chooser's options in place once the cultivars
+  // arrive — for a form that cannot cheaply re-render itself (the task form's
+  // department fields). The current selection is kept if it is still listed.
+  GF.batchCodeRefill = (id, cultivars) => {
+    const sel = GF.$(id + '-cv'); if (!sel) return;
+    const cur = String(sel.value || '');
+    const cvs = (cultivars || []).filter(c => c && c.code && c.is_active !== false);
+    const el = GF.$(id), v = el ? String(el.value || '') : '';
+    const head = cur || cvs.map(c => String(c.code)).sort((a, b) => b.length - a.length).find(code => v.indexOf(code) === 0) || '';
+    sel.innerHTML = `<option value=""></option>` + cvs.map(c => `<option value="${GF.esc(c.code)}"${String(c.code) === head ? ' selected' : ''}>${
+      GF.esc(String(c.code) + (c.name ? ' · ' + c.name : ''))}</option>`).join('');
+    if (head) PRE[id] = head;
+  };
+
   // The cultivar list for the chooser, fetched once per session and shared by
   // every form. Returns what is known NOW ([] until the first answer lands)
   // and calls every registered onLoad when it does, so a form rendered

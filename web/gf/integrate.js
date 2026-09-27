@@ -353,8 +353,10 @@ GF.WWF.loadAndRender = async () => {
       // field template / presets / home layout from the backend code.
       // parent_id rides along too: Cloning and Nursery are sub-departments of
       // Cultivation, and GF.WWF.deptFamily / GF.deptTemplate walk it.
+      // head_user_id: the department head (tasks.py; DECISIONS A-3) — what
+      // handoffRights reads for the target side (review 2026-09-27, R2-FE-14).
       return { id:d.id, code:d.code, name:d.name, mk:d.name_mk || d.name,
-               parent_id: d.parent_id || null,
+               parent_id: d.parent_id || null, head_user_id: d.head_user_id || null,
                abbr: DEPT_ABBR[d.code] || (d.code || '').toUpperCase().slice(0, 3),
                icon:st.icon, color:st.color }; });
     // Resolve the code-keyed handoff pipeline to the real backend ids.
@@ -1038,6 +1040,44 @@ GF.WWF.saveDept = async () => {
     await GF.WWF.loadAndRender();
   } catch (e) { GF.toast(AL('Failed: ', 'Неуспешно: ') + e.message, 'error'); }
 };
+
+/* ── Department head (PATCH /departments/{id}, ADMIN-only) ──
+   A-3: the head is the manager a handoff to the department is routed to
+   (collab.py), and ADMIN may set any elevated user. The route had no screen
+   (review 2026-09-27, INV-06 / R2-FE-14); the Team view's department strip
+   opens this. */
+GF.WWF.openDeptHeadForm = (deptId) => {
+  if (!GF.WWF.isAdmin()) return;
+  const dept = (GF.DEPTS || []).find(d => String(d.id) === String(deptId));
+  if (!dept) return;
+  const elevated = GF.ELEVATED_MODULE_ROLES || [];
+  const people = Object.entries(GF.PEOPLE || {})
+    .filter(([, p]) => p && p.active !== false && elevated.includes(p.backendRole))
+    .map(([id, p]) => ({ v: id, label: `${p.name} · ${GF.roleLabel ? GF.roleLabel(p.role) : p.role}` }));
+  GF.WWF._ensureModal('dept-head-modal', '420px');
+  GF.$('dept-head-modal-title').textContent = AL('Department head', 'Раководител на оддел') + ' — ' + GF.depName(dept.id);
+  GF.$('dept-head-modal-body').innerHTML = `
+    <div class="field"><label>${AL('Head', 'Раководител')}</label>
+      ${GF.selectField('dept-head-user', { value: dept.head_user_id || '', title: AL('Head', 'Раководител'),
+        options: [{ v: '', label: AL('— none —', '— нема —') }].concat(people) })}
+      <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
+        'A manager or executive. A handoff proposed to this department is addressed to its head.',
+        'Менаџер или извршен. Предложено префрлање до овој оддел се упатува до раководителот.')}</div></div>
+    <div class="row" style="gap:10px"><div class="spacer"></div>
+      <button class="btn btn-primary" id="dept-head-save" onclick="GF.WWF.saveDeptHead('${GF.esc(dept.id)}')">${GF.t('save')}</button></div>`;
+  GF.openModal('dept-head-modal');
+};
+
+GF.WWF.saveDeptHead = (deptId) => GF.once('dept-head-save', async () => {
+  if (!GF.WWF.isAdmin()) return;
+  const headId = ((GF.$('dept-head-user') || {}).value || '') || null;
+  try {
+    await GF.API.departmentPatch(deptId, { head_user_id: headId });
+    GF.closeModal('dept-head-modal');
+    GF.toast(GF.t('save') + ' ✓', 'success');
+    await GF.WWF.loadAndRender();
+  } catch (e) { GF.toast(AL('Failed: ', 'Неуспешно: ') + e.message, 'error'); }
+});
 
 // openUser(id) → edit an existing person (name/role/dept/title + reset password);
 // openUser() with no id → create a new account. The Team-card gear icon passes id.

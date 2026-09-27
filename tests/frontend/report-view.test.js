@@ -187,3 +187,23 @@ test('the boot pin-prefetch still runs when a session token is already present',
   assert.equal(h.window.__pinCalls, 1,
     'a persisted session must still get the new-report badge prefetch');
 });
+
+/* ── FE-17: "days late" is GF.daysSince, the one days-since-a-day rule ──── */
+test('the overdue list counts days late with GF.daysSince from the facility today', () => {
+  const h = loadReportView();
+  const { GF } = h;
+  // The harness clock is 2026-07-30 (Europe/Skopje).
+  const d = baseReportData([]);
+  d.overdue = [
+    { id: 'o1', title: 'Three days', due_date: '2026-07-27' },
+    { id: 'o2', title: 'Due today', due_date: '2026-07-30' },
+    { id: 'o3', title: 'Bad date', due_date: 'not-a-date' },
+  ];
+  GF.WWF._report.data = d;
+  const html = GF.WWF._reportMarkup();
+  assert.match(html, /3 days late/);
+  assert.match(html, /Due today[\s\S]*?1 day late/, 'a task the server lists as overdue is at least one day late');
+  assert.match(html, /Bad date[\s\S]*?1 day late/, 'a malformed date never yields NaN');
+  assert.doesNotMatch(html, /NaN/);
+  h.close();
+});

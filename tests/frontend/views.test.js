@@ -119,3 +119,37 @@ test('exec() excludes archived tasks from the KPI/blocked/overdue counts', () =>
   assert.ok(html.includes('Live stuck task'), 'the live (non-archived) stuck task must still appear');
   h.close();
 });
+
+/* ── INV-06 / R2-FE-14: ADMIN sets a department head from the Team view ─── */
+function loadTeam(role, isAdmin) {
+  const h = loadGF({ files: ['data.js', 'core.js', 'views.js'] });
+  const { GF } = h;
+  GF.state.tasks = [];
+  GF.state.user = 'me';
+  GF.PEOPLE = { me: { name: 'Me', role, roleLabel: '' }, h1: { name: 'Head One', role: 'pr_mgr', roleLabel: '' } };
+  GF.DEPTS = [
+    { id: 'd1', name: 'Production', mk: 'Производство', color: '#123', head_user_id: 'h1' },
+    { id: 'd2', name: 'Cultivation', mk: 'Одгледување', color: '#456', head_user_id: null },
+  ];
+  GF.WWF = { isAdmin: () => isAdmin, canProvision: () => isAdmin };
+  GF.avatar = () => '';
+  return h;
+}
+
+test('team() lists every department with its head and a Set-head control for ADMIN', () => {
+  const h = loadTeam('admin', true);
+  const html = h.GF.views.team();
+  assert.match(html, /team-dept[^>]*data-dept="d1"/);
+  assert.match(html, /Head One/);
+  assert.match(html, /no head/, 'a department without a head says so');
+  assert.equal((html.match(/GF\.WWF\.openDeptHeadForm\('d[12]'\)/g) || []).length, 2);
+  h.close();
+});
+
+test('team() shows no department strip to a non-admin', () => {
+  const h = loadTeam('qa_mgr', false);
+  const html = h.GF.views.team();
+  assert.doesNotMatch(html, /team-dept/);
+  assert.doesNotMatch(html, /openDeptHeadForm/);
+  h.close();
+});

@@ -22,10 +22,17 @@
   // FE-06 / BC-04). There is no list endpoint; the proposals reach the user
   // as `handoff` notifications, and each task's handoffs are read from
   // there. A task the server will not show (404) simply contributes nothing.
+  //
+  // The inbox is read at its maximum page (notifications.py: limit ≤ 200;
+  // the default of 50 hid a proposal older than a week of due/overdue rows —
+  // review 2026-09-27, R2-FE-09). The list still cannot see a proposal
+  // whose notification the recipient marked Done: the endpoint filters
+  // `done_at IS NULL` server-side, and only a `GET /handoffs?to_dept=mine`
+  // list (DECISIONS E-5) or an include_done flag closes that.
   const loadHandoffs = async () => {
     if (!GF.API.notifications || !GF.API.handoffs || !GF.WWF.handoffRights) return [];
     let items = [];
-    try { items = (await GF.API.notifications({})) || []; } catch (e) { return []; }
+    try { items = (await GF.API.notifications({ limit: 200 })) || []; } catch (e) { return []; }
     const titles = {};
     const taskIds = [];
     items.forEach(n => {

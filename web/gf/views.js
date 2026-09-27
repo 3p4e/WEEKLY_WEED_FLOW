@@ -617,8 +617,23 @@ GF.views = {
       ? `<button class="btn btn-sm" onclick="GF.WWF.openDeletedUsers()">${GF.icon('box','icon')}${AL('Removed accounts','Отстранети сметки')}</button>`
         + `<button class="btn btn-orange btn-sm" onclick="GF.openUser()">${GF.icon('plus','icon','currentColor')}${GF.t('add_user')}</button>`
       : `<span class="role-lock">${GF.icon('shield','icon','var(--ink-3)')}${GF.t('view_only')}</span>`;
+    // Departments and their heads (ADMIN): the head is who a handoff to the
+    // department is addressed to (A-3), and PATCH /departments had no screen
+    // (review 2026-09-27, INV-06 / R2-FE-14).
+    const isAdmin = !!(GF.WWF && GF.WWF.isAdmin && GF.WWF.isAdmin());
+    const deptStrip = isAdmin && (GF.DEPTS || []).length
+      ? `<div class="team-depts" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px">${GF.DEPTS.map(d => {
+          const head = d.head_user_id && GF.PEOPLE[d.head_user_id];
+          return `<div class="team-dept" data-dept="${GF.esc(d.id)}" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)">
+            <span class="dept-dot" style="background:${d.color}"></span>
+            <span style="font-size:12.5px;font-weight:600">${GF.esc(GF.depName(d.id))}</span>
+            <span style="font-size:11.5px;color:var(--ink-3)">${head ? GF.esc(head.name) : AL('no head', 'без раководител')}</span>
+            <button class="icon-btn btn-sm" title="${GF.esc(AL('Set head', 'Постави раководител'))}" onclick="GF.WWF.openDeptHeadForm('${GF.esc(d.id)}')">${GF.icon('user')}</button>
+          </div>`; }).join('')}</div>`
+      : '';
     return GF.viewHead('team','team_sub', addBtn)
       + `<div class="team-count">${ids.length} ${GF.t('members')} · ${GF.t('your_role')}: <b>${GF.roleLabel(GF.curRole())}</b></div>`
+      + deptStrip
       + `<div class="team-grid">${cards}</div>`;
   },
 };
