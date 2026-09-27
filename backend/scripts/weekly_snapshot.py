@@ -536,6 +536,15 @@ async def write_pins(conn, snap, digest, org_report, org_plan, user_reports, use
 
 # ── Per-org orchestration ───────────────────────────────────────────────────
 async def process_org(conn, uconn, client, org_id, org_name, ref: date, skip_letta: bool):
+    # Stamp the org on the session before anything is written (calendar_weeks
+    # via _ensure_week, ai_pins via write_pins): app.fn_audit_row reads
+    # app.org_id, and this raw admin connection carried no identity, so every
+    # audit row it wrote had org_id NULL — which the audit_read policy opens to
+    # EVERY organisation's elevated users, full report bodies included (review
+    # 2026-09-27, BC-22). Session-level (is_local=false): the connection is
+    # this job's own and is re-stamped per org. user_id stays NULL: the
+    # scheduler is the system, not a person.
+    await conn.execute("SELECT set_config('app.org_id', $1, false)", str(org_id))
     report_win, plan_win = compute_windows(ref)
     snap = await gather(conn, uconn, org_id, org_name, report_win, plan_win)
     digest = build_digest(snap)

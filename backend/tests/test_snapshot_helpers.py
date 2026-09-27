@@ -171,3 +171,18 @@ async def test_run_all_writes_pins_end_to_end(client, admin_headers, org):
     assert len(rows) > before, "run_all wrote no ai_pins — process_org never executed"
     # The three org-level pins are written deterministically even without Letta.
     assert {"weekly_snapshot", "weekly_report", "next_week_plan"} <= keys, keys
+
+
+async def test_run_all_stamps_the_org_on_its_audit_rows(client, admin_headers, org):
+    """Review 2026-09-27, BC-22: the snapshot wrote ai_pins and calendar_weeks
+    on a raw admin connection with no app.org_id, so app.fn_audit_row stamped
+    org_id NULL on those rows — which the audit_read policy opens to EVERY
+    organisation's elevated users, full report bodies included."""
+    from app.db import tasks_admin_pool
+    org_uuid = uuid.UUID(org["org_id"])
+    await w.run_all(date(2026, 7, 9), only_org=org_uuid, skip_letta=True)
+    rows = await tasks_admin_pool().fetch(
+        "SELECT org_id FROM audit_log WHERE table_name='ai_pins' AND action='INSERT'"
+        " AND new_values->>'org_id' = $1", org["org_id"])
+    assert rows, "the run wrote no ai_pins audit rows"
+    assert all(str(r["org_id"]) == org["org_id"] for r in rows), "an ai_pins audit row carried no org"

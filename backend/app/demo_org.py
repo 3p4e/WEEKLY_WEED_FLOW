@@ -250,13 +250,29 @@ async def get_demo_org_id() -> uuid.UUID | None:
     return row["id"] if row else None
 
 
+async def _stamp_org(conn, org_id) -> None:
+    """Set the org GUC for the rest of this transaction so app.fn_audit_row
+    stamps the demo org's own id on every audit row it writes here.
+
+    These pooled admin connections carry no request identity; the trigger
+    then wrote org_id NULL, and the users/tasks `audit_read` policies open
+    NULL-org rows to EVERY organisation's elevated users — so the demo cast's
+    profiles and every seeded row were readable in any other tenant's audit
+    trail (review 2026-09-27, BC-22). user_id stays NULL: this is the
+    system's own write, not a person's."""
+    await conn.execute("SELECT set_config('app.org_id', $1, true)", str(org_id))
+
+
 async def _ensure_org() -> uuid.UUID:
     org_id = await get_demo_org_id()
     if org_id is None:
         org_id = uuid.uuid4()
-        await users_admin_pool().execute(
-            "INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)"
-            " ON CONFLICT DO NOTHING", org_id, DEMO_ORG_NAME, DEMO_SLUG)
+        async with users_admin_pool().acquire() as u:
+            async with u.transaction():
+                await _stamp_org(u, org_id)
+                await u.execute(
+                    "INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)"
+                    " ON CONFLICT DO NOTHING", org_id, DEMO_ORG_NAME, DEMO_SLUG)
         org_id = await get_demo_org_id()
     return org_id
 
@@ -311,13 +327,17 @@ async def wipe_demo_org(org_id: uuid.UUID) -> None:
     t = tasks_admin_pool()
     async with t.acquire() as c:
         async with c.transaction():
+            await _stamp_org(c, org_id)
             for table in _TASKS_WIPE_ORDER:
                 # `table` is only ever a value from the hardcoded module
                 # constant _TASKS_WIPE_ORDER — never user input; the org_id
                 # filter is a bound parameter. Safe by construction.
                 await c.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)  # nosec B608
     # Users DB: profiles. Org row stays.
-    await users_admin_pool().execute("DELETE FROM profiles WHERE org_id=$1", org_id)
+    async with users_admin_pool().acquire() as u:
+        async with u.transaction():
+            await _stamp_org(u, org_id)
+            await u.execute("DELETE FROM profiles WHERE org_id=$1", org_id)
 
 
 async def reset_demo_org(cast: str = DEFAULT_CAST) -> dict:
@@ -376,6 +396,8 @@ async def _reset_locked(org_id: uuid.UUID, data: dict) -> dict:
     upool, tpool = users_admin_pool(), tasks_admin_pool()
     async with upool.acquire() as u, tpool.acquire() as t:
         async with t.transaction(), u.transaction():
+            await _stamp_org(t, org_id)
+            await _stamp_org(u, org_id)
             # departments
             dept_ids: dict[str, uuid.UUID] = {}
             for code, name, name_mk, parent in _DEPARTMENTS:
