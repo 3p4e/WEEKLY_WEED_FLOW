@@ -399,6 +399,10 @@ _TOTAL_LINE = (
     " JOIN qc_spec_parameters sp ON sp.id = l.parameter_id"
     " WHERE l.coq_id = q.id AND sp.computed_kind='total_thc'"
     " AND l.result_numeric IS NOT NULL LIMIT 1")
+# Public name for the one read of a CoQ's Total Δ9-THC: the mother bank
+# (propagation.py) imports it, so its figures can never drift from these
+# (review 2026-09-27b, INV-09).
+COQ_TOTAL_THC_SQL = _TOTAL_LINE
 
 # Selected alongside _PRODUCT_SQL when a list wants the aggregate — the lateral
 # below computes it, but a join alone does not put it in the row.
@@ -428,21 +432,11 @@ async def list_products(user: dict = Depends(require_role(*ELEVATED_ROLES)),
     return [_product_out(r) for r in rows]
 
 
-async def _potency_history(c, product) -> dict:
-    """Everything measured that bears on this product's strain, by strength of
-    evidence. Never merged into one number: a cultivar-level CoQ did not name
-    this product, and a certificate reached through the batch code is a text
-    join, so both are reported beside the product's own figures, not inside
-    them."""
-    stated = await c.fetch(
-        "SELECT q.id, q.coq_number, q.batch_id, q.reviewed_at, q.compiled_at,"
-        f" ({_TOTAL_LINE}) AS total_thc FROM qc_coq q"
-        " WHERE q.product_id=$1 AND q.status='APPROVED' ORDER BY q.compiled_at", product["id"])
-    cultivar_level = await c.fetch(
-        "SELECT q.id, q.coq_number, q.batch_id, q.compiled_at,"
-        f" ({_TOTAL_LINE}) AS total_thc FROM qc_coq q"
-        " WHERE q.product_id IS NULL AND q.cultivar_id=$1 AND q.status='APPROVED'"
-        " ORDER BY q.compiled_at", product["cultivar_id"])
+async def certificate_total_thc(c, cultivar_id, cultivar_code) -> list[dict]:
+    """Every RELEASED/APPROVED certificate of this strain, with its Total
+    Δ9-THC derived from the component results. The one implementation of
+    the certificate-level "tested so far" source: the catalogue's history
+    and the mother bank (propagation.py) both call it (INV-09)."""
     # Certificates of this cultivar's own batches (review 2026-09-27 QR-11).
     # The Total Δ9-THC of a certificate is DERIVED here from its two
     # component results (Ph. Eur. 3028, the one derived_total every CoQ path
@@ -453,7 +447,7 @@ async def _potency_history(c, product) -> dict:
     # certificate's batch_id or cultivation_batch, case-insensitively, or by
     # an exact match against the cultivar's registered batch codes. A text
     # join, and it says so.
-    head_re = f"^{product['cultivar_code'].upper()}[0-9]" if str(product["cultivar_code"]).isalnum() else None
+    head_re = f"^{str(cultivar_code).upper()}[0-9]" if str(cultivar_code or "").isalnum() else None
     certs = await c.fetch(
         "SELECT ct.id, ct.coa_number, ct.batch_id, ct.cultivation_batch, ct.report_date,"
         " sp.test_name_en, sp.test_name_mk, sp.unit AS p_unit,"
@@ -479,7 +473,7 @@ async def _potency_history(c, product) -> dict:
         "                                WHERE cultivar_id=$1 AND code IS NOT NULL)"
         "     OR upper(ct.cultivation_batch) IN (SELECT upper(code) FROM plant_batches"
         "                                         WHERE cultivar_id=$1 AND code IS NOT NULL))"
-        " ORDER BY ct.report_date NULLS LAST", product["cultivar_id"], head_re)
+        " ORDER BY ct.report_date NULLS LAST", cultivar_id, head_re)
     cert_rows = []
     for ct in certs:
         try:
@@ -490,6 +484,25 @@ async def _potency_history(c, product) -> dict:
         except HTTPException:
             continue        # mixed units: no meaningful total to report
         cert_rows.append({**dict(ct), "total_thc": derived_total(ct["a_val"], ct["b_val"])})
+    return cert_rows
+
+
+async def _potency_history(c, product) -> dict:
+    """Everything measured that bears on this product's strain, by strength of
+    evidence. Never merged into one number: a cultivar-level CoQ did not name
+    this product, and a certificate reached through the batch code is a text
+    join, so both are reported beside the product's own figures, not inside
+    them."""
+    stated = await c.fetch(
+        "SELECT q.id, q.coq_number, q.batch_id, q.reviewed_at, q.compiled_at,"
+        f" ({_TOTAL_LINE}) AS total_thc FROM qc_coq q"
+        " WHERE q.product_id=$1 AND q.status='APPROVED' ORDER BY q.compiled_at", product["id"])
+    cultivar_level = await c.fetch(
+        "SELECT q.id, q.coq_number, q.batch_id, q.compiled_at,"
+        f" ({_TOTAL_LINE}) AS total_thc FROM qc_coq q"
+        " WHERE q.product_id IS NULL AND q.cultivar_id=$1 AND q.status='APPROVED'"
+        " ORDER BY q.compiled_at", product["cultivar_id"])
+    cert_rows = await certificate_total_thc(c, product["cultivar_id"], product["cultivar_code"])
 
     def _stats(values):
         vals = [float(v) for v in values if v is not None]

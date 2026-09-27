@@ -37,11 +37,11 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.config import settings
 from app.db import rls
 from app.deps import require_role, uuid_or_422
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
+from app.worktime import site_today
 
 router = APIRouter(prefix="/cultivation", tags=["cultivation"])
 
@@ -49,17 +49,6 @@ _RECORDERS = (ADMIN, *EXECUTIVE_ROLES, "IR_MGR")
 
 # Must stay in step with irrigation_events_method_check in migration 0052.
 _METHODS = ("drip", "hand", "flood", "boom", "other")
-
-
-def _site_tz() -> str:
-    return settings.snapshot_tz or "UTC"
-
-
-async def _site_today(c) -> date:
-    """Today AT THE SITE, resolved by Postgres — the same discipline as
-    harvest.py's `_site_today`. Not `date.today()`, which renders under the
-    container's UTC zone and would misfile an evening feed by a day."""
-    return await c.fetchval("SELECT (now() AT TIME ZONE $1)::date", _site_tz())
 
 
 async def _room_or_422(c, room_id: str):
@@ -149,7 +138,7 @@ async def create_irrigation(body: FeedIn, user: dict = Depends(require_role(*_RE
         if body.batch_id is not None:
             await _batch_or_422(c, body.batch_id)
         # "today" at the site, resolved by Postgres — never the container's UTC.
-        applied_on = body.applied_on or await _site_today(c)
+        applied_on = body.applied_on or await site_today(c)
         row = await c.fetchrow(
             "INSERT INTO irrigation_events(org_id, room_id, batch_id, applied_on,"
             " method, water_volume_l, feed_ec, feed_ph, runoff_ec, runoff_ph,"

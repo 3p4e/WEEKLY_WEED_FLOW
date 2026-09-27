@@ -254,13 +254,6 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
    copy of .gf-name is untouched, where there is room for it. */
 .brand .gf-name{font-size:17px!important;letter-spacing:.12em!important;white-space:nowrap}
 .brand .pp-wordmark{width:104px;height:17px}
-.brand-mark{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;
-  position:relative;flex-shrink:0}
-.brand-name{font-family:var(--font-brand);font-weight:700;font-size:20px;letter-spacing:-.4px;
-  background:linear-gradient(120deg,var(--primary) 0%,var(--blue) 100%);
-  -webkit-background-clip:text;background-clip:text;color:transparent}
-.brand-name b{font-style:italic;background:linear-gradient(120deg,var(--blue) 0%,var(--primary) 100%);
-  -webkit-background-clip:text;background-clip:text;color:transparent}
 
 /* ── Nav ── */
 .nav{padding:2px 10px;display:flex;flex-direction:column;gap:1px}
@@ -376,8 +369,6 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 /* ── Press feedback utility — apply alongside cursor:pointer on any element
    with no bespoke :active rule of its own, for the same tactile scale-down
    .btn:active (line 321) already gives clicks/taps ── */
-.pressable{transition:transform 160ms cubic-bezier(0.23, 1, 0.32, 1)}
-.pressable:active{transform:scale(.97)}
 
 /* ── Avatar ── */
 .avatar{border-radius:999px;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;
@@ -557,11 +548,6 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 
 .subtasks{padding-left:14px;border-left:2px solid var(--line);margin-bottom:14px}
 .subtask{display:flex;align-items:center;gap:10px;padding:7px 0}
-.subtask .stt{font-size:13px;font-weight:600;flex:1;color:var(--ink)}
-.subtask.done .stt{text-decoration:line-through;color:var(--ink-3)}
-.sub-add{display:flex;gap:8px;margin-top:6px}
-.sub-add input{flex:1;border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;
-  font-size:12.5px;outline:none;background:var(--surface-2);color:var(--ink)}
 
 .deps{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
 .dep-chip{font-size:12px;font-weight:600;padding:4px 9px;border-radius:7px;display:flex;align-items:center;gap:5px}
@@ -689,7 +675,7 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 }
 @media(max-width:880px){
   .search{max-width:none}
-  .lang-toggle,.header .hide-sm{display:none}
+  .lang-toggle{display:none}
 }
 
 /* ── v2 task badges & chips ── */
@@ -706,9 +692,6 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .sub-prog{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:700;
   color:var(--blue);white-space:nowrap}
 .sub-prog .icon{stroke:var(--blue)}
-.sess-hours{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:700;
-  color:var(--primary);white-space:nowrap}
-.sess-hours .icon{stroke:var(--primary)}
 .tag-chip{font-size:10.5px;font-weight:700;color:var(--blue);background:var(--blue-soft);
   padding:2px 7px;border-radius:999px;white-space:nowrap}
 /* Attribute chips (dept template values: room/batch/equipment…) — filled soft
@@ -1400,9 +1383,6 @@ body.demo-on .main{padding-bottom:56px}
 .cj-foot{display:flex;justify-content:space-between;gap:12px;font-size:12px;margin-top:6px;flex-wrap:wrap}
 .cj-now-lbl{font-weight:700;color:var(--cj-who)}
 .cj-run{font-size:11px;color:var(--ink-3);margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.cj-chips{display:flex;gap:6px;flex-wrap:wrap}
-.cj-chip{font:inherit;font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--ink-3);cursor:pointer}
-.cj-chip.on{color:var(--ink);border-color:rgba(var(--accent-rgb),.5);background:var(--primary-soft)}
 /* lanes: one row per open batch on a shared axis — several operations at
    different stages at once, which is how the floor actually runs */
 .cj-lanes{margin-bottom:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px}

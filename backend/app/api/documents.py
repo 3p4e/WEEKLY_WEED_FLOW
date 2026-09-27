@@ -35,16 +35,9 @@ from app.deps import dept_scope, is_dept_scoped_role, require_role, uuid_or_404
 from app.roles import DEPT_SCOPED_ROLES, ELEVATED_ROLES, EXECUTIVE_ROLES, MANAGER_ROLES
 from app.roster import roster
 from app.notify import safe_emit
-from app.worktime import TZ, session_buckets, session_hours
+from app.worktime import TZ, facility_today, session_buckets, session_hours
 
 router = APIRouter(prefix="/reports/documents", tags=["documents"])
-
-
-def _today() -> date:
-    """Facility-local 'today' — never the container's naive UTC clock, which
-    resolves to the previous day (and thus the previous Fri→Thu week) for the
-    hour or two after local midnight."""
-    return datetime.now(TZ).date()
 
 
 def _effective_dept_id(user: dict, requested: str | None) -> str | None:
@@ -262,7 +255,7 @@ def _metrics(tasks: list[dict], sessions, prior_sessions) -> dict:
     # (counting it as on-time inflated the rate on the submitted record).
     with_due = [t for t in completed if t["due_date"]]
     on_time = [t for t in with_due if t["completed_date"] and t["completed_date"] <= t["due_date"]]
-    today = _today()
+    today = facility_today()
     overdue_open = [
         {"id": t["id"], "title": t["title"], "due_date": t["due_date"],
          "age_days": (today - date.fromisoformat(t["due_date"])).days}
@@ -650,7 +643,7 @@ async def compile_document(body: CompileReq, user: dict = Depends(require_role(*
     if body.kind not in ("report", "plan"):
         raise HTTPException(422, "kind must be 'report' or 'plan'")
     try:
-        ref = date.fromisoformat(body.ref_date) if body.ref_date else _today()
+        ref = date.fromisoformat(body.ref_date) if body.ref_date else facility_today()
     except ValueError:
         raise HTTPException(422, "ref_date must be ISO format YYYY-MM-DD")
     fri, thu = _fri_thu(ref)
@@ -744,7 +737,7 @@ async def get_document(kind: str = "report", ref_date: str | None = None,
     # read it — tasks_read RLS and reports.py's per-user filtering both hide that
     # data from them, and this pre-compiled blob would otherwise bypass both.
     try:
-        ref = date.fromisoformat(ref_date) if ref_date else _today()
+        ref = date.fromisoformat(ref_date) if ref_date else facility_today()
     except ValueError:
         raise HTTPException(422, "ref_date must be ISO format YYYY-MM-DD")
     fri, _thu = _fri_thu(ref)
@@ -775,7 +768,7 @@ async def documents_status(kind: str = "report", ref_date: str | None = None,
     if kind not in ("report", "plan"):
         raise HTTPException(422, "kind must be 'report' or 'plan'")
     try:
-        ref = date.fromisoformat(ref_date) if ref_date else _today()
+        ref = date.fromisoformat(ref_date) if ref_date else facility_today()
     except ValueError:
         raise HTTPException(422, "ref_date must be ISO format YYYY-MM-DD")
     fri, _thu = _fri_thu(ref)
@@ -1000,22 +993,6 @@ def _color(v, fallback: str = "#8A99B0") -> str:
     allowed; anything else falls back to a neutral grey."""
     s = str(v or "").strip()
     return s if _COLOR_RE.match(s) else fallback
-
-
-def _numf(v, nd: int = 1) -> str:
-    """Format a client-supplied number for PDF interpolation without a 500 on a
-    non-numeric value (a hostile/legacy field never crashes the export)."""
-    try:
-        return f"{float(v):.{nd}f}"
-    except (TypeError, ValueError):
-        return "0" if nd == 0 else "0." + "0" * nd
-
-
-def _numi(v) -> int:
-    try:
-        return int(float(v))
-    except (TypeError, ValueError):
-        return 0
 
 
 def _ribbon_svg(segments: list[dict], week_start: str, days: int = 7) -> str:
@@ -1254,7 +1231,7 @@ def _pdf_task_tables(c: dict, who) -> str:
             days = "/".join(_e(d) for d in (t.get("days") or []))
             sub = ""
             if t.get("description") or notes or days:
-                sub = (f'<tr class="trow-sub"><td colspan="5">'
+                sub = ('<tr class="trow-sub"><td colspan="5">'
                        + (f'<span class="sub">Days: {days}</span> ' if days else "")
                        + (f'{_nl(t["description"])}' if t.get("description") else "")
                        + (f'<ul>{notes}</ul>' if notes else "") + "</td></tr>")
@@ -1306,7 +1283,7 @@ def _pdf_html(doc: dict, people: dict) -> str:
     is_locked = doc["status"] == "locked"
     who = lambda uid: (people.get(uid or "", {}) or {}).get("full_name") or (people.get(uid or "", {}) or {}).get("username") or ""
 
-    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", _today().isoformat()),
+    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", facility_today().isoformat()),
                          period.get("days", 7)) if c.get("ribbon") else ""
     legend = "".join(f'<span class="lg"><span class="dot" style="background:{_color(b.get("color"))}"></span>{_e(b.get("sop"))}</span>'
                      for b in c.get("metrics", {}).get("per_sop", [])[:12])
@@ -1504,7 +1481,7 @@ def _html_export(doc: dict, people: dict) -> str:
                  if dept else "All departments / Сите оддели")
     status_chip = ('<span class="chip locked">LOCKED · SUBMITTED</span>' if is_locked
                    else '<span class="chip draft">DRAFT / НАЦРТ</span>')
-    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", _today().isoformat()),
+    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", facility_today().isoformat()),
                          period.get("days", 7)) if c.get("ribbon") else ""
     legend = "".join(
         f'<span class="lg"><span class="dot" style="background:{_color(b.get("color"))}"></span>{_e(b.get("sop"))}</span>'
@@ -1605,7 +1582,7 @@ async def export_range_pdf(body: RangeExportReq, user: dict = Depends(require_ro
             raise HTTPException(422, "content.period.start must be ISO format YYYY-MM-DD")
     kind = content.get("kind") if content.get("kind") in ("report", "plan") else body.kind
     doc = {"content": content, "status": "preview", "kind": kind,
-           "week_start": start_s or _today().isoformat(),
+           "week_start": start_s or facility_today().isoformat(),
            "locked_by": None, "locked_at": None}
     people = await roster(user)
     try:

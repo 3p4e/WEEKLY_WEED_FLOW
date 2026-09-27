@@ -20,7 +20,7 @@ from app.api.tasks import _assert_scope_visible, _scope_clause, _uuid_or_422
 from app.config import settings
 from app.db import rls
 from app.deps import dept_scope, is_dept_scoped_role, require_password_set, require_role
-from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
+from app.roles import ADMIN, ELEVATED_ROLES
 from app.roster import roster
 
 router = APIRouter(prefix="/ai", tags=["ai"])

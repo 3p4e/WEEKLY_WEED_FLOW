@@ -47,7 +47,6 @@ window.GF = window.GF || {};
   const EN_DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const mk = () => GF.state && GF.state.lang === 'mk';
-  const monthName = (m) => (mk() ? MK_MONTHS : EN_MONTHS)[m];
 
   const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
   const parse = (iso) => {

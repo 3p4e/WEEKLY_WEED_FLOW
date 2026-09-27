@@ -38,11 +38,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.api.decon import assert_room_authority
-from app.config import settings
 from app.db import rls
 from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
+from app.worktime import site_today
 
 router = APIRouter(prefix="/decon", tags=["decon"])
 
@@ -58,15 +58,6 @@ _FAIL_RESULTS = ("fail", "below_spec")
 # fetches open items and could never be resolved from it (review 2026-09-27,
 # BC-10 — the UI side is web/gf/decon-view.js).
 _OPEN_RESULTS = (*_FAIL_RESULTS, "pending")
-
-
-def _site_tz() -> str:
-    return settings.snapshot_tz or "UTC"
-
-
-async def _site_today(c) -> date:
-    """Today AT THE SITE, resolved by Postgres — never `date.today()`."""
-    return await c.fetchval("SELECT (now() AT TIME ZONE $1)::date", _site_tz())
 
 
 async def _room_or_422(c, room_id: str, user: dict):
@@ -155,7 +146,7 @@ async def create_biosecurity(body: BioIn, user: dict = Depends(require_role(*_RE
     async with rls(user) as c:
         if body.room_id is not None:
             await _room_or_422(c, body.room_id, user)
-        occurred_on = body.occurred_on or await _site_today(c)
+        occurred_on = body.occurred_on or await site_today(c)
         row = await c.fetchrow(
             "INSERT INTO biosecurity_events(org_id, kind, room_id, location,"
             " occurred_on, subject, action, measure_value, measure_unit, result,"

@@ -491,7 +491,7 @@ async def _reset_locked(org_id: uuid.UUID, data: dict) -> dict:
             # by the seed, complies computed the same way add_result would.
             batch = data["batch"]
             mcode, men, mmk = data["material"]
-            qc_mgr, lab_tech, qp = person_ids["qc"], person_ids["op_qc"], person_ids["qp"]
+            qc_mgr, lab_tech = person_ids["qc"], person_ids["op_qc"]
             # Demo PP-#### document codes come from a dedicated reserved range
             # (…-9001), generated in Python — NEVER from nextval() — so starting or
             # resetting the demo does not advance the shared production qc_*_id_seq

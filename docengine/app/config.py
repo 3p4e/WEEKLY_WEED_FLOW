@@ -5,7 +5,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]          # docengine/
 ENGINE_SCRIPTS = ROOT / "engine" / "scripts"
-ENGINE_ASSETS = ROOT / "engine" / "assets"
 
 
 class Settings:

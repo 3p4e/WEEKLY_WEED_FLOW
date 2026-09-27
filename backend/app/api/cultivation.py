@@ -89,7 +89,7 @@ from datetime import date, timedelta
 
 from asyncpg.exceptions import UniqueViolationError
 
-from app.worktime import SITE_TODAY_SQL, facility_today
+from app.worktime import SITE_TODAY_SQL, facility_today, site_today
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -330,11 +330,11 @@ async def _generate_phase_tasks(c, user: dict, batch, to_phase: str, occurred_on
     return ids
 
 
-async def _site_today(c):
-    """Today as POSTGRES sees the facility — the same clock SITE_TODAY_SQL
-    stamps rows with, so an expected date computed here can never be a day off
-    from the date the record carries (harvest.py resolves it the same way)."""
-    return await c.fetchval(f"SELECT {SITE_TODAY_SQL}")  # nosec B608
+# Today as POSTGRES sees the facility — the same clock SITE_TODAY_SQL stamps
+# rows with, so an expected date computed here can never be a day off from the
+# date the record carries. One implementation, in worktime (INV-09);
+# trichome.py imports it from here.
+_site_today = site_today
 
 
 async def _product_or_422(c, product_id, cultivar_id):

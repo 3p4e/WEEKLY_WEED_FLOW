@@ -27,7 +27,7 @@ from app.api.tasks import _assert_scope_visible
 from app.api.weekwindow import ensure_week
 from app.config import capture_import_token
 from app.db import rls, rls_users, users_admin_pool
-from app.deps import dept_scope, require_password_set
+from app.deps import dept_scope
 from app.worktime import MAX_SESSION_HOURS, TZ
 
 router = APIRouter(prefix="/capture", tags=["capture"])

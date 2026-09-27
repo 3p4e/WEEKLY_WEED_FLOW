@@ -41,12 +41,30 @@ SITE_TODAY_SQL = f"(now() AT TIME ZONE {SITE_TZ_SQL})::date"
 SITE_YEAR_SQL = f"to_char(now() AT TIME ZONE {SITE_TZ_SQL},'YYYY')"
 
 
+# The zone NAME, for binding as a query parameter ($n) where a statement
+# converts a column rather than asking for today.
+SITE_TZ = settings.snapshot_tz
+
+
+async def site_today(c):
+    """Today's date AT THE SITE, resolved by Postgres on connection `c`.
+
+    Use it where the day is compared against a timestamp Postgres converts
+    (the PHI gate renders `applied_at` at the site zone in SQL): resolving
+    both in SQL means the same tzdata does both conversions, so they cannot
+    drift apart — the bug class migration 0050 exists because of. Anywhere
+    else facility_today() is the same answer without a round trip. One copy
+    for every module (review 2026-09-27b, INV-09: harvest, biosecurity,
+    irrigation and cultivation each carried their own)."""
+    return await c.fetchval(f"SELECT {SITE_TODAY_SQL}")  # nosec B608 — module constant
+
+
 def facility_today():
     """Today as the FACILITY sees it — never `date.today()`.
 
     `date.today()` renders under the process's zone (UTC in every container
     and in CI), while the SQL side of this codebase converts timestamps at
-    settings.snapshot_tz (see harvest._site_today and the audit views). The
+    settings.snapshot_tz (see site_today below and the audit views). The
     two disagree every night between facility-midnight and UTC-midnight —
     for Europe/Skopje that is a standing 1–2 h window in which "today" is
     Friday to the database and still Thursday to naive Python, weekly

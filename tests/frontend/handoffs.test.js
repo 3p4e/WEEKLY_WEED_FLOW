@@ -216,19 +216,21 @@ test('Approvals lists the handoffs addressed to my department with Accept / Reje
   const h = load({ id: 'pm', role: 'PR_MGR', department_id: 'pr' }, ['approvals-view.js']);
   const w = h.window;
   w.GF.API.approvalsPending = async () => ({ mine: [], team: [] });
-  let notifQuery = null;
-  w.GF.API.notifications = async (q) => { notifQuery = q; return [
-    { id: 'n1', verb: 'handoff', task_id: 't1', params: { title: 'Dry room C183', to_dept: 'Production' }, created_at: '2026-07-30T07:00:00Z' },
-    { id: 'n2', verb: 'handoff', task_id: 't2', params: { title: 'Not for me', to_dept: 'Cultivation' }, created_at: '2026-07-30T07:00:00Z' },
-  ]; };
-  w.GF.API.handoffs = async (taskId) => taskId === 't1'
-    ? [{ ...H, created_at: '2026-07-30T06:00:00Z' }, { ...H, id: 'h0', status: 'rejected' }]
-    : [{ ...H, id: 'h2', task_id: 't2', from_dept_id: 'pr', to_dept_id: 'cu', status: 'proposed' }];
+  // The server's list (GET /handoffs/pending) — read from the handoffs, not
+  // the inbox, so a proposal whose notification was marked Done still shows
+  // (R2-FE-09). A row the client's rights rule would not let me decide is
+  // still dropped, belt and braces.
+  let inboxRead = false;
+  w.GF.API.notifications = async () => { inboxRead = true; return []; };
+  w.GF.API.pendingHandoffs = async () => [
+    { ...H, task_title: 'Dry room C183', target_side: true, created_at: '2026-07-30T06:00:00Z' },
+    { ...H, id: 'h2', task_id: 't2', task_title: 'Not for me', from_dept_id: 'pr', to_dept_id: 'cu', target_side: false },
+  ];
   w.GF.t = (k) => k;
   w.GF.state.view = 'approvals';
   await w.GF.WWF.loadApprovals();
   const st = w.GF.WWF._apv;
-  assert.equal(notifQuery && notifQuery.limit, 200, 'the inbox is read at its maximum page, not the default 50 (R2-FE-09)');
+  assert.equal(inboxRead, false, 'the list no longer depends on the inbox (R2-FE-09)');
   assert.deepEqual(toJS(st.handoffs.map(x => x.id)), ['h1'], 'only proposed handoffs I may decide on');
   const html = w.GF.views.approvals();
   assert.match(html, /Handoffs to your department/);
@@ -245,7 +247,7 @@ test('accepting from Approvals resolves through the server and reloads the list'
   const h = load({ id: 'pm', role: 'PR_MGR', department_id: 'pr' }, ['approvals-view.js']);
   const w = h.window;
   w.GF.API.approvalsPending = async () => ({ mine: [], team: [] });
-  w.GF.API.notifications = async () => [];
+  w.GF.API.pendingHandoffs = async () => [];
   const calls = [];
   w.GF.API.resolveHandoff = async (id, status) => { calls.push([id, status]); return { ok: true }; };
   w.GF.toast = () => {};

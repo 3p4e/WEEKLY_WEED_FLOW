@@ -112,9 +112,11 @@ name a product of the cultivar, APPROVED CoQs that name only the cultivar,
 and certificate Total THC results attributed to the strain by the batch
 code's head. The strain-level figure counts each lot once (a CoQ and the
 certificate it aggregates are one measurement); the product-level subset
-(CoQs naming THIS product code, any version) is reported beside it. The SQL
-is a self-contained copy of qc/products.py's — the two modules are owned
-separately, and a shared import would couple their release cadences.
+(CoQs naming THIS product code, any version) is reported beside it. The CoQ
+Total THC read and the certificate source are qc/products.py's own, imported:
+a private copy here had already drifted once (review 2026-09-27b, INV-09 —
+the copy still read stored total rows, which QC-10 refuses, so the mother's
+certificate figure was always empty).
 """
 import json
 from datetime import date
@@ -127,6 +129,8 @@ from pydantic import BaseModel, Field
 from app.db import rls
 from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
+from app.api.qc.products import COQ_TOTAL_THC_SQL as _TOTAL_LINE
+from app.api.qc.products import certificate_total_thc
 from app.plantids import (MAX_CUTTING_NO, MAX_GENERATION, MAX_MOTHER_NO, MAX_STOCK_NO,
                           acronym_of, mother_code)
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
@@ -375,16 +379,9 @@ async def update_campaign(campaign_id: str, body: CampaignPatch,
 
 # ── the mother-plant bank ────────────────────────────────────────────────────
 
-# The measured Total Δ9-THC of an APPROVED CoQ — the same read the products
-# module and the CoQ disposition use, so the three can never disagree.
-_TOTAL_LINE = (
-    "SELECT l.result_numeric FROM qc_coq_lines l"
-    " JOIN qc_spec_parameters sp ON sp.id = l.parameter_id"
-    " WHERE l.coq_id = q.id AND sp.computed_kind='total_thc'"
-    " AND l.result_numeric IS NOT NULL LIMIT 1")
-
 # The three sources of "tested so far" for a strain (see the module header).
-# Self-contained copies of qc/products.py::_potency_history's reads.
+# _TOTAL_LINE is qc/products.py's COQ_TOTAL_THC_SQL, the read the CoQ
+# disposition uses; the certificate source is certificate_total_thc.
 _COQ_PRODUCT_SQL = (
     "SELECT q.id, q.coq_number, q.batch_id AS lot_code, q.compiled_at AS on_at,"
     " pr.product_code, (" + _TOTAL_LINE + ") AS total_thc"
@@ -396,21 +393,6 @@ _COQ_CULTIVAR_SQL = (
     " FROM qc_coq q"
     " WHERE q.product_id IS NULL AND q.cultivar_id=$1 AND q.status='APPROVED'"
     " ORDER BY q.compiled_at")
-# Certificates of this cultivar's own batches: plant_batches.code is the CU
-# batch (GP072501); a certificate names its batch as free text, so match the
-# certificate's cultivation_batch or its batch_id against those codes.
-_CERT_SQL = (
-    "SELECT ct.id, ct.coa_number, ct.batch_id AS lot_code, ct.report_date AS on_at,"
-    " r.result_numeric AS total_thc"
-    " FROM qc_certificates ct"
-    " JOIN qc_results r ON r.coa_id = ct.id"
-    " JOIN qc_spec_parameters sp ON sp.id = r.parameter_id"
-    " WHERE sp.computed_kind='total_thc' AND r.result_numeric IS NOT NULL"
-    "   AND ct.status = ANY(ARRAY['APPROVED','RELEASED'])"
-    "   AND (ct.batch_id IN (SELECT code FROM plant_batches WHERE cultivar_id=$1 AND code IS NOT NULL)"
-    "     OR ct.cultivation_batch IN (SELECT code FROM plant_batches WHERE cultivar_id=$1"
-    "                                 AND code IS NOT NULL))"
-    " ORDER BY ct.report_date NULLS LAST")
 
 
 def _stats(rows) -> dict:
@@ -435,7 +417,11 @@ async def _strain_history(c, cultivar_id, product_code=None) -> dict:
     stated = _hist_rows(await c.fetch(_COQ_PRODUCT_SQL, cultivar_id), "coq_number", "coq_product")
     cultivar_level = _hist_rows(await c.fetch(_COQ_CULTIVAR_SQL, cultivar_id),
                                 "coq_number", "coq_cultivar")
-    certs = _hist_rows(await c.fetch(_CERT_SQL, cultivar_id), "coa_number", "certificate")
+    cv_code = await c.fetchval("SELECT code FROM cultivars WHERE id=$1", cultivar_id)
+    certs = _hist_rows([{"coa_number": r["coa_number"], "lot_code": r["batch_id"],
+                         "on_at": r["report_date"], "total_thc": r["total_thc"]}
+                        for r in await certificate_total_thc(c, cultivar_id, cv_code)],
+                       "coa_number", "certificate")
     # One measurement per lot: a CoQ aggregates the certificate it was compiled
     # from, so the same Total THC must not be averaged twice. Strongest source
     # first, and a source with no lot code cannot be matched, so it counts.

@@ -135,6 +135,26 @@ async def test_qc10_single_certificate_coq_refuses_a_transcribed_total(client, a
     assert r.status_code == 409 and "never transcribed" in r.json()["detail"], r.text
 
 
+async def test_inv09_aggregation_coq_refuses_a_transcribed_total_too(client, admin_headers):
+    """Review 2026-09-27b INV-09: the aggregation CoQ used to ignore a legacy
+    transcribed total and compute from the components, while the
+    single-certificate CoQ refused the same certificate. One rule: both refuse,
+    and the message names the certificate."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec, pa, pb, pt = await _computed_spec(client, admin_headers, material="INV09-LEG")
+    coa = await _release_with_components(client, admin_headers, qp, spec, pa, pb, "B-INV09")
+    pool = await _admin_pool()
+    await pool.execute(
+        "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_numeric, unit,"
+        " lower_limit, upper_limit, complies, status)"
+        " SELECT org_id, id, $2, 'Total THC', 19.0, '%', 10, 30, true, 'pass' FROM qc_certificates WHERE id=$1",
+        coa["id"], pt["id"])
+    r = await client.post("/qc/coq", json={"batch_id": "B-INV09", "specification_id": spec["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 409 and "never transcribed" in r.json()["detail"], r.text
+    assert coa["coa_number"] in r.json()["detail"]
+
+
 # ── QC-03 / QC-17: parsing and units ────────────────────────────────────────
 
 async def test_qc03_comma_decimal_is_read_under_the_lab_separator(client, admin_headers):

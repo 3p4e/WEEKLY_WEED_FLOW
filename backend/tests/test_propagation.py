@@ -342,6 +342,39 @@ async def test_a_mother_shows_what_its_specification_strain_has_tested(client, a
     assert row["tested"]["n"] == 1 and round(row["tested"]["avg"], 2) == 23.98
 
 
+async def test_a_mother_counts_its_strains_certificates_by_batch_code_head(client, admin_headers):
+    """Review 2026-09-27b, INV-09: the mother bank's certificate source is the
+    catalogue's own (qc/products.py certificate_total_thc). Its private copy
+    joined stored Total THC rows, which QC-10 refuses, so a released
+    certificate never reached a mother. Now the total is derived from the
+    components and the lot is attributed by the batch-code head."""
+    from tests.test_qc import _computed_spec, _release_with_components
+    _, qp = await _actor(client, admin_headers, "QP")
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    cv = await _cultivar(client, cu_h)
+    prod = await _approved_product(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    m = await _mother(client, cu_h, prod["id"], camp["id"])
+    spec, pa, pb, pt = await _computed_spec(client, admin_headers, material="MOTHER-CERT")
+    # 2.0 + 0.877 × 25.06 = 23.98, on a GP-headed lot, certificate only (no CoQ)
+    await _release_with_components(client, admin_headers, qp, spec, pa, pb, "GP092601",
+                                   a_val=2.0, b_val=25.06)
+    # another strain's lot is not this mother's evidence
+    await _release_with_components(client, admin_headers, qp, spec, pa, pb, "OPM092601",
+                                   a_val=1.0, b_val=20.0)
+
+    body = (await client.get(f"/cultivation/mothers/{m['id']}/potency", headers=cu_h)).json()
+    cert = body["sources"]["certificate"]
+    assert cert["n"] == 1 and round(cert["avg"], 2) == 23.98, cert
+    assert cert["values"][0]["lot_code"] == "GP092601"
+    assert body["strain"]["n"] == 1 and body["strain"]["values"][0]["source"] == "certificate"
+    # The catalogue reports the same certificate from the same function.
+    hist = (await client.get(f"/qc/products/{prod['id']}/potency-history",
+                             headers=admin_headers)).json()
+    assert hist["certificate_level"]["n"] == 1
+    assert round(hist["certificate_level"]["avg"], 2) == round(cert["avg"], 2)
+
+
 async def test_a_run_feeds_a_batch_of_the_same_cultivar_only(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     gp = await _cultivar(client, cu_h, "GP", "Grape Pie")
@@ -673,8 +706,10 @@ async def test_a_reissued_catalogue_page_does_not_freeze_the_line(client, admin_
     assert all(x["product_code"] == "GP_THC26:CBD1" for x in bank.values())
 
     # Another CODE cannot take the line, and a clone cannot change its code.
+    # Its window stops below GP_THC26's 24.60: a strain's grades never overlap
+    # within one document version (owner 2026-09-06; QR-09 enforces it).
     gp24 = await _approved_product(client, admin_headers, cv["id"], "GP_THC24:CBD1", 24,
-                                   window=(22.6, 25.59), doc_version="fitted 2026-09-15")
+                                   window=(22.6, 24.59), doc_version="fitted 2026-09-15")
     r = await client.post("/cultivation/mothers", json={
         "product_id": gp24["id"], "campaign_id": camp["id"], "mother_no": 1}, headers=cu_h)
     assert r.status_code == 422 and "GP_THC26:CBD1" in r.text

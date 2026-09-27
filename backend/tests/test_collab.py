@@ -315,6 +315,48 @@ async def test_handoff_reaches_the_receiving_manager_who_can_open_the_task_while
     assert (await client.get(f"/tasks/{tid}", headers=cu_h)).status_code == 404
 
 
+async def test_pending_handoffs_lists_what_the_caller_may_decide_until_it_is_resolved(
+        client, admin_headers):
+    """Review 2026-09-27b, R2-FE-09. The Approvals list was rebuilt from
+    `handoff` notifications, so marking the notification Done dropped the
+    proposal from the only list that showed it. GET /handoffs/pending reads
+    the handoffs themselves: the receiving side (here through the parent
+    department) sees the proposal after the notification is done; the
+    proposing department-scoped manager does not; an org-wide role sees it as
+    an arbiter; nobody sees it once it is resolved."""
+    src = (await client.post("/departments", json={"code": "hp_src", "name": "Source"},
+                             headers=admin_headers)).json()
+    cult = (await client.post("/departments", json={"code": "hp_cult", "name": "Cultivation"},
+                              headers=admin_headers)).json()
+    clone = (await client.post("/departments", json={"code": "hp_clone", "name": "Cloning",
+                                                     "parent_id": cult["id"]},
+                               headers=admin_headers)).json()
+    _, src_h = await _mgr(client, admin_headers, "QC_MGR", src["id"])
+    _, cu_h = await _mgr(client, admin_headers, "CU_MGR", cult["id"])
+    tid = (await client.post("/tasks", json={"title": "Cuttings for GP", "department_id": src["id"]},
+                             headers=src_h)).json()["id"]
+    hid = (await client.post(f"/tasks/{tid}/handoffs", json={"to_dept_id": clone["id"]},
+                             headers=src_h)).json()["id"]
+
+    # the recipient marks the notification done — the proposal must stay listed
+    for n in (await client.get("/notifications", headers=cu_h)).json():
+        if n["verb"] == "handoff" and n["task_id"] == tid:
+            assert (await client.post(f"/notifications/{n['id']}/done", headers=cu_h)).status_code in (200, 204)
+    assert not [n for n in (await client.get("/notifications", headers=cu_h)).json()
+                if n["verb"] == "handoff" and n["task_id"] == tid]
+    rows = (await client.get("/handoffs/pending", headers=cu_h)).json()
+    assert [(r["id"], r["task_title"], r["target_side"]) for r in rows] == [(hid, "Cuttings for GP", True)]
+    # the proposer's department is not the receiving side
+    assert (await client.get("/handoffs/pending", headers=src_h)).json() == []
+    # an org-wide role may arbitrate it, and is told it is not the target side
+    arb = [r for r in (await client.get("/handoffs/pending", headers=admin_headers)).json() if r["id"] == hid]
+    assert len(arb) == 1 and arb[0]["target_side"] is False
+
+    assert (await client.post(f"/handoffs/{hid}/resolve", json={"status": "accepted"},
+                              headers=cu_h)).status_code == 200
+    assert (await client.get("/handoffs/pending", headers=cu_h)).json() == []
+
+
 async def test_a_pending_handoff_opens_the_task_to_the_receiving_manager_for_reading_only(
         client, admin_headers):
     """Review 2026-09-27, R2-BC-04. A proposal addressed to my department lets

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
 from app.db import rls, rls_users, tasks_admin_pool, users_admin_pool
-from app.deps import get_current_user, require_password_set, require_role, uuid_or_404
+from app.deps import dept_family, get_current_user, require_password_set, require_role, uuid_or_404
 from app.roles import ADMIN, CREATABLE_ROLES, DEPT_SCOPED_ROLES, ELEVATED_ROLES, MANAGER_ROLES
 from app.security import BCRYPT_MAX_BYTES, create_access_token, hash_password, verify_password
 from app.worktime import facility_today
@@ -321,9 +321,10 @@ async def _actor_family(actor: dict) -> list[str] | None:
     reaches _can_manage's manager branch. Read from the tasks DB, where
     departments live; the actor's own department is always in the answer."""
     if actor["role"] in MANAGER_ROLES and actor.get("department_id"):
+        # deps.dept_family is the one Python reading of app.dept_family (and
+        # its unknown-root → [root] fallback) — review 2026-09-27b, INV-09.
         async with tasks_admin_pool().acquire() as c:
-            arr = await c.fetchval("SELECT app.dept_family($1::uuid)", str(actor["department_id"]))
-        return [str(x) for x in (arr or [actor["department_id"]])]
+            return await dept_family(c, str(actor["department_id"]))
     return None
 
 

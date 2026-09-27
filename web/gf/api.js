@@ -526,6 +526,8 @@ GF.API = {
   handoffs(id)                 { return this._req('GET', '/tasks/' + id + '/handoffs'); },
   proposeHandoff(id, toDeptId, note) { return this._req('POST', '/tasks/' + id + '/handoffs', { to_dept_id: toDeptId, note: note || null }); },
   resolveHandoff(handoffId, status)  { return this._req('POST', '/handoffs/' + handoffId + '/resolve', { status }); },
+  // Proposed handoffs the caller may accept or reject (R2-FE-09).
+  pendingHandoffs()                  { return this._req('GET', '/handoffs/pending'); },
   addProgress(id, p)   { return this._req('POST', '/tasks/' + id + '/progress', p); },
   ai(fn, payload)      { return this._req('POST', '/ai/' + fn, payload || {}); },
   bilingual(body)      { return this._req('POST', '/intake/bilingual', body); },

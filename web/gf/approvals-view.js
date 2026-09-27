@@ -18,35 +18,20 @@
   // Cross-department handoffs waiting on THIS user. The receiving
   // department's manager is the person a proposal is addressed to, and the
   // task itself still sits in the source department — so it is on no board
-  // of theirs, and until now nothing listed it for them (review 2026-09-27,
-  // FE-06 / BC-04). There is no list endpoint; the proposals reach the user
-  // as `handoff` notifications, and each task's handoffs are read from
-  // there. A task the server will not show (404) simply contributes nothing.
-  //
-  // The inbox is read at its maximum page (notifications.py: limit ≤ 200;
-  // the default of 50 hid a proposal older than a week of due/overdue rows —
-  // review 2026-09-27, R2-FE-09). The list still cannot see a proposal
-  // whose notification the recipient marked Done: the endpoint filters
-  // `done_at IS NULL` server-side, and only a `GET /handoffs?to_dept=mine`
-  // list (DECISIONS E-5) or an include_done flag closes that.
+  // of theirs (review 2026-09-27, FE-06 / BC-04). GET /handoffs/pending lists
+  // the proposals the server lets this caller accept or reject, read from the
+  // handoffs themselves: the list used to be rebuilt from `handoff`
+  // notifications, so a proposal vanished once its notification was marked
+  // Done (review 2026-09-27b, R2-FE-09). handoffRights still decides which
+  // buttons render, from the same rule the server applies.
   const loadHandoffs = async () => {
-    if (!GF.API.notifications || !GF.API.handoffs || !GF.WWF.handoffRights) return [];
-    let items = [];
-    try { items = (await GF.API.notifications({ limit: 200 })) || []; } catch (e) { return []; }
-    const titles = {};
-    const taskIds = [];
-    items.forEach(n => {
-      if (n.verb !== 'handoff' || !n.task_id) return;
-      if (n.params && n.params.title) titles[n.task_id] = n.params.title;
-      if (!taskIds.includes(n.task_id)) taskIds.push(n.task_id);
-    });
-    const lists = await Promise.all(taskIds.map(id => GF.API.handoffs(id).catch(() => [])));
+    if (!GF.API.pendingHandoffs || !GF.WWF.handoffRights) return [];
+    const rows = (await GF.API.pendingHandoffs()) || [];
     const out = [];
-    lists.forEach((hs, i) => (hs || []).forEach(h => {
-      if (h.status !== 'proposed') return;
+    rows.forEach(h => {
       const r = GF.WWF.handoffRights(h);
-      if (r.accept || r.reject) out.push({ ...h, title: titles[taskIds[i]] || '', rights: r });
-    }));
+      if (r.accept || r.reject) out.push({ ...h, title: h.task_title || '', rights: r });
+    });
     return out;
   };
 

@@ -26,7 +26,6 @@
 
   // Shared QC/LIMS role gates (core.js GF.QC_HOQC / GF.QC_WRITERS).
   const canApprove = () => GF.QC_HOQC.includes((GF.API.user || {}).role);
-  const canWrite = () => GF.QC_WRITERS.includes((GF.API.user || {}).role);
 
   const ST = {
     DRAFT: { en: 'Draft', mk: 'Нацрт', c: 'var(--orange)' },

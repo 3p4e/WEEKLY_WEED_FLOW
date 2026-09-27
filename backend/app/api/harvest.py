@@ -98,12 +98,11 @@ from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.config import settings
 from app.db import rls
 from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
-from app.worktime import SITE_TODAY_SQL
+from app.worktime import SITE_TODAY_SQL, SITE_TZ, site_today
 
 router = APIRouter(prefix="/cultivation", tags=["cultivation"])
 
@@ -136,29 +135,12 @@ _TERMINAL_PHASES = ("harvested", "destroyed")
 _LOSS_PLAUSIBLE_MIN_PCT = 60.0
 _LOSS_PLAUSIBLE_MAX_PCT = 92.0
 
-# The zone a calendar-day interval is counted in. A pre-harvest interval is N
-# CALENDAR DAYS AT THE SITE, so the application timestamp is rendered in the
-# facility zone explicitly rather than left to whatever TimeZone the reading
-# session happens to carry. Leaving it to the session is precisely the bug
-# migration 0050 was written to fix in the audit chain.
-def _site_tz() -> str:
-    return settings.snapshot_tz or "UTC"
-
-
-async def _site_today(c) -> date:
-    """Today's date AT THE SITE, resolved by Postgres.
-
-    Not `date.today()`: that renders under the *container's* zone (UTC), while
-    every PHI comparison in this module renders `applied_at` under the site zone.
-    Mixing the two means that for a couple of hours each evening "today" and the
-    interval it is compared against disagree by a day — which is a gate that
-    opens early, i.e. wrong in the permissive direction.
-
-    Resolved in SQL rather than with `zoneinfo` so the zone database doing the
-    conversion is the SAME one doing it inside `_PHI_BLOCK_SQL`. Two tzdata
-    copies that could drift apart is exactly the class of bug migration 0050
-    exists because of."""
-    return await c.fetchval("SELECT (now() AT TIME ZONE $1)::date", _site_tz())
+# The zone a calendar-day interval is counted in is worktime.SITE_TZ, bound as
+# a parameter. A pre-harvest interval is N CALENDAR DAYS AT THE SITE, so the
+# application timestamp is rendered in the facility zone explicitly rather than
+# left to whatever TimeZone the reading session happens to carry. Leaving it to
+# the session is precisely the bug migration 0050 was written to fix in the
+# audit chain. "Today" is worktime.site_today(c), resolved by the same tzdata.
 
 
 class IpmIn(BaseModel):
@@ -328,7 +310,7 @@ async def list_ipm(user: dict = Depends(require_role(*ELEVATED_ROLES)),
             " WHERE ($1::uuid IS NULL OR a.batch_id=$1)"
             "   AND ($2::uuid IS NULL OR a.room_id=$2)"
             " ORDER BY a.applied_at DESC LIMIT $4",
-            batch_id, room_id, _site_tz(), limit)
+            batch_id, room_id, SITE_TZ, limit)
     now = datetime.now(timezone.utc)
     return {"applications": [{
         "id": str(r["id"]),
@@ -423,7 +405,7 @@ ORDER BY ((a.applied_at AT TIME ZONE $3)::date + a.phi_days) DESC
 
 
 async def _phi_blocks(c, batch, on: date):
-    return await c.fetch(_PHI_BLOCK_SQL, batch["id"], batch["room_id"], _site_tz(), on)
+    return await c.fetch(_PHI_BLOCK_SQL, batch["id"], batch["room_id"], SITE_TZ, on)
 
 
 def _block_out(r) -> dict:
@@ -451,7 +433,7 @@ async def harvest_clearance(batch_id: str,
     this endpoint is the explanation, never the gate."""
     async with rls(user) as c:
         b = await _batch_or_422(c, batch_id)
-        when = on or await _site_today(c)
+        when = on or await site_today(c)
         blocks = await _phi_blocks(c, b, when)
         # Re-entry is a separate control with a separate clock (hours, not days)
         # and it restricts PEOPLE rather than product. It is reported alongside
@@ -591,7 +573,7 @@ async def create_harvest(body: HarvestIn, user: dict = Depends(require_role(*_CU
         # date is refused rather than clamped. A backdated cut is still
         # evaluated on its own date, which is the stricter reading: the plants
         # came off on that day, and the interval had or had not elapsed then.
-        today = await _site_today(c)
+        today = await site_today(c)
         if body.harvested_on is not None and body.harvested_on > today:
             raise HTTPException(
                 422, f"harvested_on {body.harvested_on.isoformat()} is after today"
@@ -712,13 +694,13 @@ async def record_dry(harvest_id: str, body: DryIn,
         row = await c.fetchrow(
             # Site-zone date, not CURRENT_DATE: CURRENT_DATE renders under the
             # session's TimeZone, so the same lot dried at 01:00 local would be
-            # dated the previous day. Same reasoning as _site_today().
+            # dated the previous day. Same reasoning as worktime.site_today().
             "UPDATE harvests SET status='dried',"
             " dried_on=COALESCE($1::date, (now() AT TIME ZONE $2)::date),"
             " dry_flower_g=$3, dry_trim_g=$4, dry_waste_g=$5,"
             " note=COALESCE($6, note), updated_by=$7, updated_at=now()"
             " WHERE id=$8 RETURNING *",
-            body.dried_on, _site_tz(), body.dry_flower_g, body.dry_trim_g,
+            body.dried_on, SITE_TZ, body.dry_flower_g, body.dry_trim_g,
             body.dry_waste_g, body.note, user["id"], harvest_id)
         loss = _loss_pct(wet, total)
         await safe_emit(c, user, verb="harvest_dried", object_type="harvest",

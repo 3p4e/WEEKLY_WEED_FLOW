@@ -40,7 +40,6 @@ import re
 # The inner class excludes both brackets so a malformed or nested marker fails
 # to match rather than swallowing the rest of the line, and the length cap
 # stops a runaway '[' from consuming a paragraph.
-MARKER = "NEEDS INPUT"
 _NEEDS = re.compile(r"\[\s*NEEDS\s+INPUT\s*:\s*([^\[\]]{1,300}?)\s*\]", re.I)
 
 # What the agents are told, in one place, so the wording cannot drift between

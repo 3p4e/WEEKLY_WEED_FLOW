@@ -45,7 +45,6 @@ def _require_elevated(user: dict = Depends(require_password_set)) -> dict:
 # formatting with the hard `RESULT: PASS` gate. Internal container, key
 # injected here, explicit endpoint surface only.
 
-_DE_UNAVAILABLE = docengine.DE_UNAVAILABLE
 # Controlled-document AUTHORING is a quality function: QP, QA manager, ADMIN
 # (and OWNER — the site's top authority). Reading stays at elevated.
 _AUTHOR_ROLES = (ADMIN, "OWNER", "QP", "QA_MGR")

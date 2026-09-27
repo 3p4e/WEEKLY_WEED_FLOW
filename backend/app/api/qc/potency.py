@@ -20,7 +20,6 @@ consumed by the certificate pipeline.
 Segregation of duties mirrors the eCoA control (M5): the person who APPROVES a
 ladder must not be the person who authored it.
 """
-from datetime import date
 
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field

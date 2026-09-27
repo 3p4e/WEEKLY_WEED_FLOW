@@ -363,6 +363,38 @@ async def list_handoffs(task_id: str, user: dict = Depends(require_password_set)
     return [dict(r) for r in rows]
 
 
+@router.get("/handoffs/pending")
+async def pending_handoffs(user: dict = Depends(require_password_set)):
+    """Proposed handoffs this caller may decide — the receiving side's worklist
+    (review 2026-09-27b, R2-FE-09; DECISIONS E-5).
+
+    The Approvals view used to rebuild this list from `handoff` notifications,
+    so a proposal vanished the moment its recipient marked the notification
+    Done, while the task itself still waited in the source department. This
+    reads the handoffs table, so a proposal stays listed until it is resolved.
+
+    Who sees a row is resolve_handoff's rule for accept/reject: the target
+    department's head, a manager whose department family contains the target
+    (Cultivation's manager for Cloning), or an org-wide elevated role (ADMIN,
+    executives, QP) who may arbitrate any of them. `target_side` tells the two
+    apart."""
+    my_dept = str(user.get("department_id") or "")
+    org_wide = user["role"] in _ELEVATED and dept_scope(user) is None
+    async with rls(user) as c:
+        fam = await dept_family(c, my_dept) if (my_dept and user["role"] in _ELEVATED) else []
+        rows = await c.fetch(
+            "SELECT h.*, t.title AS task_title,"
+            " (h.to_dept_id = ANY($2::uuid[]) OR d.head_user_id = $3::uuid) AS target_side"
+            " FROM handoffs h"
+            " LEFT JOIN tasks t ON t.id = h.task_id AND t.is_deleted = false"
+            " LEFT JOIN departments d ON d.id = h.to_dept_id"
+            " WHERE h.status = 'proposed'"
+            "   AND ($1::bool OR h.to_dept_id = ANY($2::uuid[]) OR d.head_user_id = $3::uuid)"
+            " ORDER BY h.created_at DESC LIMIT 500",
+            org_wide, fam, str(user["id"]))
+    return [{**dict(r), "target_side": bool(r["target_side"])} for r in rows]
+
+
 @router.post("/handoffs/{handoff_id}/resolve")
 async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = Depends(require_password_set)):
     """accepted → the task moves into the target department; rejected/cancelled

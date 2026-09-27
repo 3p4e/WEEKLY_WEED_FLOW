@@ -9,7 +9,7 @@ from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from .certificates import VoidIn, _mint_cert_number
-from .common import (CLOSED_OOS_ROWS_SQL, OPEN_OOS_ROWS_SQL, OPEN_OOS_SQL, _COQ_ROLES, _HOQC,
+from .common import (OPEN_OOS_ROWS_SQL, OPEN_OOS_SQL, _COQ_ROLES, _HOQC,
                      _WRITERS, _evaluate, _uuid_or_404, _uuid_or_422, assert_batch_not_rejected,
                      check_derived_total_units, derived_total, norm_batch, norm_test, router)
 from .coq_docx import _coq_client, _coq_manifest, _coq_markdown
@@ -17,9 +17,6 @@ from .laboratories import _lab_scope_set, _result_in_scope
 from .potency import disposition_for
 from .products import conformance_of, names_total_thc
 from .signatures import _sig_out
-
-
-_COQ_STATUSES = ("DRAFT", "APPROVED", "VOIDED")
 
 
 _COQ_VOIDABLE = {"DRAFT", "APPROVED"}
@@ -701,6 +698,19 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
         if p["computed_kind"]:
             # Ph. Eur. 3028 derived total — computed here from the latest
             # component results (total = neutral + 0.877 × acid).
+            # A source certificate that carries a TRANSCRIBED row for it (data
+            # from before the never-transcribed rule) is refused here exactly
+            # as the single-certificate CoQ refuses it — one rule for both
+            # paths (review 2026-09-27b, INV-09). This path used to ignore the
+            # row and compute, so the same certificate got two verdicts.
+            legacy = next((x for x in results if str(x["parameter_id"] or "") == pid), None)
+            if legacy is not None:
+                nm = p["test_name_en"] or p["test_name_mk"] or "?"
+                src = (by_cert.get(str(legacy["coa_id"])) or {}).get("coa_number") or "?"
+                raise HTTPException(
+                    409, f"'{nm}' is a Ph. Eur. 3028 derived total but certificate {src} carries"
+                         " a transcribed result for it — a derived total is computed from its"
+                         " components, never transcribed; revise the certificate without that row")
             ra = latest.get(str(p["component_a_id"])) if p["component_a_id"] else None
             rb = latest.get(str(p["component_b_id"])) if p["component_b_id"] else None
             if not (ra and rb and ra["result_numeric"] is not None
