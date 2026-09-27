@@ -17,7 +17,7 @@ recorded here.
 | 2026-09-05 | QA may move batches through their phases and edit the cultivar master and the mother bank. |
 | 2026-09-05 | The journey shows every open batch at once. Mothers show the potency tested so far for their strain (average and individual Total THC values). |
 | 2026-09-05 | Batch number = strain abbreviation + mmyy (the cloning month) + nn. Mother ID `GP26_S1M03-2_nnn` (product, facility-wide selection campaign, mother number of that campaign, the mother's own generation, stock number 001–999). Clone ID `<mother>-xx.nnn`, xx = consecutive cutting 00–99, nnn = clone within the cutting 001–999. |
-| 2026-09-05 | Phase durations: cloning 7–14 d (imported clones may stay some days more for quarantine); vegetation 14–17 d; flowering 6–9 weeks in one of six flowering rooms; harvest date from documented trichome-maturation records; "harvest, course and defoliating" (his words) = end of GACP → start of GMP — read as "harvest · coarse trim · defoliation" (D-6, unconfirmed). |
+| 2026-09-05 | Phase durations: cloning 7–14 d (imported clones may stay some days more for quarantine); vegetation 14–17 d; flowering 6–9 weeks in one of six flowering rooms; harvest date from documented trichome-maturation records; "harvest, course and defoliating" (the owner's words) = end of GACP → start of GMP — read as "harvest · coarse trim · defoliation" (D-6, unconfirmed). |
 | 2026-09-06 | Out-of-grade rule: a batch whose Total THC falls outside its product window drops to the next grade, is flagged visually, gets a formal OOS on the batch disposition, and a deviation goes to Cultivation and Production. **"NO for now": an out-of-window CoQ is not blocked from issuance** (16:29 and 18:02) — the OOS is opened alongside, not before. |
 | 2026-09-06 | Strain names as printed in the specifications are canonical (e.g. "Pure Michigen", "Clemosa A Bud"). |
 | 2026-09-06 | Cleanliness grades per area type as the owner listed them; trimming/drying treated as Grade D; the plan coloured by grade. |
@@ -106,6 +106,7 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | B-15 | (Fix round 2) The single-certificate CoQ applies the same investigation gates as the aggregated one, keyed on test name or `result_id` — stricter than the aggregation path, which checks masked failures only. | QR-03 |
 | B-16 | (Fix round 2) The 0071 downgrade keeps COMPILED signatures and reseeds the retired sequences past each series' maximum; it refuses before touching anything when RETEST CoQs or two APPROVED CoQs of one batch/spec exist. | QR-12, INV-10 |
 | B-17 | (Fix round 2) Certificate-level potency history is kept and fixed rather than deleted: Total Δ9-THC derived from the components, matched on the batch-code head or an exact registered code, experiment lots (`＊`) skipped per the owner's 2026-09-16 rule. | QR-11 |
+| B-18 | (Fix round 2) A legacy transcribed row on a derived total (Total Δ9-THC) now makes BOTH CoQ paths refuse with 409 and name the certificate; the aggregation path used to ignore the row and compute. The other reading — both paths ignore it and compute — was rejected because it silently certifies over invalid data. | INV-09 |
 | A-1 | The login limiter trusts the X-Forwarded-For header only on the Traefik-side interface (172.16.31.20); a sibling container's header is dropped. A successful login clears the account's budget. | BC-01 |
 | A-2 | PR_MGR records waste manifests and runs decon / gowning for `dry` rooms; witnessing, swabs and release stay QA's. | BC-12 |
 | A-3 | A department's head is maintained by the roster: the first department-scoped manager provisioned into or moved into it becomes head; an existing head is never displaced; ADMIN may set it. | BC-04 |
@@ -123,7 +124,7 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | E-2 | Replaced in fix round 2 (it contradicted B-12): the form still sends the previous recipient as the giver for continuity, but the recorder must be the giver or the receiver — when someone else holds the sample the receiver defaults to the recorder, and "Log transfer" is disabled with the server's sentence while the recorder is neither. | FE-02, QC-29, R2-FE-05 |
 | E-3 | The SOP Registry / Knowledge stub views (which only printed "retired") are deleted from the shell. | FE-21 |
 | E-4 | The biosecurity board loads the 200 most recent events unfiltered (a backend `pending_only` filter would be cleaner). | FE-10 |
-| E-5 | The "handoffs to your department" list is derived from notifications (a backend `GET /handoffs?to_dept=mine` would be cleaner). | FE-06 |
+| E-5 | Superseded in fix round 2: the "handoffs to your department" list reads `GET /handoffs/pending`, the proposals the caller may accept or reject by the resolve rule (target head, a manager whose department family holds the target, or an org-wide role as arbiter, flagged `target_side: false`). It no longer depends on notifications, so marking one Done no longer hides the proposal. | FE-06, R2-FE-09 |
 | E-6 | Executives land in the Analytics module (executive overview) on a fresh browser. | FE-12 |
 | E-7 | (Fix round 2) Approvals lives in the Tasks module's Management group and is reachable by every manager role; a handoff notification opens it only for a role that can, a plain assignee jumps to the task. | R2-FE-01 |
 | E-8 | (Fix round 2) The production manager's waste/decon/biosecurity actions mirror the server's `dry`-room rule client-side and FAIL OPEN when the room registry cannot be read — the server's 403 stays the gate. | R2-FE-03 |
@@ -146,7 +147,7 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | 2026-09-04 | Accounts renamed by a direct database write, outside the provisioning script. | `backend/scripts/provision_test_accounts.py` still creates `tt.*` names. | Align the script or record the scheme as the standard. |
 | 2026-09-25 | The self-hosted CI runner lives on the production host with the docker socket. | `ops/gh-runner/` | When a separate runner host exists (review DI-02). |
 | 2026-09-26 | `wwf-backup-offsite` was not recreated on the new VM; offsite backups are not running. | `docs/BACKUP.md` | As soon as the rotated Drive credential exists. |
-| 2026-09-14 | The `admin` account carries the trivial password the owner set "just for a short while" (10:09). | Production users database. | The owner said he would change it; no record that he did — the BC-23 floor (12) does not touch existing hashes. |
+| 2026-09-14 | The `admin` account carries the trivial password the owner set "just for a short while" (10:09). | Production users database. | The owner said they would change it; no record that they did — the BC-23 floor (12) does not touch existing hashes. |
 | 2026-09-04 | The trial `qc_mgr` account exists "for the trial period" and "will be deleted by an admin" (14:32). | Production users database. | End of the trial period; soft-delete through the app so the audit trail keeps it. |
 
 ## 4. Owner requests with no code yet

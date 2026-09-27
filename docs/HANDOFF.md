@@ -1,4 +1,4 @@
-# Session handoff — where things stand (2026-09-27 09:00 UTC)
+# Session handoff — where things stand (2026-09-27 14:00 UTC)
 
 Written so a new agent session can pick up without the long-running session's
 history. Read `CLAUDE.md` first (access rules, deploy procedure, helpers), then
@@ -16,10 +16,13 @@ the host before acting on it.
    backend core, frontend, DocEngine + infrastructure) fixed the findings in
    isolated worktrees; their branches were cherry-picked onto
    `claude/weekly-read-flow-setup-yft7if` in ~45 commits, with the
-   cross-workstream wiring done on top. The second review is
-   `docs/REVIEW-2026-09-27b.md` (written after the fixes; if that file does not
-   exist yet, the re-review had not finished when this note was written).
-3. Every decision a workstream made on its own is listed in
+   cross-workstream wiring done on top.
+3. The second review re-read everything after those fixes (seven area
+   reports in `docs/review-2026-09-27b/`: 7 high / 32 medium / 55 low), and a
+   second fix round of four workstreams closed them. Both are summarised in
+   `docs/REVIEW-2026-09-27b.md`; its §4 lists what stays open and why, and
+   its §6 the test results on the final head.
+4. Every decision a workstream made on its own is listed in
    `docs/DECISIONS-2026-09.md` §2b, one line each, for the owner's yes or
    correction. Nothing there is hidden in a commit message only.
 
@@ -29,7 +32,7 @@ the host before acting on it.
 | --- | --- | --- | --- |
 | **#52** | `claude/weekly-read-flow-setup-yft7if` | Carries the whole September work plus the review fixes. Check the head's CI before trusting it: the single runner takes ~30 min per run and a push cancels the previous run. | **Owner merges it**, then deploys per the rollout below. |
 | #55 | `claude/audit-fixes-2026-09` @ `e18acd2` | 8/9 green | Only *Security scan* fails: `weasyprint==69.0` inherited from `main`; #52 bumps it. After #52 merges: **Update branch**. |
-| #53 | `claude/sync-potency-spec-service` @ `63474db` | 8/9 green — **and stale**: the branch holds builder `2026.09.16-27`, production runs `-28` (the owner's two-per-page PDF export of 2026-09-16 exists only in the deployed image). | Same single failure, same fix; before merging, copy `web/index.html` off the running container into the branch (the owner, or an agent he authorises — agents must not push to it otherwise). |
+| #53 | `claude/sync-potency-spec-service` @ `63474db` | 8/9 green — **and stale**: the branch holds builder `2026.09.16-27`, production runs `-28` (the owner's two-per-page PDF export of 2026-09-16 exists only in the deployed image). | Same single failure, same fix; before merging, copy `web/index.html` off the running container into the branch (the owner, or an agent they authorise — agents must not push to it otherwise). |
 
 Agents must not push to the #53/#55 branches; one explanatory comment is
 already on each. The repo's **default branch is still
