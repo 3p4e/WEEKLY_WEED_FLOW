@@ -60,6 +60,10 @@ name: Deploy WWF stack to KVM4
 # Tooling assumed on the runner: python3 only (stdlib urllib does the HTTP, so
 # neither curl nor jq is required any more — jq in particular is not on most
 # runner images). The first step checks for it and apt-installs it if missing.
+# On KVM4 the remote script likewise needs only python3: every /shell call
+# runs inside the kvm4-runner container, which has had python3 on both VMs
+# and curl on neither, and the smoke probe asserts that ONCE in preflight,
+# before anything is built or swapped (review 2026-09-27, DI-01).
 
 on:
   workflow_dispatch:
@@ -73,6 +77,14 @@ on:
           - frontend
           - backend+scheduler
           - full
+          # DocEngine ships on its own cadence (CLAUDE.md, "Check deployability
+          # PER SERVICE"). It has no alembic chain — its schema is additive DDL
+          # the service runs at startup — so this scope builds, verifies the
+          # image is the commit, snapshots both databases, recreates the one
+          # service and probes its /health. `full` stays backend+frontend; a
+          # three-tier change is two dispatches, docengine FIRST (it serves the
+          # routes the other tiers call).
+          - docengine
       sha:
         description: 'Full 40-hex commit SHA to deploy (blank = the commit this workflow was dispatched on)'
         type: string
@@ -134,6 +146,8 @@ jobs:
       BACKEND_CT:     weekly_weed_flow-backend-1
       SCHEDULER_CT:   wwf-scheduler
       FRONTEND_CT:    wwf-gf-frontend
+      DOCENGINE_IMAGE: growflow-docengine
+      DOCENGINE_CT:   wwf-docengine
       USERS_DB_CT:    wwf-db-users
       TASKS_DB_CT:    wwf-db-tasks
       SNAP_ROOT:      /opt/wwf-deploy/snapshots
@@ -208,6 +222,63 @@ jobs:
           print(f"CI gate passed: {len(runs)} checks green on {sha}")
           PY
 
+      - name: Gate — the workflow files at this commit must be the default branch's
+        # "CI green on this SHA" proves only that the ci.yml AT THAT SHA passed.
+        # The one self-hosted runner is the production host with the docker
+        # socket, and a pull_request run executes the PR's own workflow file,
+        # so a branch that neuters ci.yml is green by construction — and root
+        # on production while it runs (review 2026-09-27, DI-02). This gate
+        # refuses to deploy any commit whose .github/workflows/ tree differs
+        # from the default branch's: merge the workflow change first, then
+        # deploy. Compared by git blob SHA through the contents API, so it
+        # needs nothing checked out and cannot be fooled by a same-name file.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          IN_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+
+          sha = os.environ.get("IN_SHA") or os.environ["GITHUB_SHA"]
+          repo = os.environ["REPO"]
+
+          def get(url):
+              req = urllib.request.Request(url)
+              req.add_header("Authorization", "Bearer " + os.environ["GH_TOKEN"])
+              req.add_header("Accept", "application/vnd.github+json")
+              try:
+                  return json.load(urllib.request.urlopen(req, timeout=30))
+              except urllib.error.HTTPError as e:
+                  # Fail CLOSED: an unreadable gate is not an open one.
+                  print(f"::error::cannot read {url}: HTTP {e.code} {e.read().decode()[:300]}")
+                  sys.exit(1)
+
+          default = get(f"https://api.github.com/repos/{repo}")["default_branch"]
+
+          def tree(ref):
+              rows = get(f"https://api.github.com/repos/{repo}/contents/.github/workflows?ref={ref}")
+              return {r["name"]: r["sha"] for r in rows if r.get("type") == "file"}
+
+          want, have = tree(default), tree(sha)
+          diff = sorted(set(want) | set(have))
+          bad = [n for n in diff if want.get(n) != have.get(n)]
+          rows = ["| workflow | default branch | deployed commit |", "| --- | --- | --- |"]
+          for n in diff:
+              rows.append(f"| {n} | {want.get(n, '-')[:12]} | {have.get(n, '-')[:12]} |")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(f"## Workflow files: `{sha[:12]}` vs `{default}`\n\n" + "\n".join(rows) + "\n\n")
+          if bad:
+              for n in bad:
+                  print(f"::error::.github/workflows/{n} differs between {sha} and {default}")
+              print(f"::error::{len(bad)} workflow file(s) differ from the default branch — the CI "
+                    "that ran on this commit is not the CI this repository trusts. Merge the "
+                    "workflow change first, then deploy.")
+              sys.exit(1)
+          print(f"workflow gate passed: {len(want)} files identical to {default}")
+          PY
+
       - name: Runner toolchain preflight
         # The whole CI side of this deploy is python3 + stdlib. `sudo apt-get`
         # is used here because ci.yml's e2e job already installs nginx-light the
@@ -252,9 +323,10 @@ jobs:
           echo "TAG=gh-${RUN_NUMBER}-$(printf '%s' "$SHA" | cut -c1-7)" >> "$GITHUB_ENV"
           echo "REMOTE_DIR=/opt/wwf-deploy/run-${RUN_NUMBER}-${RUN_ATTEMPT}" >> "$GITHUB_ENV"
           case "$IN_SCOPE" in
-            frontend)          echo "DO_BACKEND=false" >> "$GITHUB_ENV"; echo "DO_FRONTEND=true"  >> "$GITHUB_ENV" ;;
-            backend+scheduler) echo "DO_BACKEND=true"  >> "$GITHUB_ENV"; echo "DO_FRONTEND=false" >> "$GITHUB_ENV" ;;
-            full)              echo "DO_BACKEND=true"  >> "$GITHUB_ENV"; echo "DO_FRONTEND=true"  >> "$GITHUB_ENV" ;;
+            frontend)          echo "DO_BACKEND=false" >> "$GITHUB_ENV"; echo "DO_FRONTEND=true"  >> "$GITHUB_ENV"; echo "DO_DOCENGINE=false" >> "$GITHUB_ENV" ;;
+            backend+scheduler) echo "DO_BACKEND=true"  >> "$GITHUB_ENV"; echo "DO_FRONTEND=false" >> "$GITHUB_ENV"; echo "DO_DOCENGINE=false" >> "$GITHUB_ENV" ;;
+            full)              echo "DO_BACKEND=true"  >> "$GITHUB_ENV"; echo "DO_FRONTEND=true"  >> "$GITHUB_ENV"; echo "DO_DOCENGINE=false" >> "$GITHUB_ENV" ;;
+            docengine)         echo "DO_BACKEND=false" >> "$GITHUB_ENV"; echo "DO_FRONTEND=false" >> "$GITHUB_ENV"; echo "DO_DOCENGINE=true"  >> "$GITHUB_ENV" ;;
             *) echo "::error::unknown scope '$IN_SCOPE'"; exit 1 ;;
           esac
 
@@ -299,6 +371,18 @@ jobs:
           # Not echoed here: GITHUB_ENV assignments are only visible to LATER
           # steps, and under `set -u` referencing them now would abort the step.
           # The next step prints config.env, which contains them.
+
+      - name: Fingerprint the DocEngine sources the deployed commit carries
+        # DocEngine has no alembic chain to assert the image against, so the
+        # artifact is proven the way the hand deploys did it (docs/DEPLOY-2026-
+        # 09-07-docengine-v26.md): the files of substance are checksummed
+        # inside the built image against the checkout at $SHA. A stale build
+        # context or the wrong SHA fails the verify phase, never the smoke.
+        run: |
+          set -euo pipefail
+          ( cd docengine && sha256sum app/*.py agents/fleet.yaml agents/ragflow_search.py \
+              engine/scripts/build_from_md.py engine/scripts/pp_verify.py ) > "$RUNNER_TEMP/docengine.sums"
+          wc -l "$RUNNER_TEMP/docengine.sums"
 
       - name: Stage the remote deploy scripts
         run: |
@@ -390,6 +474,9 @@ jobs:
             printf 'SCOPE=%s\n'           "$IN_SCOPE"
             printf 'DO_BACKEND=%s\n'      "$DO_BACKEND"
             printf 'DO_FRONTEND=%s\n'     "$DO_FRONTEND"
+            printf 'DO_DOCENGINE=%s\n'    "$DO_DOCENGINE"
+            printf 'DOCENGINE_IMAGE=%s\n' "$DOCENGINE_IMAGE"
+            printf 'DOCENGINE_CT=%s\n'    "$DOCENGINE_CT"
             printf 'RUN_MIGRATIONS=%s\n'  "$IN_MIGRATE"
             printf 'CONFIRM_DESTRUCTIVE=%s\n' "$IN_CONFIRM"
             printf 'SHA=%s\n'             "$SHA"
@@ -657,8 +744,10 @@ jobs:
           DBENV="$RUNDIR/.dbenv"
           PROBE="$RUNDIR/alembic_probe.py"
           ENTRY="$RUNDIR/migrate_entry.sh"
+          DOCENGINE_SUMS="$RUNDIR/docengine.sums"
           BACKEND_REF="$BACKEND_IMAGE:$TAG"
           FRONTEND_REF="$FRONTEND_IMAGE:$TAG"
+          DOCENGINE_REF="$DOCENGINE_IMAGE:$TAG"
 
           log() { printf '%s\n' "$*"; }
           die() { printf 'DEPLOY-ABORT: %s\n' "$*" >&2; exit 1; }
@@ -690,17 +779,71 @@ jobs:
           }
 
           # ---------------------------------------------------------------
+          # The HTTP probe the smoke and status phases use. python3 + urllib,
+          # the one tool every kvm4-runner container so far has had: the
+          # pre-migration container was python:3.12-slim with neither curl nor
+          # wget, the current one is Alpine with busybox wget and no curl, and
+          # this script must not depend on which VM it is running on (review
+          # 2026-09-27, DI-01: the curl->wget->die chain was evaluated inside
+          # a `$(...)` whose failure was swallowed by `|| true`, so on a
+          # container with neither tool every deploy ended red AFTER the swap
+          # and told the operator to roll back a healthy deploy). The tool is
+          # asserted ONCE, in preflight, before anything is built or swapped.
+          # A probe returns the body on stdout and exits non-zero only on a
+          # TRANSPORT failure; an HTTP error status is a reached endpoint and
+          # comes back as its body with exit 0 (the callers judge the body).
+          require_http_tool() {
+            command -v python3 >/dev/null 2>&1 \
+              || die "python3 is not available in the kvm4-runner container — the smoke probe cannot run. Refusing to start a deploy whose success could not be verified."
+            python3 -c 'import urllib.request, json' \
+              || die "python3 is present but urllib/json are not importable — cannot probe"
+          }
+          http_get() {  # http_get <url>  (10 s, stdout = body)
+            WWF_URL="$1" python3 -c '
+          import os, sys, urllib.request, urllib.error
+          try:
+              with urllib.request.urlopen(os.environ["WWF_URL"], timeout=10) as r:
+                  sys.stdout.write(r.read().decode("utf-8", "replace"))
+          except urllib.error.HTTPError as e:
+              sys.stdout.write(e.read().decode("utf-8", "replace"))
+          except Exception as e:
+              sys.stderr.write("%s: %s\n" % (type(e).__name__, e))
+              sys.exit(7)
+          '
+          }
+          # The same probe from INSIDE a container (no published port, or the
+          # host cannot hairpin its own public IP). The backend and docengine
+          # images are slim and ship no curl, so it is python there too.
+          http_get_in() {  # http_get_in <container> <url>
+            docker exec -e WWF_URL="$2" "$1" python -c '
+          import os, sys, urllib.request, urllib.error
+          try:
+              with urllib.request.urlopen(os.environ["WWF_URL"], timeout=10) as r:
+                  sys.stdout.write(r.read().decode("utf-8", "replace"))
+          except urllib.error.HTTPError as e:
+              sys.stdout.write(e.read().decode("utf-8", "replace"))
+          except Exception as e:
+              sys.stderr.write("%s: %s\n" % (type(e).__name__, e))
+              sys.exit(7)
+          '
+          }
+
+          # ---------------------------------------------------------------
           phase_preflight() {
             command -v docker >/dev/null 2>&1 || die "docker is not on PATH on the host"
             docker compose version >/dev/null 2>&1 || die "docker compose v2 is unavailable on the host"
+            require_http_tool
             [ -f "$STACK_DIR/compose.yaml" ] || die "$STACK_DIR/compose.yaml does not exist"
             mkdir -p "$SNAP_ROOT"
             [ -w "$SNAP_ROOT" ] || die "$SNAP_ROOT is not writable"
             docker network inspect "$NETWORK" >/dev/null 2>&1 \
               || die "docker network $NETWORK not found — migrations run in a throwaway container on it"
+            if [ "$DO_DOCENGINE" = true ]; then
+              [ -s "$DOCENGINE_SUMS" ] || die "$DOCENGINE_SUMS is missing — the image cannot be verified against the commit"
+            fi
 
             log "== containers =="
-            for ct in "$BACKEND_CT" "$SCHEDULER_CT" "$FRONTEND_CT" "$USERS_DB_CT" "$TASKS_DB_CT"; do
+            for ct in "$BACKEND_CT" "$SCHEDULER_CT" "$FRONTEND_CT" "$DOCENGINE_CT" "$USERS_DB_CT" "$TASKS_DB_CT"; do
               docker inspect -f '{{.Name}} status={{.State.Status}} image={{.Config.Image}} restarts={{.RestartCount}}' "$ct" \
                 || die "container $ct not found — refusing to deploy into a stack that is not the documented one"
             done
@@ -734,8 +877,8 @@ jobs:
             log "== compose services:$services"
             local ct svc wdir key
             for pair in "BACKEND_SVC $BACKEND_CT" "SCHEDULER_SVC $SCHEDULER_CT" \
-                        "FRONTEND_SVC $FRONTEND_CT" "USERS_DB_SVC $USERS_DB_CT" \
-                        "TASKS_DB_SVC $TASKS_DB_CT"; do
+                        "FRONTEND_SVC $FRONTEND_CT" "DOCENGINE_SVC $DOCENGINE_CT" \
+                        "USERS_DB_SVC $USERS_DB_CT" "TASKS_DB_SVC $TASKS_DB_CT"; do
               key=${pair%% *}
               ct=${pair#* }
               svc=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' "$ct")
@@ -793,11 +936,16 @@ jobs:
               [ -n "$prev" ] || die "no 'image: $FRONTEND_IMAGE:<tag>' line in compose.yaml"
               state_put PREV_FRONTEND_TAG "$prev"
             fi
+            if [ "$DO_DOCENGINE" = true ]; then
+              prev=$(prev_tag_of "$DOCENGINE_IMAGE") || true
+              [ -n "$prev" ] || die "no 'image: $DOCENGINE_IMAGE:<tag>' line in compose.yaml"
+              state_put PREV_DOCENGINE_TAG "$prev"
+            fi
             log "== compose image lines =="
             # `|| die` for the same reason: a quoted or variable image line made
             # this grep exit 1 and abort the phase with no message at all.
-            grep -nE "image: *($BACKEND_IMAGE|$FRONTEND_IMAGE):" compose.yaml \
-              || die "no anchored 'image: <name>:<tag>' lines found in compose.yaml" 
+            grep -nE "image: *($BACKEND_IMAGE|$FRONTEND_IMAGE|$DOCENGINE_IMAGE):" compose.yaml \
+              || die "no anchored 'image: <name>:<tag>' lines found in compose.yaml"
             log "preflight ok (scope=$SCOPE sha=$SHA new tag=$TAG)"
           }
 
@@ -844,10 +992,31 @@ jobs:
               state_put FRONTEND_SHELL "$shell_v"
               log "built $FRONTEND_REF serving $shell_v"
             fi
+            if [ "$DO_DOCENGINE" = true ]; then
+              log "building $DOCENGINE_REF from $REPO@$SHA (docengine/)"
+              # --network host as for the backend: the image pip-installs from
+              # scratch and that is the recipe proven on this box.
+              if ! docker build --network host -t "$DOCENGINE_REF" "$(build_context_url docengine)" 2>&1 \
+                   | redact > "$RUNDIR/build-docengine.log"; then
+                tail -n 120 "$RUNDIR/build-docengine.log" || true
+                die "docengine image build failed (full redacted log: $RUNDIR/build-docengine.log)"
+              fi
+              tail -n 25 "$RUNDIR/build-docengine.log"
+              docker image inspect -f 'built {{index .RepoTags 0}} id={{.Id}} created={{.Created}}' "$DOCENGINE_REF"
+            fi
           }
 
           # ---------------------------------------------------------------
           phase_verify() {
+            if [ "$DO_DOCENGINE" = true ]; then
+              # The files of substance inside the image must checksum-equal the
+              # checkout at $SHA (sha256sum -c against the list the workflow
+              # computed). This is what turns "an image was built" into "the
+              # image is this commit".
+              docker run --rm -v "$DOCENGINE_SUMS:/sums:ro" "$DOCENGINE_REF" sha256sum -c /sums \
+                || die "the built docengine image does not contain the sources of $SHA"
+              log "docengine image verified against $SHA ($(wc -l < "$DOCENGINE_SUMS") files)"
+            fi
             if [ "$DO_BACKEND" != true ]; then
               log "scope=$SCOPE: no backend image to verify"
               return 0
@@ -921,7 +1090,10 @@ jobs:
 
           # ---------------------------------------------------------------
           phase_snapshot() {
-            if [ "$DO_BACKEND" != true ]; then
+            # A docengine deploy touches the tasks database too: the service
+            # runs additive DDL (CREATE/ALTER ... IF NOT EXISTS) on its own
+            # schema at startup. Snapshot for it as for a backend deploy.
+            if [ "$DO_BACKEND" != true ] && [ "$DO_DOCENGINE" != true ]; then
               log "scope=$SCOPE: no snapshot taken — a frontend-only deploy cannot touch either database"
               return 0
             fi
@@ -1068,6 +1240,7 @@ jobs:
             local svcs="" s
             if [ "$DO_BACKEND" = true ]; then svcs="${BACKEND_SVC:?} ${SCHEDULER_SVC:?}"; fi
             if [ "$DO_FRONTEND" = true ]; then svcs="$svcs ${FRONTEND_SVC:?}"; fi
+            if [ "$DO_DOCENGINE" = true ]; then svcs="$svcs ${DOCENGINE_SVC:?}"; fi
             # Belt and braces: whatever the labels said, never recreate a
             # database container. Losing one is not a rollback, it is an
             # incident, and --no-deps is the only thing standing between
@@ -1081,8 +1254,9 @@ jobs:
 
             if [ "$DO_BACKEND" = true ]; then bump_image "$BACKEND_IMAGE" "$TAG"; fi
             if [ "$DO_FRONTEND" = true ]; then bump_image "$FRONTEND_IMAGE" "$TAG"; fi
+            if [ "$DO_DOCENGINE" = true ]; then bump_image "$DOCENGINE_IMAGE" "$TAG"; fi
             log "== compose image lines after rewrite =="
-            grep -nE "image: *($BACKEND_IMAGE|$FRONTEND_IMAGE):" compose.yaml
+            grep -nE "image: *($BACKEND_IMAGE|$FRONTEND_IMAGE|$DOCENGINE_IMAGE):" compose.yaml
 
             # One service at a time, --no-deps every time: the whole stack is
             # never converged, so the databases and db-backup are never in the
@@ -1093,59 +1267,101 @@ jobs:
             done
 
             log "== containers after swap =="
-            for ct in "$BACKEND_CT" "$SCHEDULER_CT" "$FRONTEND_CT"; do
+            for ct in "$BACKEND_CT" "$SCHEDULER_CT" "$FRONTEND_CT" "$DOCENGINE_CT"; do
               docker inspect -f '{{.Name}} status={{.State.Status}} image={{.Config.Image}} restarts={{.RestartCount}}' "$ct" || true
             done
           }
 
           # ---------------------------------------------------------------
-          http_get() {
-            if command -v curl >/dev/null 2>&1; then
-              curl -fsS --max-time 10 "$1"
-            elif command -v wget >/dev/null 2>&1; then
-              wget -qO- --timeout=10 "$1"
-            else
-              die "neither curl nor wget is on the host — cannot probe $1"
-            fi
-          }
-
           json_has() {  # json_has <literal substring> <document>
             case "$2" in *"$1"*) return 0 ;; *) return 1 ;; esac
           }
 
+          # /health/ready through the public edge, with a container fallback
+          # ONLY on a transport failure (the host may not hairpin its own
+          # public IP — ops/watchdog.sh learned this first). A reachable
+          # endpoint answering badly is never masked by the fallback.
+          probe_app_ready() {  # sets APP_BODY / APP_VIA; returns 0 when ready
+            local body rc norm
+            body=$(http_get "$HEALTH_URL" 2>/dev/null); rc=$?
+            APP_VIA=public
+            if [ "$rc" -ne 0 ]; then
+              body=$(http_get_in "$BACKEND_CT" "http://127.0.0.1:8000/health/ready" 2>/dev/null) || body=""
+              APP_VIA=container-fallback
+            fi
+            APP_BODY="$body"
+            norm=$(printf '%s' "$body" | tr -d ' \011\015\012')
+            json_has '"ready":true' "$norm" \
+              && json_has '"users":"ok"' "$norm" \
+              && json_has '"tasks":"ok"' "$norm"
+          }
+
+          # DocEngine has no published port: /health from inside the container.
+          # `db` is the registry pool; without it every document job is a 503.
+          probe_docengine() {  # sets DE_BODY; returns 0 when serving with its registry
+            local norm
+            DE_BODY=$(http_get_in "$DOCENGINE_CT" "http://127.0.0.1:8000/health" 2>/dev/null) || DE_BODY=""
+            norm=$(printf '%s' "$DE_BODY" | tr -d ' \011\015\012')
+            json_has '"ok":true' "$norm" && json_has '"db":true' "$norm"
+          }
+
           phase_smoke() {
-            local attempt=1 body norm ok=0 want ct expect
+            local attempt=1 ok=0 want ct expect
+            APP_BODY=""; APP_VIA=""; DE_BODY=""
+            require_http_tool
             # /health/ready round-trips BOTH databases, which is the only reason
             # this probe is worth anything: it is the difference between "the
             # container is up" and "the deploy works".
             while [ "$attempt" -le 24 ]; do
-              body=$(http_get "$HEALTH_URL" 2>/dev/null || true)
-              norm=$(printf '%s' "$body" | tr -d ' \011\015\012')
-              if json_has '"ready":true' "$norm" \
-                 && json_has '"users":"ok"' "$norm" \
-                 && json_has '"tasks":"ok"' "$norm"; then
+              if probe_app_ready; then
                 ok=1
                 break
               fi
-              log "attempt $attempt: not ready yet (${norm:-<empty response>})"
+              log "attempt $attempt: not ready yet via $APP_VIA ($(printf '%s' "$APP_BODY" | tr -d '\012' | cut -c1-300))"
               attempt=$((attempt + 1))
               sleep 5
             done
             if [ "$ok" != 1 ]; then
-              log "== last /health/ready response =="
-              printf '%s\n' "${body:-<empty>}"
+              log "== last /health/ready response (via $APP_VIA) =="
+              printf '%s\n' "${APP_BODY:-<empty>}"
               log "== backend log tail =="
               docker logs --tail 50 "$BACKEND_CT" 2>&1 | tail -n 50 || true
               die "$HEALTH_URL did not report ready with BOTH databases ok after $((attempt - 1)) attempts. Images are already swapped: use the rollback recipe in the job summary."
             fi
-            log "smoke ok: $body"
-            state_put HEALTH_BODY "$body"
+            log "smoke ok via $APP_VIA: $APP_BODY"
+            [ "$APP_VIA" = public ] || log "note: the public edge (TLS -> Traefik -> nginx) was NOT exercised; the host could not reach $HEALTH_URL"
+            state_put HEALTH_BODY "$APP_BODY"
+
+            if [ "$DO_DOCENGINE" = true ]; then
+              attempt=1; ok=0
+              while [ "$attempt" -le 24 ]; do
+                if probe_docengine; then
+                  ok=1
+                  break
+                fi
+                log "docengine attempt $attempt: not serving yet ($(printf '%s' "$DE_BODY" | tr -d '\012' | cut -c1-300))"
+                attempt=$((attempt + 1))
+                sleep 5
+              done
+              if [ "$ok" != 1 ]; then
+                log "== docengine log tail =="
+                docker logs --tail 50 "$DOCENGINE_CT" 2>&1 | tail -n 50 || true
+                die "$DOCENGINE_CT did not answer /health with ok:true and db:true after $((attempt - 1)) attempts. The image is already swapped: use the rollback recipe in the job summary."
+              fi
+              log "docengine smoke ok: $DE_BODY"
+              case "$(printf '%s' "$DE_BODY" | tr -d ' \011\015\012')" in
+                *'"ready":true'*) ;;
+                *) log "note: docengine is serving but NOT ready for document jobs (Letta, RAGflow or a dataset unresolved) — see its /health body above; not a deploy failure" ;;
+              esac
+              state_put DOCENGINE_HEALTH "$DE_BODY"
+            fi
 
             # A green probe is not enough on its own: assert the containers are
             # actually running the tag this run built.
             for want in "$DO_BACKEND $BACKEND_CT $BACKEND_REF" \
                         "$DO_BACKEND $SCHEDULER_CT $BACKEND_REF" \
-                        "$DO_FRONTEND $FRONTEND_CT $FRONTEND_REF"; do
+                        "$DO_FRONTEND $FRONTEND_CT $FRONTEND_REF" \
+                        "$DO_DOCENGINE $DOCENGINE_CT $DOCENGINE_REF"; do
               set -- $want
               [ "$1" = true ] || continue
               ct="$2"; expect="$3"
@@ -1173,6 +1389,7 @@ jobs:
           | new tag | $TAG |
           | previous backend tag | ${PREV_BACKEND_TAG:-n/a} |
           | previous frontend tag | ${PREV_FRONTEND_TAG:-n/a} |
+          | previous docengine tag | ${PREV_DOCENGINE_TAG:-n/a} |
           | compose backup | ${COMPOSE_BACKUP:-n/a} |
           | database snapshot | ${SNAPSHOT_DIR:-none (frontend-only deploy)} |
           | pre-deploy revisions | users=${PRE_USERS_REV:-n/a} tasks=${PRE_TASKS_REV:-n/a} |
@@ -1183,8 +1400,10 @@ jobs:
           ~~~sh
           cd $STACK_DIR
           cp ${COMPOSE_BACKUP:-compose.yaml.bak.SEE-ABOVE} compose.yaml
-          docker compose up -d --no-deps ${BACKEND_SVC:-backend} ${SCHEDULER_SVC:-scheduler} ${FRONTEND_SVC:-frontend}
+          docker compose up -d --no-deps ${BACKEND_SVC:-backend} ${SCHEDULER_SVC:-scheduler} ${FRONTEND_SVC:-frontend} ${DOCENGINE_SVC:-docengine}
           ~~~
+          (Only the services in scope changed; recreating an unchanged one is a
+          no-op. DocEngine's startup DDL is additive and needs no unwind.)
 
           **2. Schema back — only if a migration has to be undone.** Prefer the
           surgical downgrade; CI proves every revision downgrades cleanly:
@@ -1214,15 +1433,21 @@ jobs:
           # ---------------------------------------------------------------
           phase_status() {
             log "scope=$SCOPE sha=$SHA tag=$TAG"
-            log "previous tags: backend=${PREV_BACKEND_TAG:-n/a} frontend=${PREV_FRONTEND_TAG:-n/a}"
+            log "previous tags: backend=${PREV_BACKEND_TAG:-n/a} frontend=${PREV_FRONTEND_TAG:-n/a} docengine=${PREV_DOCENGINE_TAG:-n/a}"
             log "compose backup: ${COMPOSE_BACKUP:-none taken}"
             log "database snapshot: ${SNAPSHOT_DIR:-none taken}"
             log "pre-deploy revisions: users=${PRE_USERS_REV:-n/a} tasks=${PRE_TASKS_REV:-n/a}"
             log "run dir kept for postmortem: $RUNDIR"
-            for ct in "$BACKEND_CT" "$SCHEDULER_CT" "$FRONTEND_CT" "$USERS_DB_CT" "$TASKS_DB_CT"; do
+            for ct in "$BACKEND_CT" "$SCHEDULER_CT" "$FRONTEND_CT" "$DOCENGINE_CT" "$USERS_DB_CT" "$TASKS_DB_CT"; do
               docker inspect -f '{{.Name}} status={{.State.Status}} image={{.Config.Image}} restarts={{.RestartCount}}' "$ct" 2>/dev/null || true
             done
-            printf 'health: %s\n' "$(http_get "$HEALTH_URL" 2>/dev/null || echo '<unreachable>')"
+            if command -v python3 >/dev/null 2>&1; then
+              printf 'health (public): %s\n' "$(http_get "$HEALTH_URL" 2>/dev/null || echo '<unreachable from this host>')"
+              printf 'health (backend, in-container): %s\n' "$(http_get_in "$BACKEND_CT" "http://127.0.0.1:8000/health/ready" 2>/dev/null || echo '<no answer>')"
+              printf 'docengine /health: %s\n' "$(http_get_in "$DOCENGINE_CT" "http://127.0.0.1:8000/health" 2>/dev/null || echo '<no answer>')"
+            else
+              printf 'health: <python3 missing in the kvm4-runner container: cannot probe>\n'
+            fi
           }
 
           # ---------------------------------------------------------------
@@ -1237,7 +1462,7 @@ jobs:
             # Never prune images here: the PREVIOUS tag is the rollback path, and
             # deleting it would throw away the recipe this run just published.
             # Old tags and snapshots are removed by hand, deliberately.
-            log "kept (no secrets): $RUNDIR/{deploy.sh,config.env,state.env,alembic_probe.py,migrate_entry.sh,build-*.log}"
+            log "kept (no secrets): $RUNDIR/{deploy.sh,config.env,state.env,alembic_probe.py,migrate_entry.sh,docengine.sums,build-*.log}"
           }
 
           case "${1:-}" in
@@ -1295,6 +1520,7 @@ jobs:
           python3 "$RUNNER_TEMP/kvm4.py" write "$REMOTE_DIR/config.env"         "$RUNNER_TEMP/config.env"         0600
           python3 "$RUNNER_TEMP/kvm4.py" write "$REMOTE_DIR/alembic_probe.py"   "$RUNNER_TEMP/alembic_probe.py"   0644
           python3 "$RUNNER_TEMP/kvm4.py" write "$REMOTE_DIR/migrate_entry.sh"   "$RUNNER_TEMP/migrate_entry.sh"   0644
+          python3 "$RUNNER_TEMP/kvm4.py" write "$REMOTE_DIR/docengine.sums"     "$RUNNER_TEMP/docengine.sums"     0644
           python3 "$RUNNER_TEMP/kvm4.py" write "$REMOTE_DIR/.gh_token"          "$RUNNER_TEMP/gh_token"           0600
 
       - name: Preflight on KVM4 (stack identity, service names, previous tags)

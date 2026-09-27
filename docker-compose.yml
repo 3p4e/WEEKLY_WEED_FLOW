@@ -9,13 +9,17 @@
 #    frontend  nginx serving the GrowFlow UI (web/) and reverse-proxying
 #              /auth /departments /weeks /tasks /sessions /capture /ai /audit
 #              /reports to the backend; published over HTTPS by Traefik.
-#    db-backup rotating local pg_dump backups of BOTH databases — docs/BACKUP.md
+#    db-backup rotating local pg_dump backups of BOTH databases plus a tarball
+#              of the DocEngine output volume — docs/BACKUP.md
+#    docengine GrowFlow DocEngine (docengine/): the document AI service behind
+#              /qms/studio/* and COQ generation — internal only, registry in
+#              schema `docengine` of wwf_tasks, artefacts in docengine_out
 #    capture-mcp remote MCP connector for claude.ai/Cowork auto-delivery of
 #              task captures (secret path, single-purpose token)
 #
 #  The always-on Letta agent layer (AI functions) runs in its own pre-existing
-#  stack and is reached over host.docker.internal — it is intentionally NOT
-#  defined or managed here.
+#  stack (letta-6ou3) and is reached over the external `ai-net` network — it
+#  is intentionally NOT defined or managed here.
 #
 #  RESOURCE LIMITS — every service now carries mem_limit + cpus. They had
 #  none, so any one container could take the whole host down with it: the
@@ -170,8 +174,57 @@ services:
     volumes:
       - ./backend/scripts/db_backup.sh:/usr/local/bin/db_backup.sh:ro
       - weekly_weed_flow_backups:/backups
+      # Read-only view of the DocEngine's produced documents, archived beside
+      # the dumps of the registry that names them (docs/BACKUP.md).
+      - docengine_out:/docengine-out:ro
     entrypoint: ["/bin/sh", "/usr/local/bin/db_backup.sh"]
     networks: [internal]
+    restart: unless-stopped
+
+  # GrowFlow DocEngine — the document AI service (docengine/): questionnaire
+  # -> gf_* Letta fleet -> per-section regulatory check -> §6A audit ->
+  # pp_verify PASS gate -> registry row (schema `docengine` in wwf_tasks,
+  # created by the service at startup under its own role — docs/DEPLOY.md,
+  # "DocEngine database role"). INTERNAL ONLY: the backend's /qms/studio
+  # proxy and the certificate pipeline are its only callers, with X-API-Key
+  # injected server-side. It reaches Letta (letta-6ou3) and Gotenberg over
+  # the external `ai-net` network, exactly as the host's compose.yaml does.
+  # Its environment is docengine.env (DOCENGINE_*, LETTA_*, RAGFLOW_*,
+  # GOTENBERG_URL — see .env.example), kept apart from app.env so the Letta
+  # and RAGflow tenant keys never sit in the backend's environment. The file
+  # is `required: false` only so CI can validate this compose with just
+  # .env present; on the host it must exist, and the healthcheck says so:
+  # without it /health answers db:false and the service reads unhealthy.
+  docengine:
+    build: ./docengine
+    mem_limit: 1g
+    cpus: '1.0'
+    image: growflow-docengine:latest
+    container_name: wwf-docengine
+    depends_on: [db-tasks]
+    env_file:
+      - path: docengine.env
+        required: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose: ["8000"]
+    volumes:
+      - docengine_out:/data/docengine-out
+    # /health is liveness plus the readiness facts beside it. `db` is the
+    # registry pool: without it every workflow answers 503 and a /build
+    # registers nothing, so a process that is up but cannot reach its
+    # registry is NOT healthy. Letta/RAGflow reachability is reported there
+    # too (and by ops/watchdog.sh as a WARN) but does not flip the container
+    # unhealthy — an upstream outage is not a reason to restart this one.
+    # Python rather than curl: the slim image has no curl.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import json,sys,urllib.request; b=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=10)); sys.exit(0 if b.get('ok') and b.get('db') else 1)"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+    networks: [internal, ainet]
     restart: unless-stopped
 
   # Nightly OFFSITE copy of the local dumps — rclone `copy` (never `sync`, so
@@ -233,8 +286,17 @@ networks:
   traefik:
     name: traefik_network
     external: true
+  # The Letta stack's network (letta-6ou3, RAGflow, Gotenberg). External:
+  # owned by that stack, joined here by docengine (and on the host by the
+  # backend and scheduler too — docs/LETTA-CUTOVER-PHASE1-2026-08-22.md).
+  ainet:
+    name: ai-net
+    external: true
 
 volumes:
   wwf_users_pgdata:
   wwf_tasks_pgdata:
   weekly_weed_flow_backups:
+  # Every controlled document DocEngine produced; the registry rows point
+  # into it. Backed up by db-backup (docs/BACKUP.md). Never prune.
+  docengine_out:

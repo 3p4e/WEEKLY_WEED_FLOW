@@ -7,19 +7,35 @@
 
 For agent sessions. The GitHub App behind a session is read-only (no Actions
 write), and the session's proxy will not carry a personal token, so the call is
-made from KVM4 through ops/agent/rsh.py's /shell API. The owner pre-approves
-exactly this invocation in the cloud environment's setup script (see
-CLAUDE.md, "Agent helpers"); call it as a standalone command from the repo root.
+made from KVM4 through the kvm4-runner API (the same /shell and /file/write
+endpoints deploy.yml uses). The owner pre-approves exactly this invocation in
+the cloud environment's setup script (see CLAUDE.md, "Agent helpers"); call it
+as a standalone command from the repo root.
 
-Deliberately narrow:
-  - only paths under /repos/3p4e/WEEKLY_WEED_FLOW/
-  - only GET, POST, PUT and PATCH; DELETE is refused, so a deletion stays a
-    human action in the GitHub UI
-  - the token (GITHUB_PAT_WWF) travels to the host inside the HTTPS request
-    body and is handed, base64-encoded, to a one-off python process that lives
-    for the length of the call. It is never written to disk there, but root in
-    the kvm4-runner container could see it in that process's arguments while
-    it runs. It is scrubbed from anything printed here.
+ALLOW-LIST, not a deny-list. The first version refused DELETE and nothing
+else, so a pre-approved command could merge a pull request, force-move a
+branch, commit straight to the default branch, add a collaborator or rewrite
+branch protection with the owner's token (review 2026-09-27, DI-03). What is
+allowed now is exactly what the read-only GitHub App cannot do and a session
+legitimately needs:
+
+  GET   anything under /repos/3p4e/WEEKLY_WEED_FLOW/            (reads; a query string is fine)
+  POST  …/actions/runs/<id>/rerun  and  …/rerun-failed-jobs     (re-run a workflow run)
+  POST  …/actions/workflows/<file>.yml/dispatches               (dispatch a workflow)
+  POST  …/issues/<n>/comments                                   (comment on an issue or a PR)
+
+Everything else — PUT, PATCH, DELETE, any other POST — is refused here, before
+any request is built. The token's own scopes remain the outer limit.
+
+THE TOKEN NEVER TRAVELS IN THE /shell COMMAND TEXT. The kvm4-runner keeps an
+audit trail of /shell command strings on the host, so a token in `cmd` is a
+token written to disk. It goes to the host as a 0600 file through /file/write
+(whose body is not part of that trail), the one-off python process reads it
+from that file, and the same /shell call shreds the file whether the request
+succeeded or not. If /file/write is unavailable the helper falls back to
+writing the file from the command text with a loud warning, so the exposure
+is at least visible rather than silent. The token is scrubbed from anything
+printed here.
 
 Prints "HTTP <status>" and the response body. Exit 0 on 2xx, 1 otherwise.
 """
@@ -27,23 +43,36 @@ import base64
 import json
 import os
 import re
+import secrets
 import sys
 import urllib.error
 import urllib.request
 
-REPO_PREFIX = "/repos/3p4e/weekly_weed_flow/"
-METHODS = ("GET", "POST", "PUT", "PATCH")
+REPO = "/repos/3p4e/WEEKLY_WEED_FLOW"
+_R = re.escape(REPO)
+# (method, path-regex). Paths are matched WITHOUT their query string; only
+# GET may carry one. Case-sensitive on the method, case-insensitive on the
+# repository name (GitHub treats it so).
+ALLOW = (
+    ("GET", re.compile(rf"^{_R}(?:/[^\s?#]*)?$", re.I)),
+    ("POST", re.compile(rf"^{_R}/actions/runs/\d+/rerun(?:-failed-jobs)?$", re.I)),
+    ("POST", re.compile(rf"^{_R}/actions/workflows/[A-Za-z0-9_.-]+\.ya?ml/dispatches$", re.I)),
+    ("POST", re.compile(rf"^{_R}/issues/\d+/comments$", re.I)),
+)
 MAX_BODY_PRINT = 20_000
+TOKEN_DIR = "/opt/wwf-deploy/.gh_api"
 
-# Runs on KVM4. Reads one base64 JSON argument so nothing but the script
-# itself needs shell quoting.
+# Runs on KVM4. argv[1] is the 0600 token file, argv[2] one base64 JSON
+# argument (method, path, body) — nothing secret is in the command line.
 REMOTE = r"""
 import base64, json, sys, urllib.error, urllib.request
-a = json.loads(base64.b64decode(sys.argv[1]))
+with open(sys.argv[1], encoding="utf-8") as f:
+    token = f.read().strip()
+a = json.loads(base64.b64decode(sys.argv[2]))
 req = urllib.request.Request(
     "https://api.github.com" + a["path"], method=a["method"],
     data=None if a["body"] is None else json.dumps(a["body"]).encode(),
-    headers={"Authorization": "Bearer " + a["token"],
+    headers={"Authorization": "Bearer " + token,
              "Accept": "application/vnd.github+json",
              "X-GitHub-Api-Version": "2022-11-28",
              "User-Agent": "wwf-agent-gh-api"})
@@ -61,20 +90,79 @@ def usage():
     return 2
 
 
+def allowed(method, path):
+    """The allow-list verdict for one request, as (ok, reason)."""
+    if ".." in path or re.search(r"\s", path) or "//" in path or not path.startswith("/"):
+        return False, "path must be a clean absolute API path under %s" % REPO
+    bare, _, query = path.partition("?")
+    if query and method != "GET":
+        return False, "only GET may carry a query string"
+    for m, rx in ALLOW:
+        if m == method and rx.match(bare):
+            return True, ""
+    return False, ("%s %s is not on the allow-list (GET anything under the repo; POST "
+                   "…/actions/runs/<id>/rerun[-failed-jobs], …/actions/workflows/<file>/dispatches, "
+                   "…/issues/<n>/comments). Anything else is a human action in the GitHub UI."
+                   % (method, bare))
+
+
+def _sh_quote(s):
+    return "'" + s.replace("'", "'\"'\"'") + "'"
+
+
+class Runner:
+    """The two kvm4-runner endpoints this helper uses."""
+
+    def __init__(self, base, token):
+        self.base = base.rstrip("/")
+        self.token = token
+
+    def _post(self, path, payload, timeout):
+        req = urllib.request.Request(
+            self.base + path, method="POST",
+            data=json.dumps(payload).encode(),
+            headers={"Authorization": "Bearer " + self.token,
+                     "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
+
+    def shell(self, cmd, timeout=90):
+        return self._post("/shell", {"cmd": cmd, "timeout": timeout}, timeout + 60)
+
+    def file_write(self, remote, content, mode="0600"):
+        """True if the file landed through /file/write; False if that endpoint
+        is unavailable (blocked, absent), so the caller can fall back. Any
+        other failure raises."""
+        payload = {"path": remote, "content_b64": base64.b64encode(content.encode()).decode(),
+                   "mode": mode, "mkdir": True}
+        try:
+            self._post("/file/write", payload, 60)
+            return True
+        except urllib.error.HTTPError as exc:
+            if exc.code in (400, 415, 422):
+                # the same mode-type guess deploy.yml's kvm4.py makes
+                payload["mode"] = int(mode, 8)
+                try:
+                    self._post("/file/write", payload, 60)
+                    return True
+                except urllib.error.HTTPError as exc2:
+                    if exc2.code in (403, 404, 405):
+                        return False
+                    raise
+            if exc.code in (403, 404, 405):
+                return False
+            raise
+
+
 def main(argv):
     dry = "--dry-run" in argv
     argv = [a for a in argv if a != "--dry-run"]
     if len(argv) < 2 or argv[0] in ("-h", "--help"):
         return usage()
     method, path = argv[0].upper(), argv[1]
-    if method not in METHODS:
-        print("gh_api: %s is not allowed (only %s)" % (method, ", ".join(METHODS)),
-              file=sys.stderr)
-        return 2
-    if not path.lower().startswith(REPO_PREFIX) or ".." in path \
-            or re.search(r"\s", path):
-        print("gh_api: path must start with /repos/3p4e/WEEKLY_WEED_FLOW/",
-              file=sys.stderr)
+    ok, why = allowed(method, path)
+    if not ok:
+        print("gh_api: refused: " + why, file=sys.stderr)
         return 2
     body = None
     if len(argv) > 2:
@@ -92,23 +180,33 @@ def main(argv):
     if not token.startswith(("github_pat_", "ghp_")):
         print("gh_api: GITHUB_PAT_WWF is not set to a GitHub token", file=sys.stderr)
         return 1
-    arg = base64.b64encode(json.dumps(
-        {"method": method, "path": path, "body": body, "token": token}).encode()).decode()
-    cmd = "python3 -c %s %s" % (_sh_quote(REMOTE), arg)
-
     base = os.environ.get("RUNNER_URL", "").rstrip("/")
     rtok = os.environ.get("RUNNER_TOKEN", "").strip()
     if not base or not rtok:
         print("gh_api: RUNNER_URL and RUNNER_TOKEN must be set", file=sys.stderr)
         return 1
-    req = urllib.request.Request(
-        base + "/shell", method="POST",
-        data=json.dumps({"cmd": cmd, "timeout": 90}).encode(),
-        headers={"Authorization": "Bearer " + rtok,
-                 "Content-Type": "application/json"})
+    runner = Runner(base, rtok)
+
+    token_file = "%s/%s.token" % (TOKEN_DIR, secrets.token_hex(8))
+    arg = base64.b64encode(json.dumps(
+        {"method": method, "path": path, "body": body}).encode()).decode()
+    # Whatever happens to the request, the token file is shredded in the SAME
+    # shell call, so no failure path leaves it behind.
+    call = ("python3 -c %s %s %s; rc=$?; shred -u %s 2>/dev/null || rm -f %s; exit $rc"
+            % (_sh_quote(REMOTE), _sh_quote(token_file), arg, _sh_quote(token_file),
+               _sh_quote(token_file)))
     try:
-        with urllib.request.urlopen(req, timeout=150) as resp:
-            out = json.loads(resp.read().decode()).get("output", "")
+        staged = runner.file_write(token_file, token)
+        if staged:
+            cmd = call
+        else:
+            print("gh_api: WARNING: /file/write is unavailable on kvm4-runner; the token "
+                  "is being staged through the /shell command text instead, which the "
+                  "runner records. Rotate GITHUB_PAT_WWF when /file/write is back.",
+                  file=sys.stderr)
+            cmd = ("umask 077; mkdir -p %s; printf '%%s' %s > %s; %s"
+                   % (_sh_quote(TOKEN_DIR), _sh_quote(token), _sh_quote(token_file), call))
+        r = runner.shell(cmd, 90)
     except urllib.error.HTTPError as exc:
         print("gh_api: kvm4-runner answered HTTP %d%s" % (
             exc.code, " (RUNNER_TOKEN is stale; see CLAUDE.md)" if exc.code == 403 else ""),
@@ -118,14 +216,14 @@ def main(argv):
         print("gh_api: %s" % exc, file=sys.stderr)
         return 1
 
-    out = out.replace(token, "<GITHUB_PAT_WWF>")
+    out = (r.get("output", "") or "").replace(token, "<GITHUB_PAT_WWF>")
     line = next((l for l in out.splitlines() if l.startswith("@@GH@@")), None)
     if line is None:
-        print("gh_api: no response from the host-side call:\n" + out[-2000:],
-              file=sys.stderr)
+        print("gh_api: no response from the host-side call (remote exit %s):\n%s"
+              % (r.get("exit_code"), out[-2000:]), file=sys.stderr)
         return 1
     res = json.loads(line[len("@@GH@@"):])
-    status, text = res["status"], res["body"]
+    status, text = res["status"], res["body"].replace(token, "<GITHUB_PAT_WWF>")
     print("HTTP %d" % status)
     if text:
         try:
@@ -136,10 +234,6 @@ def main(argv):
             text = text[:MAX_BODY_PRINT] + "\n… (%d more characters)" % (len(text) - MAX_BODY_PRINT)
         print(text)
     return 0 if 200 <= status < 300 else 1
-
-
-def _sh_quote(s):
-    return "'" + s.replace("'", "'\"'\"'") + "'"
 
 
 if __name__ == "__main__":

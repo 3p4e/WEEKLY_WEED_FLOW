@@ -43,6 +43,9 @@ its normal failure mode rather than an edge case.
 | `runner_process` | runner | Advisory only: a `Runner.Listener` process is visible via `docker top`. A miss is not conclusive (process naming depends on how the runner was launched), so it WARNs. Treat consecutive WARNs as an outage. |
 | `app_ready` | prod | `GET /health/ready` is 200 with `users:ok` **and** `tasks:ok`. Probed through the public URL so it exercises traefik → nginx → backend. |
 | `db_<container>` | prod | Both database containers are `running` and accepting connections. |
+| `docengine_ready` | prod | `wwf-docengine` is `running` and its `/health` (probed from inside the container — it has no published port) answers `ok:true` with `db:true` (the registry pool). `ready:false` — Letta, RAGflow or a declared dataset unresolved — is a WARN: document jobs will fail loudly, the registry still serves. Added 2026-09-27: a 3.5 h crash loop after the 2026-09-07 reboot had no check to notice it. |
+| `backup_fresh` | prod | Inside `wwf-db-backup`: the newest `wwf_users_*` and `wwf_tasks_*` dumps are younger than 30 h (FAIL otherwise — db-backup has stopped producing), and the `docengine_out_*` archive likewise (WARN when there is none yet, FAIL when stale). |
+| `offsite_fresh` | prod | `wwf-backup-offsite` running and the newest object on the encrypted remote younger than 48 h. A missing or stopped container is a WARN naming the known state (down since the 2026-09-19 migration); a running one that is not landing copies is a FAIL. |
 | `ci_freshness` | ci | The newest `ci.yml` run is neither stuck `queued` (nothing picked it up) nor failing. Optional — SKIPs without a token. |
 
 Three deliberate subtleties worth knowing before you change any of it:
@@ -210,6 +213,12 @@ one is added).
 | `WWF_WATCHDOG_RUNNER_DIR` | *(auto-detected)* | Set if the runner install path is non-standard. |
 | `WWF_WATCHDOG_BACKEND_CONTAINER` | `weekly_weed_flow-backend-1` | Used only by the fallback probe. |
 | `WWF_WATCHDOG_DB_TARGETS` | `wwf-db-users:wwf_users wwf-db-tasks:wwf_tasks` | `container:database` pairs. |
+| `WWF_WATCHDOG_DOCENGINE_CONTAINER` | `wwf-docengine` | DocEngine container (probed from inside). |
+| `WWF_WATCHDOG_BACKUP_CONTAINER` | `wwf-db-backup` | Where the local dumps live. |
+| `WWF_WATCHDOG_OFFSITE_CONTAINER` | `wwf-backup-offsite` | The rclone container (holds the crypt config). |
+| `WWF_WATCHDOG_OFFSITE_REMOTE` | `wwf-crypt:` | Remote listed for freshness. |
+| `WWF_WATCHDOG_BACKUP_MAX_AGE_H` | `30` | Newest local dump older than this = FAIL (one daily cycle plus drift slack). |
+| `WWF_WATCHDOG_OFFSITE_MAX_AGE_H` | `48` | Newest offsite object older than this = FAIL, when the container runs. |
 | `WWF_WATCHDOG_GH_TOKEN_FILE` | *(unset)* | Path to a `0600` file holding a token with `actions:read`. Preferred over `WWF_WATCHDOG_GH_TOKEN` so the value never enters the environment of unrelated processes. |
 | `WWF_WATCHDOG_REPO` | `3p4e/WEEKLY_WEED_FLOW` | Repository for the CI query. |
 | `WWF_WATCHDOG_CI_WORKFLOW` | `ci.yml` | Workflow whose freshness is checked. |
@@ -237,6 +246,50 @@ ambiguous; exit status 0. `SKIP` = not checked, and the line says why — a SKIP
 never means "healthy".
 
 Only FAIL exits non-zero, so anything that must page has to be a FAIL.
+
+## The runner IS the production host — what that means for pull requests
+
+**Decision needed from the owner.** Recorded from the 2026-09-27 review
+(`docs/review-2026-09-27/docengine-infra.md`, DI-02), because it cannot be
+fixed from inside this repository.
+
+`ci.yml` runs on `pull_request`, and every job runs on the single self-hosted
+runner `gh-runner-wwf` (`ops/gh-runner/compose.yaml`): host networking and
+`/var/run/docker.sock` mounted, on the same host as `wwf-db-tasks`,
+`wwf-db-users`, DocEngine, Letta and RAGflow. For a `pull_request` event GitHub
+executes **the workflow file from the PR's own merge ref**. So anyone who can
+push a branch and open a PR — a collaborator, an agent session, a compromised
+account — can put `docker exec wwf-db-tasks psql …` or
+`docker run -v /:/host …` in a workflow and have it run as root against
+production, with the repository token in hand. "CI green at this commit" also
+proves only that the `ci.yml` *at that commit* passed.
+
+What the repository now does about it (mitigation, not a fix):
+
+- `ci.yml` declares `permissions: contents: read` and no longer runs a
+  host-wide `docker image prune` from PR context (it removes only the images
+  it built, by label).
+- `deploy.yml` refuses to deploy any commit whose `.github/workflows/` files
+  differ from the default branch's (compared by blob SHA), so a neutered or
+  weaponised workflow cannot be the "green CI" a deploy relies on. Merge the
+  workflow change first, then deploy.
+
+What actually closes it — pick one, both are host/GitHub settings:
+
+1. **A separate runner for CI** that shares nothing with production: a second
+   VM (or a rootless/sysbox daemon on this one) registered with a distinct
+   label, `ci.yml` moved to it, and `gh-runner-wwf` kept only for
+   `deploy.yml`, `migration-rehearsal.yml` and `watchdog.yml` (which need the
+   production socket by design). This is the clean answer; it costs a small VM.
+2. **Required approval for PR runs** on this runner: GitHub → Settings →
+   Actions → "Require approval for all outside collaborators" (the strongest
+   setting), plus branch protection that blocks pushes from anyone but the
+   owner. This keeps one runner but makes every PR from an agent or outside
+   account wait for a human click before its workflow touches the host — and
+   it does nothing about a workflow pushed by a trusted account.
+
+Until one of these is done, treat every branch push as root on production and
+review workflow-file diffs on every PR first.
 
 ## Remediation: the runner self-update that deletes `bin/`
 
