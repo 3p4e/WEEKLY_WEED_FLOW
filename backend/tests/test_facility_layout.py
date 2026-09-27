@@ -300,24 +300,38 @@ async def test_a_deactivated_room_can_still_be_found_and_switched_back_on(client
 
 
 async def test_the_owners_grades_are_seeded_where_his_rule_reaches(client, admin_headers):
-    """INS-07. The owner's scheme (2026-09-06): the extraction department is
-    Grade D; trimming and drying are officially CNC but operated as D; curing
-    and packaging are D; the corridors around cultivation are CNC. Cultivation
-    rooms carry no grade (GACP has none), and rooms the rule did not name stay
-    unclassified rather than guessed."""
+    """INS-07 / CS2-06. The owner's scheme (2026-09-06): the extraction
+    department is Grade D — the WHOLE wing, the rule names the department and
+    makes no exception for its air locks, wardrobes, washing rooms, waste
+    exits or halls (the halls are D by his corridor rule); trimming and
+    drying are officially CNC but operated as D; curing and packaging are D;
+    the corridors around cultivation are CNC. Cultivation rooms carry no grade
+    (GACP has none), rooms the rule did not name (the T/M/W wings, the F-wing
+    rooms other than trimming, drying, curing and packaging) stay unclassified
+    rather than guessed, and E34 — an unnamed polygon — is not graded by a
+    rule about rooms it cannot be shown to be one of."""
     await _import(client, admin_headers)
     graded = {"E27": "D", "E36": "D", "E40": "D", "E46": "D", "E90": "D",
               "E81": "D", "F96": "D", "F104": "D", "F108": "D", "F113": "D", "C153": "D",
-              "C74": "CNC", "C170": "CNC"}
+              "C74": "CNC", "C170": "CNC",
+              # CS2-06: the rest of the E wing, by the department rule.
+              "E23": "D", "E12": "D", "E21": "D", "E26": "D", "E32": "D", "E41": "D",
+              "E54": "D", "E34a": "D"}
     for code, grade in graded.items():
         room = await _by_code(client, admin_headers, code)
         assert room["grade"] == grade, (code, room["grade"])
     treated = await _by_code(client, admin_headers, "F104")
     assert "Officially CNC" in treated["notes"] and "Grade D" in treated["notes"]
-    for code in ("C180", "C171", "T69", "M5", "E23", "F139", "F131", "W18"):
+    hall = await _by_code(client, admin_headers, "E23")
+    assert "corridor inside" in hall["notes"], "a hall in E is D by the corridor rule, and says so"
+    wardrobe = await _by_code(client, admin_headers, "E21")
+    assert "as a whole" in wardrobe["notes"], "a room graded by the department rule says so"
+    for code in ("C180", "C171", "T69", "M5", "E34", "F139", "F131", "W18"):
         assert (await _by_code(client, admin_headers, code))["grade"] is None, code
     counted = [r for r in _REGISTER if r.get("grade")]
-    assert len(counted) == 34
+    assert len(counted) == 68
+    e_named = [r for r in _REGISTER if r["wing"] == "extraction" and r.get("name_en")]
+    assert all(r["grade"] == "D" for r in e_named), "every named E room is D"
 
 
 async def test_a_reimport_fills_a_missing_grade_and_keeps_a_set_one(client, admin_headers):

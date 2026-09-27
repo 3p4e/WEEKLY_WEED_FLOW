@@ -129,7 +129,7 @@ the register deliberately does **not** invent one. What the register carries is 
 `regime` and the `zone`; a `grade` column can be added once QA states the
 classification, and the air-lock topology above is the evidence base for it.
 
-### Grades — ANSWERED by the owner 2026-09-07
+### Grades — ANSWERED by the owner 2026-09-06 (message of 18:02)
 
 The scheme is **EU GMP grades plus CNC** (controlled not classified). The owner's
 rules, in their own terms:
@@ -164,28 +164,45 @@ call against the owner's words (review AD-15 / INS-07) and is withdrawn.
 `facility_rooms.grade` is nullable free text with no CHECK, so any scheme fits
 without a migration.
 
-**What the packaged register now seeds (2026-09-27).** 34 rooms carry a grade,
-each with a `notes` line quoting the rule that placed it:
+**What the packaged register now seeds (2026-09-27, revised in the second fix
+round).** 68 rooms carry a grade, each with a `notes` line quoting the rule
+that placed it:
 
 | Rule | Grade | Rooms |
 | --- | --- | --- |
-| Extraction department | D | E27, E35, E36, E37, E83 (production), E38, E44 (packaging), E40, E78 (IPC labs), E46, E47, E48, E53, E57, E66, E66B (warehouses) |
+| Extraction department — the rooms the wing is for | D | E27, E35, E36, E37, E83 (production), E38, E44 (packaging), E40, E78 (IPC labs), E46, E47, E48, E53, E57, E66, E66B (warehouses) |
+| Extraction department — the rest of the wing, by the same rule ("E means Extraction department so it must be Area Grade D" names the department, not a list of room kinds) | D | E12, E24, E31, E59, E66A, E85, E89 (air locks), E21, E22, E25, E50, E51, E55, E75, E76 (wardrobes, office), E26, E42, E43, E52, E82, E84 (washing, clean equipment, utility), E32, E33, E60 (garbage exits), E41 (emergency exit), E54, E56 (sampling, receiving of samples), E34a (technical premise for purification) |
+| Corridors inside the Grade D extraction department ("corridors that are within a grade D inside … are grade D also") | D | E23, E39, E45, E58, E77, E79 |
 | Curing and packaging | D | E90, F108 (curing), F113, F114, F129 (packaging) |
 | Trimming, de-bucking and drying — officially CNC, operated as D | D | E80, E81, F96, F104, F105, F106, C153 |
 | Corridors around cultivation | CNC | C74, C146, C152, C155, C169, C170 |
 
+The first seeding (28049c0) applied the E rule only to the wing's production,
+quality, warehouse and post-harvest rooms and left its air locks, wardrobes,
+utility, waste and egress rooms and halls null — a reading the decision
+register did not record (review CS2-06). The owner's sentence has no such
+qualifier, so the second fix round applies it to every named room of the wing;
+the notes on those rooms say they carry D "by the department rule, not by
+name — QA may reclassify", and a re-import never overwrites a grade QA set.
+**E34** stays null: it is an unnamed, unzoned polygon (see "Known gaps"), and a
+rule about the department's rooms cannot be shown to reach a shape that is not
+attributed to one. The de-bucking room **C153** and the E-wing trimming/drying
+rooms **E80/E81** are graded D by *analogy* with the owner's "Trimming and
+Drying Rooms" (he named those; de-bucking is the same post-harvest step in the
+first GMP room) — an extension for him to confirm (review INS2-18).
+
 Everything else stays null: the cultivation rooms (GACP defines no grade — the
 plan draws them as "GACP — no grade applies", which is a statement about GACP,
-not an invented grade), the technical, main and washing wings, the E/F wardrobes,
-sampling rooms, air locks, waste and egress rooms, the F-wing IPC labs and
-warehouses (the owner's F rule names trimming, drying, curing and packaging
-only), the staircases and lifts, and the E/F corridors (interior vs perimeter is
-not derivable from the drawing). A re-import fills a grade or note only where
-none is set, so a classification QA made is never overwritten. The Floor plan
-tab colours the plan **by zone** or **by grade**, with a legend that counts
-rooms and area per grade and doubles as a filter.
+not an invented grade), the technical, main and washing wings, the F-wing
+wardrobes, sampling rooms, air locks, waste and egress rooms, the F-wing IPC
+labs and warehouses (the owner's F rule names trimming, drying, curing and
+packaging only), the staircases and lifts, and the F corridors (interior vs
+perimeter is not derivable from the drawing). A re-import fills a grade or
+note only where none is set, so a classification QA made is never
+overwritten. The Floor plan tab colours the plan **by zone** or **by grade**,
+with a legend that counts rooms and area per grade and doubles as a filter.
 
-**[NEEDS INPUT] — still open, three gaps in the rules above** (these rooms are
+**[NEEDS INPUT] — still open, the gaps in the rules above** (these rooms are
 left null in the register). The rules cover the `E` and `F` wings; they do not
 reach:
 
@@ -193,16 +210,18 @@ reach:
 - **`M…` main** (15 rooms: entrance, security, cantina, personnel)
 - **`W…`** (3 rooms: wardrobe, laundry, air lock — the laundry serves clean areas)
 
-And within `E` and `F`, "the department is Grade D" would currently sweep in
-**7 warehouses, 3 waste rooms, 8 wardrobes and 1 emergency exit** on the `E` side
-(5 warehouses, 1 waste room, 11 personnel rooms and 2 egress routes on `F`). Do
-waste, egress and finished-goods warehousing really carry D, or are they CNC?
+Within `F`, the owner named trimming, drying, curing and packaging; "dry flower
+processing" would also sweep in **5 warehouses, 1 waste room, 11 personnel rooms
+and 2 egress routes**. Do those carry D, or are they CNC? (On the `E` side the
+question is answered by the department rule and applied — see above; confirm
+that the air locks, wardrobes and garbage exits of E are meant to be D too.)
 
 Finally, "corridors inside a Grade D area are D, perimeter corridors are CNC"
-cannot be applied from the drawing alone: **which of the 6 `E` and 6 `F` corridors
-are interior and which are perimeter is not derivable from the plan geometry** and
-needs marking. The 10 cultivation and 2 main corridors follow from the rules as
-CNC without further input.
+cannot be applied to `F` from the drawing alone: **which of the 6 `F` corridors
+are interior and which are perimeter is not derivable from the plan geometry**
+and needs marking. The 6 `E` halls are inside the extraction department and
+take D by the rule; the 10 cultivation and 2 main corridors follow from the
+rules as CNC without further input.
 
 ## Cultivation capacity, as drawn
 

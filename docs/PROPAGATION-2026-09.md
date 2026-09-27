@@ -24,15 +24,36 @@
 
 ## What "the ImB Product Specifications" are in this system
 
-The per-strain potency ladders in `qc_potency_specs` (`PP-QC-SPEC-001`), imported
-from the owner's ImB handoff catalogue (`app/data/imb_grade_ladders.json`,
-`qc/potency_import.py`) and joined to the cultivar master. A ladder carries the
-strain (through `cultivars`) and its grades (`qc_potency_spec_ranges`: Spec I is
-the top range, descending). `qc/spec_html.py` renders the same data as the ImB
-specification document. So "choose the cultivar from the product
-specifications" means: **the cultivar chooser shows each cultivar with its
-ladder**, and the batch and the clone run record which ladder they were
-registered / propagated against.
+The **product catalogue** — `qc_products`, one row per product (a strain at a
+nominal Total Δ9-THC, coded `GP_THC26:CBD1`) with its acceptance window,
+document code and version, and an APPROVED / DRAFT / SUPERSEDED status
+(`docs/PRODUCT-CATALOGUE-2026-09.md`, `app/api/qc/products.py`). The owner
+confirmed on 2026-09-05 that the two ImB Specification documents are the
+official pages, and on 2026-09-18 that the **fitted specifications** (the
+Potency Spec Service export, imported through `POST /qc/products/import-fitted`)
+are the controlled state everywhere — the flat ±10 % of the issued v.03 pages
+survives only as the ceiling a window may not exceed. So "choose the cultivar
+from the product specifications" means: **the cultivar chooser shows each
+cultivar with its APPROVED products** (`GET /cultivation/cultivars` folds them
+in as `products`), the batch records the product it is grown to
+(`plant_batches.product_id`), the clone run records the product the material is
+propagated against (`clone_runs.product_id`), and a mother plant belongs to a
+product (`mother_plants.product_id`; its id's head `GP26` is the product code's
+acronym and grade).
+
+The per-strain **ladders** (`qc_potency_specs`, `PP-QC-SPEC-001`, imported from
+`app/data/imb_grade_ladders.json`) are the scheme this section used to
+describe. They are retired: a cultivar's first APPROVED product supersedes its
+ladder, and no ladder can be authored, approved or imported for a cultivar
+that has one (review QC-04, C-7). Nothing in propagation or cultivation reads
+them any more (review CS-18).
+
+**Versions.** Approving the first product of a new document version — the
+fitted `GP_THC26:CBD1` after the ImB v.03 page — supersedes the strain's rows
+of the old version. A product is therefore identified by its **code**, not its
+row: the mother line, the parent check and the parent chooser all compare the
+code, a later generation registers against the live page of its parent's code,
+and the line's mothers are moved onto that page when it does (review CS2-01).
 
 ## Design
 
@@ -60,16 +81,20 @@ was stale against the code since 2026-09-05; review CS-20.)
 
 ### Registering from the specification
 
-- `GET /cultivation/cultivars` returns each cultivar **with** `spec`: the
-  APPROVED ladder if one exists, else the newest DRAFT (flagged), else `null`.
-  One query (lateral join + folded grades).
-- `GET /cultivation/batch-code?cultivar_id=` suggests the next batch number.
-- The batch form: the cultivar chooser's sub-text is the grade line
-  (`I 26.00–30.00 · II 22.00–26.00 · …`, `DRAFT` when it is one, "no product
-  specification yet" when there is none); the panel beneath shows strain,
-  `PP-QC-SPEC-001 vX`, APPROVED / DRAFT, and the grade table. Picking a
-  cultivar re-fills the batch number through `GF.codeField` with the cultivar
-  code as the fixed head.
+- `GET /cultivation/cultivars` returns each cultivar **with** `products`: its
+  APPROVED and DRAFT products (approved first, each with code, grade, nominal,
+  window and status). One query (a folded sub-select). There is no `spec`
+  key any more (review CS-18).
+- `GET /cultivation/batch-code?cultivar_id=&clone_date=` suggests the next
+  batch number for the CLONING month.
+- The batch form: the cultivar chooser's sub-text lists the products
+  (`THC 26 · THC 18`, `(DRAFT)` when one is, "no product specification yet"
+  when there is none); the target-product chooser offers the APPROVED ones
+  with their windows; the panel beneath shows the strain and its products —
+  code, window, nominal, APPROVED / DRAFT. Picking a cultivar re-fills the
+  batch number through `GF.codeField` with the cultivar code as the fixed
+  head. The product can also be set later (`PATCH /cultivation/batches/{id}`,
+  "Edit batch" on the card) because the catalogue arrives after the batches do.
 
 ### The batch journey strip
 
@@ -91,7 +116,7 @@ was stale against the code since 2026-09-05; review CS-20.)
   a chip per open batch to switch. Every batch card carries the compact bar.
 - If the propagation record links a clone run to the batch, the strip says
   which run, from how many mothers, with how many cuttings, against which
-  specification.
+  product (the run's `product_code`).
 
 ### The mother bank and clone runs (migration 0065)
 
@@ -195,7 +220,14 @@ The bank derived `generations` meaning "how many clone runs this mother was cut
 in" — which is not the `-2` in the owner's id. That reading is now `times_cut`;
 `generation` means only the mother's own generation.
 
-## The specification files the owner sent (2026-09-05)
+## The specification files the owner sent (2026-09-05) — historical
+
+*This section is the analysis made on 2026-09-05, kept as the record of how
+the pages were read. The question it raised was answered the same evening
+(the pages ARE the ImB specification; they were imported as products, C-1)
+and overtaken on 2026-09-18 (the fitted specifications replace the flat ±10 %
+windows everywhere). The catalogue comparison below is against the retired
+ladders. Do not act on it; see `PRODUCT-CATALOGUE-2026-09.md`.*
 
 `PP_ImB_Specifications_Tran01-1-19.pdf` and `PP_ImB_Specifications_Tran02-20-48.pdf`
 (Drive, 2026-08-31) — 48 one-page ImB Product Specifications, read through the
@@ -223,18 +255,18 @@ imported into `qc_potency_specs` as tiered ladders):
   codes that do match, **7 have a different window**: the catalogue's tiers
   are absolute bands (Spec II 22.00–26.00) where the PDF's are ± 10 %
   relative (21.60–26.39).
-- So the two sources describe the same strains with two different grade
-  schemes. Which one is the specification a batch is registered against —
-  and released against — is the owner's call:
-  `[NEEDS INPUT: are the per-product ± 10 % pages the current ImB
-  specification, superseding the tiered ladders imported in August? If so the
-  potency catalogue should be re-imported from these pages (one product =
-  one nominal, window = ± 10 %), and a batch could carry a TARGET product at
-  registration.]`
+- So the two sources described the same strains with two different grade
+  schemes. **Answered by the owner on 2026-09-05 (22:28):** the per-product
+  pages are the ImB specification and were imported as products
+  (`POST /qc/products/import`); a batch carries a TARGET product at
+  registration. **Superseded on 2026-09-18:** the ±10 % windows of these pages
+  are retired in favour of the fitted specifications (`import-fitted`), which
+  approve as a new document version and retire the v.03 rows.
 
-This does not change what was built: the batch form registers against the
-cultivar and shows whatever ladder `qc_potency_specs` holds; a clone run
-snapshots that ladder. When the catalogue is corrected, both follow it.
+What was built follows the catalogue: the batch form registers against the
+cultivar and its APPROVED products; a clone run names the product the
+material is propagated against (`clone_runs.product_id`; the ladder snapshot
+`potency_spec_id` of 0065 was dropped in 0067).
 
 <details>
 <summary>All 48 pages as extracted (strain · product code · window · catalogue match)</summary>
@@ -294,19 +326,32 @@ snapshots that ladder. When the catalogue is corrected, both follow it.
 
 ## Tests
 
-- Backend: `tests/test_propagation.py` (7) and three additions to
-  `tests/test_cultivation.py` — gating, derived fields, the next-code rules,
-  same-cultivar rules, the specification snapshot, the run lifecycle.
+- Backend: `tests/test_propagation.py` (17) — gating, derived fields, the
+  facility-wide campaign numbers, the next-code rules, the inherited line of
+  a later generation, one line per mother number, concurrent registrations,
+  the caps, the acronym head, the null-vs-empty ids, the frozen runs of a
+  filled batch, the run lifecycle, and the re-issued catalogue page
+  (CS2-01) — plus the propagation cases in `tests/test_cultivation.py` (the
+  clone ids of a filled batch, a failed run, the fill lock).
 - Frontend: `tests/frontend/propagation-view.test.js` — who is offered what,
-  the chooser's grade lines and the panel, the pre-filled batch number, the
+  the chooser's product lines and the panel, the pre-filled batch number, the
   strip's position / next step / handoff / animation / focus, the bank's
-  derived columns, the run form's filtering and null-vs-zero, finishing a run.
+  derived columns and its segments, the parent chooser by product code, the
+  run form's filtering and null-vs-zero, the unset run date, finishing a run.
 
 ## Rollout
 
-- Migration `0065` is additive (three new tables); nothing existing changes.
+- Migrations `0065`, `0066`, `0067` and `0070` (three new tables; the id
+  segments; the line key without the product). `0067` and `0070` refuse to
+  run over pre-existing mother rows; production has none.
 - The demo seeder does not seed mothers or runs; the bank starts empty and is
-  filled from the Mother bank tab.
-- A cultivar shows grades only once its ladder is in `qc_potency_specs`
-  (import the ImB catalogue via `POST /qc/potency-specs/import`, then approve
-  per cultivar).
+  filled from the Mother bank tab. A mother needs an APPROVED product and an
+  open selection campaign first.
+- A cultivar shows its products once they are in the catalogue — follow the
+  rollout in `PRODUCT-CATALOGUE-2026-09.md`: import the ImB pages **for the
+  strain renames only, without approving them**, import the fitted export
+  (`POST /qc/products/import-fitted`), then approve each strain's fitted set
+  in one sitting as a second QC person or the QP. Do **not** import or
+  approve the retired ladders (`POST /qc/potency-specs/import` is refused once
+  any product is APPROVED, and before that it would install the scheme the
+  owner retired on 2026-09-18).
