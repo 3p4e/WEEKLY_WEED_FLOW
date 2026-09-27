@@ -2,6 +2,7 @@
 # (the create/attach/delete round-trips are exercised on the wwf_mass stack,
 # same convention as test_pipeline.py).
 import ast
+import asyncio
 import json
 import sys
 import urllib.request
@@ -333,13 +334,22 @@ def test_governance_blocks_are_read_only_and_the_persona_is_not():
     """Every gf_ agent carries memory_replace/memory_insert, so without the
     flag an agent can rewrite its own house rules — or widen its own dataset
     scope, which is the guardrail keeping stability data out of release
-    documents. `persona` stays writable: Letta owns that block."""
+    documents. `persona` stays writable for a conversational agent (Letta
+    owns that block) — but NOT for a verbatim author: its reply is spliced
+    straight into a controlled document, so a persona it could be talked
+    into rewriting would steer every later section with no human stop
+    (review 2026-09-27, DI-14)."""
     spec = load_fleet()
     for ag in spec["agents"]:
         for block in fleet._blocks_for(ag, spec):
-            expected = block["label"] != fleet.PERSONA_BLOCK
+            if block["label"] == fleet.PERSONA_BLOCK:
+                expected = bool(ag.get("verbatim_output"))
+            else:
+                expected = True
             assert block["read_only"] is expected, (ag["name"], block["label"])
     assert fleet.PERSONA_BLOCK not in fleet.GOVERNANCE_BLOCKS
+    verbatim = {a["name"] for a in spec["agents"] if a.get("verbatim_output")}
+    assert verbatim == {"gf_sop_author", "gf_annex_author", "gf_raci_specialist"}
 
 
 def test_every_persona_is_a_brief_not_a_sentence():
@@ -399,6 +409,170 @@ def test_scope_block_forbids_an_unscoped_search():
     key can reach — including the withheld one. The tool refuses it now; the
     block says so too."""
     assert "never omit the argument" in _scope_block(["eCoA_DATABASE"], [])
+
+
+# ── Serialisation: agent locks + cached ensure pass (DI-08) ─────────────────
+
+
+@pytest.fixture
+def _clean_fleet_cache():
+    fleet.invalidate_fleet_cache()
+    yield
+    fleet.invalidate_fleet_cache()
+
+
+def test_agent_lock_is_one_lock_per_persistent_agent():
+    assert fleet.agent_lock("gf_qa_auditor") is fleet.agent_lock("gf_qa_auditor")
+    assert fleet.agent_lock("gf_qa_auditor") is not fleet.agent_lock("gf_sop_author")
+
+
+@pytest.mark.asyncio
+async def test_ensure_fleet_ctx_reuses_a_recent_pass_and_force_repeats_it(monkeypatch, _clean_fleet_cache):
+    """Every job and every chat question used to run the full reconcile —
+    and a reconcile can reset a persistent agent's buffer under another
+    job's turn. A pass younger than FLEET_CACHE_S is reused instead."""
+    passes = []
+
+    async def fake_pass(client):
+        passes.append(client)
+        return fleet.FleetContext({"gf_x": "a-1"}, [], "m", "e", "tool-1", [], fleet.FleetReport())
+    monkeypatch.setattr(fleet, "_ensure_fleet_pass", fake_pass)
+
+    assert fleet.fleet_ctx_cached() is None
+    first = await fleet.ensure_fleet_ctx(object())
+    second = await fleet.ensure_fleet_ctx(object())
+    assert first is second and len(passes) == 1
+    assert fleet.fleet_ctx_cached() is first
+    third = await fleet.ensure_fleet_ctx(object(), force=True)
+    assert third is not first and len(passes) == 2
+    fleet.invalidate_fleet_cache()
+    assert fleet.fleet_ctx_cached() is None
+    await fleet.ensure_fleet_ctx(object())
+    assert len(passes) == 3
+
+
+@pytest.mark.asyncio
+async def test_a_cached_pass_expires_after_the_window(monkeypatch, _clean_fleet_cache):
+    async def fake_pass(client):
+        return fleet.FleetContext({}, [], "m", "e", "t", [], fleet.FleetReport())
+    monkeypatch.setattr(fleet, "_ensure_fleet_pass", fake_pass)
+    await fleet.ensure_fleet_ctx(object())
+    assert fleet.fleet_ctx_cached() is not None
+    monkeypatch.setattr(fleet, "FLEET_CACHE_S", 0)
+    assert fleet.fleet_ctx_cached() is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_callers_share_one_pass(monkeypatch, _clean_fleet_cache):
+    """Two jobs starting at once run ONE reconcile, not two interleaved."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+    passes = []
+
+    async def slow_pass(client):
+        passes.append(1)
+        started.set()
+        await release.wait()
+        return fleet.FleetContext({}, [], "m", "e", "t", [], fleet.FleetReport())
+    monkeypatch.setattr(fleet, "_ensure_fleet_pass", slow_pass)
+    a = asyncio.create_task(fleet.ensure_fleet_ctx(object()))
+    await started.wait()
+    b = asyncio.create_task(fleet.ensure_fleet_ctx(object()))
+    await asyncio.sleep(0)
+    release.set()
+    ra, rb = await asyncio.gather(a, b)
+    assert ra is rb and passes == [1]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_config_waits_for_the_agents_turn_before_resetting_its_buffer():
+    """The race the review found: job B mid-turn on gf_qa_auditor, job A's
+    reconcile sees a stale buffer and resets it under B. The reconciler now
+    takes the agent's lock — the same lock the pipeline holds around every
+    send to a persistent agent — so the reset waits for B's turn to end."""
+    spec = load_fleet()
+    client = _ConfigClient()
+    agent = {"id": "agent-1", "message_buffer_autoclear": True,
+             "message_ids": ["m1", "m2", "m3"],
+             "llm_config": {"context_window": spec["defaults"]["context_window"],
+                            "max_tokens": spec["defaults"]["max_tokens"]}}
+    ag = {"name": "gf_qa_auditor", "autoclear": True}
+    lock = fleet.agent_lock("gf_qa_auditor")
+    await lock.acquire()                      # "job B" is mid-turn
+    task = asyncio.create_task(
+        fleet._reconcile_config(client, agent, ag, spec, "gf_qa_auditor"))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert client.resets == []                # nothing reset under B
+    assert not task.done()
+    lock.release()                            # B's turn ends
+    assert await task is True
+    assert client.resets == ["agent-1"]
+
+
+@pytest.mark.asyncio
+async def test_the_pipeline_sends_to_a_persistent_author_under_its_lock(monkeypatch):
+    """With the author's lock held by someone else, the section draft waits;
+    once released, the job proceeds. No second job can share an author's
+    turn."""
+    from app import builder, db, pipeline
+
+    updates = []
+
+    async def fake_job_get(jid):
+        return {"id": "job-1", "payload": {"questionnaire": "annex_form", "answers": {},
+                                          "meta": {"title_mk": "МК", "title_en": "EN", "code": "C-1"}}}
+
+    async def fake_job_update(jid, **fields):
+        updates.append(fields)
+
+    async def fake_document_create(job_id, meta):
+        return "doc-1"
+
+    agents = {a["name"]: f"agent-{a['name']}" for a in load_fleet()["agents"]}
+
+    async def fake_ctx(client):
+        return fleet.FleetContext(agents, [], "m", "e", "tool-1", [], fleet.FleetReport())
+
+    async def fake_spawn(client, agent_name, name_suffix, ctx=None, autoclear=None):
+        return "tmp-1"
+    monkeypatch.setattr(db, "job_get", fake_job_get)
+    monkeypatch.setattr(db, "job_update", fake_job_update)
+    monkeypatch.setattr(db, "document_create", fake_document_create)
+    monkeypatch.setattr(fleet, "ensure_fleet_ctx", fake_ctx)
+    monkeypatch.setattr(fleet, "spawn_ephemeral", fake_spawn)
+    monkeypatch.setattr(builder, "build", lambda *a, **k: builder.BuildResult(
+        path=Path("/tmp/x.docx"), bytes=1, verify_report="RESULT: PASS", doctype="FORM"))
+
+    sent = []
+
+    class Client:
+        async def send_message_full(self, agent_id, prompt):
+            sent.append(agent_id)
+            text = "Verdict: PASS" if "§6A" in prompt else \
+                "# Образец|Form\n[[FORM:grid]]\nДатум~~Date|||\n[[/FORM]]\nТекст со букви.|Text with letters."
+            return {"text": text, "tool_calls": [], "tool_returns": []}
+
+        async def send_message(self, agent_id, prompt):
+            return "NO-FINDING"
+
+        async def delete_agent(self, agent_id):
+            pass
+
+        async def aclose(self):
+            pass
+
+    lock = fleet.agent_lock(pipeline.ANNEX_AUTHOR)
+    await lock.acquire()
+    task = asyncio.create_task(pipeline.run_workflow("job-1", client=Client()))
+    for _ in range(10):
+        await asyncio.sleep(0)
+    assert sent == []                         # the author's turn is someone else's
+    lock.release()
+    await task
+    assert sent[0] == agents[pipeline.ANNEX_AUTHOR]
+    assert updates[-1]["status"] == "done"
+    assert not lock.locked()                  # released after the turn
 
 
 # ── Config reconciliation ───────────────────────────────────────────────────
@@ -1421,7 +1595,9 @@ def test_every_block_this_module_makes_carries_one_limit_and_derives_read_only()
     ag, spec = _agent_and_spec()
     for b in fleet._blocks_for(ag, spec):
         assert b["limit"] == fleet.BLOCK_LIMIT
-        assert b["read_only"] == (b["label"] in fleet.GOVERNANCE_BLOCKS)
+        expected = (b["label"] in fleet.GOVERNANCE_BLOCKS
+                    or (b["label"] == fleet.PERSONA_BLOCK and bool(ag.get("verbatim_output"))))
+        assert b["read_only"] == expected
 
 
 @pytest.mark.asyncio

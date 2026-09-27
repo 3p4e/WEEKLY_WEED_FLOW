@@ -13,6 +13,9 @@ from app.config import settings  # noqa: E402
 from app.main import app  # noqa: E402
 
 KEY = "test-key-123"
+# Every read and write is for one organisation (DI-13); the backend proxy
+# sends the signed-in user's org id as X-Org-Id.
+ORG = "org-test-1"
 
 
 @pytest.fixture(autouse=True)
@@ -28,8 +31,11 @@ def client():
         yield c
 
 
-def h(key=KEY):
-    return {"X-API-Key": key}
+def h(key=KEY, org=ORG):
+    out = {"X-API-Key": key}
+    if org:
+        out["X-Org-Id"] = org
+    return out
 
 
 def test_health_open(client):
@@ -57,19 +63,48 @@ def test_questionnaires(client):
     assert client.get("/questionnaires/nope", headers=h()).status_code == 404
 
 
-def test_direct_build_pass(client):
-    md = (
-        "<!--HEADERDATA\nmk_title: Тест\nen_title: Test\ncode: T-1\n"
-        "version: 1.0\ndoctype: FORM\norient: portrait\n-->\n"
-        "# 1.0 ИНФОРМАЦИИ|INFORMATION\n[[FORM:grid]]\nДатум~~Date|||\n[[/FORM]]\n"
-    )
-    r = client.post("/build", json={"markdown": md, "out_name": "t1"}, headers=h())
+_BUILD_MD = (
+    "<!--HEADERDATA\nmk_title: Тест\nen_title: Test\ncode: T-1\n"
+    "version: 3.2\ndoctype: FORM\norient: portrait\n-->\n"
+    "# 1.0 ИНФОРМАЦИИ|INFORMATION\n[[FORM:grid]]\nДатум~~Date|||\n[[/FORM]]\n"
+)
+
+
+def _stub_registry(monkeypatch):
+    """A registry that records what /build registers. Offline: the file
+    header says so, and the point of these tests is the request contract."""
+    registered = {}
+    monkeypatch.setattr(db, "ready", lambda: True)
+
+    async def fake_document_create(job_id, meta):
+        registered.update(meta)
+        return "33333333-3333-3333-3333-333333333333"
+    monkeypatch.setattr(db, "document_create", fake_document_create)
+    return registered
+
+
+def test_direct_build_pass(client, monkeypatch):
+    registered = _stub_registry(monkeypatch)
+    r = client.post("/build", json={"markdown": _BUILD_MD, "out_name": "t1",
+                                    "meta": {"code": "T-1"}, "requested_by": "qa.one"},
+                    headers=h())
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True and "RESULT: PASS" in body["verify"]
+    assert body["document_id"] == "33333333-3333-3333-3333-333333333333"
+    # DI-06: the registry identity is the DOCUMENT's, not the request's —
+    # the version the header prints, both titles, the doctype, and who asked
+    assert body["audited"] is False
+    assert registered["code"] == "T-1" and registered["version"] == "3.2"
+    assert registered["title_mk"] == "Тест" and registered["title_en"] == "Test"
+    assert registered["doctype"] == "FORM"
+    assert registered["created_by"] == "qa.one" and registered["org_id"] == ORG
+    assert registered["source"] == "build" and registered["qa_audit"] is None
+    assert registered["provenance"]["sections"] == ["1.0"]
 
 
 def test_direct_build_fail_gated(client, monkeypatch):
+    _stub_registry(monkeypatch)
     monkeypatch.setattr(builder, "run_verify",
                          lambda p, min_pt=6.0, require_bilingual=True: (False, "RESULT: FAIL"))
     md = (
@@ -80,6 +115,141 @@ def test_direct_build_fail_gated(client, monkeypatch):
     r = client.post("/build", json={"markdown": md, "out_name": "t2"}, headers=h())
     assert r.status_code == 422
     assert "FAIL" in r.json()["detail"]["verify"]
+
+
+def test_direct_build_is_503_without_a_registry(client, monkeypatch):
+    """DI-16: a built file registered nowhere is not a controlled document.
+    Answering 200 with document_id=null let the certificate pipeline record
+    'generated' with no artefact."""
+    monkeypatch.setattr(db, "ready", lambda: False)
+    r = client.post("/build", json={"markdown": _BUILD_MD, "out_name": "t1"}, headers=h())
+    assert r.status_code == 503
+
+
+def test_direct_build_rejects_meta_that_contradicts_the_header(client, monkeypatch):
+    _stub_registry(monkeypatch)
+    r = client.post("/build", json={"markdown": _BUILD_MD, "out_name": "t1",
+                                    "meta": {"code": "T-1", "version": "1.0"}},
+                    headers=h())
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["error"] == "meta contradicts HEADERDATA"
+    assert detail["conflicts"] == {"version": {"meta": "1.0", "headerdata": "3.2"}}
+
+
+def test_direct_build_rejects_an_incomplete_header(client, monkeypatch):
+    _stub_registry(monkeypatch)
+    md = "<!--HEADERDATA\ncode: T-3\ndoctype: FORM\n-->\n# 1.0 А|A\nТекст.|Text.\n"
+    r = client.post("/build", json={"markdown": md, "out_name": "t3"}, headers=h())
+    assert r.status_code == 422
+    assert set(r.json()["detail"]["missing"]) == {"version", "mk_title", "en_title"}
+
+
+def test_direct_build_runs_the_per_section_gates(client, monkeypatch):
+    """The same bilingual gate the questionnaire path enforces: a section in
+    one language is refused before anything is built or registered."""
+    _stub_registry(monkeypatch)
+    calls = []
+    monkeypatch.setattr(builder, "build", lambda *a, **k: calls.append(a))
+    md = (
+        "<!--HEADERDATA\nmk_title: Тест\nen_title: Test\ncode: T-4\n"
+        "version: 1.0\ndoctype: FORM\n-->\n"
+        "# 1.0 ИНФОРМАЦИИ|INFORMATION\n"
+        "This whole section is written in English only, long enough for the gate to "
+        "judge it, and carries no Macedonian text anywhere at all in its body. A second "
+        "sentence keeps it comfortably past the floor below which the gate abstains.\n"
+    )
+    r = client.post("/build", json={"markdown": md, "out_name": "t4"}, headers=h())
+    assert r.status_code == 422
+    assert "not bilingual: 1.0 (no MK)" in " ".join(r.json()["detail"]["gates"])
+    assert calls == []
+
+
+def test_a_bilingual_switch_in_the_body_no_longer_disables_verification():
+    """DI-06: `bilingual: no` used to be honoured anywhere in the markdown;
+    only the HEADERDATA block may say it."""
+    body_only = _BUILD_MD + "\nbilingual: no\n"
+    assert builder.headerdata(body_only).get("bilingual") is None
+    header = _BUILD_MD.replace("orient: portrait", "orient: portrait\nbilingual: no")
+    assert builder.headerdata(header)["bilingual"] == "no"
+
+
+# ---------- organisation scope (DI-13) ----------
+def test_scoped_routes_refuse_a_request_without_an_organisation(client, monkeypatch):
+    monkeypatch.setattr(db, "ready", lambda: True)
+    for method, path, body in (
+        ("GET", "/documents", None),
+        ("GET", f"/documents/{DONE_JOB}", None),
+        ("GET", f"/workflows/{DONE_JOB}", None),
+        ("POST", "/build", {"markdown": _BUILD_MD}),
+        ("POST", f"/workflows/{DONE_JOB}/chat", {"question": "why?"}),
+        ("POST", f"/workflows/{DONE_JOB}/revise", {"instruction": "x"}),
+    ):
+        r = client.request(method, path, json=body, headers=h(org=None))
+        assert r.status_code == 400, (method, path, r.status_code)
+        assert "X-Org-Id" in r.json()["detail"]
+    # static catalogues need no organisation
+    assert client.get("/questionnaires", headers=h(org=None)).status_code == 200
+    assert client.get("/presets", headers=h(org=None)).status_code == 200
+
+
+def test_another_organisations_job_reads_as_absent(client, monkeypatch):
+    monkeypatch.setattr(db, "ready", lambda: True)
+
+    async def _job(jid):
+        return _done_job(org="org-other")
+    monkeypatch.setattr(db, "job_get", _job)
+    assert client.get(f"/workflows/{DONE_JOB}", headers=h()).status_code == 404
+    assert client.post(f"/workflows/{DONE_JOB}/revise", headers=h(),
+                       json={"instruction": "x"}).status_code == 404
+    assert client.post(f"/workflows/{DONE_JOB}/chat", headers=h(),
+                       json={"question": "q"}).status_code == 404
+    assert client.get(f"/workflows/{DONE_JOB}", headers=h(org="org-other")).status_code == 200
+
+
+def test_workflow_and_revise_jobs_are_stamped_with_the_organisation(client, monkeypatch):
+    _stub_job_pipeline(monkeypatch)
+    created = []
+
+    async def _fake_job_create(kind, payload, created_by="", org_id=None):
+        created.append((kind, org_id))
+        return "00000000-0000-0000-0000-000000000000"
+    monkeypatch.setattr(db, "job_create", _fake_job_create)
+    r = client.post("/workflows", headers=h(org="org-42"),
+                    json={"questionnaire": "sop_qc", "answers": {},
+                          "meta": {"title_mk": "а", "title_en": "a", "code": "X-8"}})
+    assert r.status_code == 200
+    assert created == [("workflow", "org-42")]
+
+
+def test_documents_list_is_org_scoped_and_paged(client, monkeypatch):
+    """DI-13 / DI-21: the list is the organisation's own, and pages."""
+    monkeypatch.setattr(db, "ready", lambda: True)
+    asked = {}
+
+    async def fake_list(org_id, limit=100, offset=0):
+        asked.update(org=org_id, limit=limit, offset=offset)
+        return {"documents": [], "total": 0, "limit": limit, "offset": offset}
+    monkeypatch.setattr(db, "documents_list", fake_list)
+    r = client.get("/documents?limit=50&offset=100", headers=h(org="org-7"))
+    assert r.status_code == 200
+    assert asked == {"org": "org-7", "limit": 50, "offset": 100}
+    assert r.json() == {"documents": [], "total": 0, "limit": 50, "offset": 100}
+    assert client.get("/documents?limit=0", headers=h()).status_code == 422
+    assert client.get("/documents?limit=501", headers=h()).status_code == 422
+
+
+def test_document_reads_pass_the_organisation_to_the_registry(client, monkeypatch):
+    monkeypatch.setattr(db, "ready", lambda: True)
+    asked = []
+
+    async def fake_get(did, org_id):
+        asked.append((did, org_id))
+        return None
+    monkeypatch.setattr(db, "document_get", fake_get)
+    assert client.get(f"/documents/{DONE_JOB}", headers=h(org="org-9")).status_code == 404
+    assert client.get(f"/documents/{DONE_JOB}/download", headers=h(org="org-9")).status_code == 404
+    assert asked == [(DONE_JOB, "org-9"), (DONE_JOB, "org-9")]
 
 
 def test_workflow_degrades_without_db(client, monkeypatch):
@@ -122,7 +292,7 @@ def _stub_job_pipeline(monkeypatch):
     isn't rejected downstream for unrelated reasons."""
     monkeypatch.setattr(db, "ready", lambda: True)
 
-    async def _fake_job_create(kind, payload, created_by=""):
+    async def _fake_job_create(kind, payload, created_by="", org_id=None):
         return "00000000-0000-0000-0000-000000000000"
 
     monkeypatch.setattr(db, "job_create", _fake_job_create)
@@ -248,9 +418,10 @@ def test_presets_lists_catalog(client):
     assert all(p["instruction"] for p in presets)
 
 
-def _done_job(result_extra=None):
+def _done_job(result_extra=None, org=ORG):
     return {
         "id": DONE_JOB, "kind": "workflow", "status": "done", "stage": "done",
+        "org_id": org,
         "result": {"document_id": "doc-1", "sections": _SECTIONS, "meta": _META,
                    **(result_extra or {})},
     }
@@ -273,7 +444,7 @@ def test_revise_409_when_job_predates_the_feature(client, monkeypatch):
     monkeypatch.setattr(db, "ready", lambda: True)
 
     async def _old(jid):
-        return {"id": DONE_JOB, "status": "done", "result": {"markdown": "..."}}
+        return {"id": DONE_JOB, "status": "done", "org_id": ORG, "result": {"markdown": "..."}}
     monkeypatch.setattr(db, "job_get", _old)
     r = client.post(f"/workflows/{DONE_JOB}/revise", headers=h(), json={"instruction": "x"})
     assert r.status_code == 409
@@ -316,7 +487,7 @@ def test_revise_queues_a_job_with_the_preset_resolved(client, monkeypatch):
 
     created = {}
 
-    async def _fake_job_create(kind, payload, created_by=""):
+    async def _fake_job_create(kind, payload, created_by="", org_id=None):
         created["kind"] = kind
         created["payload"] = payload
         created["created_by"] = created_by
@@ -353,7 +524,7 @@ def test_revise_freeform_instruction_overrides_preset_key(client, monkeypatch):
 
     created = {}
 
-    async def _fake_job_create(kind, payload, created_by=""):
+    async def _fake_job_create(kind, payload, created_by="", org_id=None):
         created["payload"] = payload
         return "22222222-2222-2222-2222-222222222222"
     monkeypatch.setattr(db, "job_create", _fake_job_create)

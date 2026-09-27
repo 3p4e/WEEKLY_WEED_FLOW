@@ -120,13 +120,144 @@ async def test_job_round_trip(dbpool):
 
 
 async def test_document_create_and_read_back(dbpool):
-    jid = await db.job_create("build", {})
+    jid = await db.job_create("workflow", {}, org_id="org-a")
     did = await db.document_create(jid, {
         "code": "QCSOP-999", "doctype": "SOP", "title_mk": "МК", "title_en": "EN",
         "version": "1.0", "path": "/data/out/QCSOP-999.docx", "bytes": 4242,
-        "verify": "RESULT: PASS",
+        "verify": "RESULT: PASS", "org_id": "org-a", "created_by": "qa.one",
+        "qa_audit": "Verdict: PASS", "provenance": {"sections": [{"section": "1.0"}]},
     })
-    doc = await db.document_get(did)
+    doc = await db.document_get(did, "org-a")
     assert doc["code"] == "QCSOP-999" and doc["bytes"] == 4242
     assert doc["verify"] == "RESULT: PASS"
-    assert any(d["id"] == did for d in await db.documents_list())
+    assert doc["created_by"] == "qa.one" and doc["source"] == "workflow"
+    assert doc["qa_audit"] == "Verdict: PASS"
+    assert doc["provenance"] == {"sections": [{"section": "1.0"}]}
+    # registration is not review: nobody has reviewed it until someone does
+    assert doc["reviewed_by"] is None and doc["reviewed_at"] is None
+    page = await db.documents_list("org-a")
+    assert page["total"] == 1 and page["documents"][0]["id"] == did
+    assert page["documents"][0]["audited"] is True
+
+
+# ── org scope (DI-13) ────────────────────────────────────────────────────────
+async def _register(org, code, **extra):
+    return await db.document_create(None, {
+        "code": code, "doctype": "FORM", "title_mk": "МК", "title_en": "EN",
+        "version": "1.0", "path": f"/data/out/{code}.docx", "bytes": 10,
+        "verify": "RESULT: PASS", "org_id": org, **extra,
+    })
+
+
+async def test_documents_are_invisible_to_another_organisation(dbpool):
+    """One shared registry, many tenants: another organisation's document
+    must read as ABSENT (not forbidden — the id must not leak existence)."""
+    mine = await _register("org-a", "A-1")
+    theirs = await _register("org-b", "B-1")
+    assert await db.document_get(theirs, "org-a") is None
+    assert await db.document_get(mine, "org-a") is not None
+    ids = {d["id"] for d in (await db.documents_list("org-a"))["documents"]}
+    assert ids == {mine}
+    assert (await db.documents_list("org-b"))["total"] == 1
+
+
+async def test_a_document_with_no_org_is_listed_by_nobody(dbpool):
+    """Rows registered before org scoping existed carry NULL and are
+    reachable through no organisation until the owner backfills them (the
+    rollout step in docs/DEPLOY.md). Fail closed rather than show them to
+    whoever asks first."""
+    orphan = await db.document_create(None, {
+        "code": "OLD-1", "doctype": "SOP", "title_mk": "МК", "title_en": "EN",
+        "version": "1.0", "path": "/data/out/OLD-1.docx", "bytes": 10,
+        "verify": "RESULT: PASS",
+    })
+    assert await db.document_get(orphan, "org-a") is None
+    assert (await db.documents_list("org-a"))["total"] == 0
+
+
+# ── paging (DI-21) ───────────────────────────────────────────────────────────
+async def test_documents_list_pages_past_the_old_100_row_cap(dbpool):
+    for i in range(120):
+        await _register("org-p", f"P-{i:03d}")
+    first = await db.documents_list("org-p", limit=100, offset=0)
+    second = await db.documents_list("org-p", limit=100, offset=100)
+    assert first["total"] == 120 and second["total"] == 120
+    assert len(first["documents"]) == 100 and len(second["documents"]) == 20
+    seen = {d["id"] for d in first["documents"]} | {d["id"] for d in second["documents"]}
+    assert len(seen) == 120
+    # newest first, and the page is what the caller asked for
+    assert first["limit"] == 100 and second["offset"] == 100
+
+
+async def test_documents_list_clamps_an_abusive_limit(dbpool):
+    await _register("org-p", "P-0")
+    page = await db.documents_list("org-p", limit=100_000, offset=-5)
+    assert page["limit"] == 500 and page["offset"] == 0
+
+
+# ── lineage (DI-07) ──────────────────────────────────────────────────────────
+async def test_a_revision_points_at_the_document_it_supersedes(dbpool):
+    v1 = await _register("org-a", "SOP-X", version="1.0")
+    v2 = await _register("org-a", "SOP-X", version="1.1", supersedes_id=v1, source="revise")
+    doc = await db.document_get(v2, "org-a")
+    assert doc["supersedes_id"] == v1 and doc["source"] == "revise"
+    rows = {d["id"]: d for d in (await db.documents_list("org-a"))["documents"]}
+    assert rows[v2]["supersedes_id"] == v1 and rows[v1]["supersedes_id"] is None
+
+
+async def test_an_unaudited_build_is_marked_as_such(dbpool):
+    did = await _register("org-a", "PP-COA-1", source="build", qa_audit=None,
+                          created_by="qp.one")
+    row = (await db.documents_list("org-a"))["documents"][0]
+    assert row["id"] == did and row["audited"] is False
+    assert row["source"] == "build" and row["created_by"] == "qp.one"
+
+
+# ── worker-aware reaping (DI-04) ─────────────────────────────────────────────
+async def test_job_create_stamps_this_worker(dbpool):
+    jid = await db.job_create("workflow", {}, org_id="org-a")
+    assert await dbpool.fetchval(
+        "SELECT worker_id FROM docengine.jobs WHERE id = $1", jid) == db.WORKER_ID
+
+
+async def test_orphan_reaper_fails_another_workers_jobs_regardless_of_age(dbpool):
+    """The redeploy case: a job at 'regulatory-check 4.0', updated two
+    minutes ago, whose worker is gone. The age sweep alone leaves it
+    'running' forever (it is younger than the threshold); the orphan sweep
+    fails it at once because its worker id is not this process's."""
+    gone = str(uuid.uuid4())
+    await dbpool.execute(
+        "INSERT INTO docengine.jobs (id, kind, status, stage, worker_id, updated_at)"
+        " VALUES ($1, 'workflow', 'running', 'regulatory-check 4.0', $2,"
+        "         now() - interval '2 minutes')", gone, "old-worker-boot")
+    queued = str(uuid.uuid4())
+    await dbpool.execute(
+        "INSERT INTO docengine.jobs (id, kind, status, worker_id) VALUES ($1, 'revise', 'queued', $2)",
+        queued, "old-worker-boot")
+    legacy = await seed_job(dbpool, status="running", age_minutes=1)  # worker_id NULL
+
+    assert await db.reap_orphaned_jobs() == 3
+    for jid in (gone, queued, legacy):
+        assert await status_of(dbpool, jid) == "failed"
+    err = await dbpool.fetchval("SELECT error FROM docengine.jobs WHERE id = $1", gone)
+    assert "old-worker-boot" in err and "gone" in err
+
+
+async def test_orphan_reaper_spares_this_workers_own_jobs(dbpool):
+    mine = await db.job_create("workflow", {}, org_id="org-a")
+    await db.job_update(mine, status="running", stage="generate 3.0")
+    done = await db.job_create("workflow", {}, org_id="org-a")
+    await db.job_update(done, status="done")
+    assert await db.reap_orphaned_jobs() == 0
+    assert await status_of(dbpool, mine) == "running"
+
+
+async def test_stale_reaper_skips_jobs_the_live_process_still_owns(dbpool):
+    """A slow-but-alive job (its task still exists in this process) is never
+    failed under its own task, however old its last update; a job with no
+    task is."""
+    alive = await seed_job(dbpool, status="running", age_minutes=500)
+    dead = await seed_job(dbpool, status="running", age_minutes=500)
+    assert await db.reap_stale_jobs(exclude=[alive]) == 1
+    assert await status_of(dbpool, alive) == "running"
+    assert await status_of(dbpool, dead) == "failed"

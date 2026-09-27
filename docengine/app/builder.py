@@ -8,6 +8,7 @@
 # module — build() raises instead of returning a path. This mirrors the live
 # Letta tool's contract ({ok, verify, path, bytes}) but enforces PASS.
 import contextlib
+import hashlib
 import io
 import os
 import re
@@ -59,6 +60,11 @@ def safe_name(name: str) -> str:
     return name[:120]
 
 
+def sha256_text(text: str) -> str:
+    """Hash of a document source, for the provenance record."""
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
 def run_verify(docx_path: Path, min_pt: float = 6.0, require_bilingual: bool = True) -> tuple[bool, str]:
     """Run the vendored pp_verify in-process; return (passed, report_text)."""
     buf = io.StringIO()
@@ -85,11 +91,11 @@ def run_verify(docx_path: Path, min_pt: float = 6.0, require_bilingual: bool = T
     return code == 0 and "RESULT: PASS" in report, report
 
 
-def _strip_headerdata(markdown: str) -> str:
-    """Line-anchored HEADERDATA strip (mirrors build_from_md.py's parser
-    fix) — a naive non-greedy regex would stop at the first literal '-->'
-    inside a field value, undercounting the real source content."""
-    lines = markdown.splitlines()
+def _headerdata_span(lines: list[str]) -> tuple[int | None, int | None]:
+    """(start, end) line indexes of the FIRST HEADERDATA block, line-anchored
+    exactly like build_from_md.py's parser (which is why a naive non-greedy
+    regex is wrong here: it would stop at the first literal '-->' inside a
+    field value)."""
     start = end = None
     for idx, ln in enumerate(lines):
         if ln.strip() == "<!--HEADERDATA":
@@ -100,6 +106,38 @@ def _strip_headerdata(markdown: str) -> str:
             if lines[idx].strip() == "-->":
                 end = idx
                 break
+    return start, end
+
+
+def headerdata(markdown: str) -> dict[str, str]:
+    """The `key: value` fields of the document's HEADERDATA block, and ONLY
+    those. Every fact about a document's identity (code, version, doctype,
+    titles, orientation, the bilingual switch) is read from here.
+
+    It used to be read from anywhere in the markdown with a `^doctype:` /
+    `^bilingual:` regex, so a line `bilingual: no` in the body — a table
+    cell, a stray paragraph — switched off the bilingual verification of the
+    whole document (review 2026-09-27, DI-06). The block is the header; the
+    body is content."""
+    lines = markdown.splitlines()
+    start, end = _headerdata_span(lines)
+    if start is None or end is None:
+        return {}
+    out: dict[str, str] = {}
+    for ln in lines[start + 1:end]:
+        if ":" not in ln:
+            continue
+        k, v = ln.split(":", 1)
+        k = k.strip().lower()
+        if k:
+            out[k] = v.strip()
+    return out
+
+
+def _strip_headerdata(markdown: str) -> str:
+    """The markdown without its HEADERDATA block (see _headerdata_span)."""
+    lines = markdown.splitlines()
+    start, end = _headerdata_span(lines)
     if start is not None and end is not None:
         return "\n".join(lines[:start] + lines[end + 1 :])
     return markdown
@@ -138,14 +176,11 @@ def build(markdown: str, out_dir: Path, out_name: str = "document") -> BuildResu
     stamp = uuid.uuid4().hex[:12]
     final = out_dir / f"{safe_name(out_name)}-{stamp}.docx"
     out = out_dir / f".{safe_name(out_name)}-{stamp}.partial.docx"
-    doctype = "SOP"
-    m = re.search(r"^doctype:\s*(\S+)", markdown, re.M)
-    if m:
-        doctype = m.group(1).upper()
-    require_bilingual = True
-    mbil = re.search(r"^bilingual:\s*(\S+)", markdown, re.M)
-    if mbil and mbil.group(1).strip().lower() in ("no", "false"):
-        require_bilingual = False
+    hd = headerdata(markdown)
+    doctype = (hd.get("doctype") or "SOP").upper()
+    # Only the header may switch bilingual verification off — never a line
+    # in the body (see headerdata()).
+    require_bilingual = hd.get("bilingual", "").strip().lower() not in ("no", "false")
     with _BUILD_LOCK:
         with tempfile.NamedTemporaryFile(
             "w", suffix=".md", delete=False, encoding="utf-8"

@@ -21,7 +21,10 @@
 # agent granted only release datasets cannot name a stability dataset.
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -116,6 +119,57 @@ LAST_REPORT: FleetReport | None = None
 
 def last_report() -> FleetReport | None:
     return LAST_REPORT
+
+
+# ---- serialisation (review 2026-09-27, DI-08) ----------------------------
+# Section drafting and the §6A audit talk to PERSISTENT agents
+# (gf_sop_author, gf_raci_specialist, gf_annex_author, gf_qa_auditor), not to
+# clones. Two concurrent jobs therefore used to send to the same agent at
+# once, and every job and every chat question ran a reconcile pass that could
+# reset an agent's message buffer under another job's in-flight turn. Two
+# locks close that:
+#   * one asyncio.Lock per persistent agent name, held by the pipeline around
+#     each send and by the reconciler around each buffer reset / config write;
+#   * one global lock around the ensure pass itself, plus a short-lived cache
+#     of its result so a job or a question started inside the window reuses
+#     the converged context instead of reconciling again.
+# A single uvicorn worker (Dockerfile) makes in-process locks sufficient.
+_AGENT_LOCKS: dict[str, asyncio.Lock] = {}
+_FLEET_LOCK: asyncio.Lock | None = None
+_CTX_CACHE: FleetContext | None = None
+_CTX_AT: float = 0.0
+FLEET_CACHE_S = int(os.environ.get("DOCENGINE_FLEET_CACHE_S", "600"))
+
+
+def agent_lock(agent_name: str) -> asyncio.Lock:
+    """The lock for one persistent agent. Created lazily so import never
+    needs a running loop; the dict is per process, which is the scope that
+    matters with one worker."""
+    lock = _AGENT_LOCKS.get(agent_name)
+    if lock is None:
+        lock = _AGENT_LOCKS[agent_name] = asyncio.Lock()
+    return lock
+
+
+def _fleet_lock() -> asyncio.Lock:
+    global _FLEET_LOCK
+    if _FLEET_LOCK is None:
+        _FLEET_LOCK = asyncio.Lock()
+    return _FLEET_LOCK
+
+
+def fleet_ctx_cached() -> FleetContext | None:
+    """The last ensure pass's context if it is younger than FLEET_CACHE_S,
+    else None. Read-only: never triggers a reconcile. This is what a chat
+    question uses, so a question never mutates the fleet."""
+    if _CTX_CACHE is not None and (time.monotonic() - _CTX_AT) < FLEET_CACHE_S:
+        return _CTX_CACHE
+    return None
+
+
+def invalidate_fleet_cache() -> None:
+    global _CTX_CACHE, _CTX_AT
+    _CTX_CACHE, _CTX_AT = None, 0.0
 
 
 # fleet.yaml is static for the life of the process (it's a declarative spec,
@@ -357,9 +411,19 @@ def _blocks_for(ag: dict, spec: dict, pending: list[str] | None = None) -> list[
     if pending is None:
         pending = declared_pending(spec)
 
+    # `persona` is the agent's own block and normally agent-writable. For an
+    # agent whose reply is spliced VERBATIM into a controlled document it is
+    # not: a retrieved passage or a crafted instruction that talked the author
+    # into rewriting its own persona would steer every later section of that
+    # job, and every concurrent job on the same agent, with no human stop in
+    # between (review 2026-09-27, DI-14). Read-only blocks the agent's memory
+    # tools; the reconciler still writes them from fleet.yaml.
+    verbatim = bool(ag.get("verbatim_output"))
+
     def block(label: str, value: str) -> dict:
+        ro = label in GOVERNANCE_BLOCKS or (label == PERSONA_BLOCK and verbatim)
         return {"label": label, "value": value.strip(),
-                "read_only": label in GOVERNANCE_BLOCKS, "limit": BLOCK_LIMIT}
+                "read_only": ro, "limit": BLOCK_LIMIT}
 
     blocks = [
         block(MISSION_BLOCK, spec["mission"]),
@@ -691,35 +755,41 @@ async def _reconcile_config(
 
     if not body and not stale_buffer:
         return False
-    if body:
-        try:
-            await client.update_agent_config(agent["id"], body)
-            log.info("reconciled config on %s: %s", label, body)
-        except LettaError as e:  # non-fatal: an undersized window still runs
-            log.warning("could not reconcile config on %s: %s", label, e)
-            if report is not None:
-                report.warnings.append(f"{label}: config not reconciled: {e}")
-            return False
-        # Re-read what the server actually kept. Anything it did not honour is
-        # recorded and never re-pushed by this process — see _UNHONOURED.
-        try:
-            fresh = (await client.get_agent(agent["id"]) or {}).get("llm_config") or {}
-        except LettaError:
-            fresh = {}
-        for key, want, wrote in (("context_window", want_cw, "context_window_limit"),
-                                 ("max_tokens", want_mt, "max_tokens")):
-            if wrote in body and fresh and fresh.get(key) != want:
-                _UNHONOURED.add((aid, key))
-                msg = f"{label}: server reports {key}={fresh.get(key)} after writing {want}; not re-pushing"
-                log.warning(msg)
+    # Under the agent's own lock: a buffer reset or a config PATCH must never
+    # land in the middle of a turn a job is holding on this agent (DI-08).
+    # The pipeline takes the same lock around every send to a persistent
+    # agent, so this waits for that turn to finish rather than cutting it.
+    async with agent_lock(label):
+        if body:
+            try:
+                await client.update_agent_config(agent["id"], body)
+                log.info("reconciled config on %s: %s", label, body)
+            except LettaError as e:  # non-fatal: an undersized window still runs
+                log.warning("could not reconcile config on %s: %s", label, e)
                 if report is not None:
-                    report.drift.append(msg)
-    if stale_buffer:
-        try:
-            await client.reset_messages(agent["id"])
-            log.info("cleared accumulated message buffer on %s", label)
-        except LettaError as e:  # non-fatal: autoclear still bounds it going forward
-            log.warning("could not clear message buffer on %s: %s", label, e)
+                    report.warnings.append(f"{label}: config not reconciled: {e}")
+                return False
+            # Re-read what the server actually kept. Anything it did not
+            # honour is recorded and never re-pushed by this process — see
+            # _UNHONOURED.
+            try:
+                fresh = (await client.get_agent(agent["id"]) or {}).get("llm_config") or {}
+            except LettaError:
+                fresh = {}
+            for key, want, wrote in (("context_window", want_cw, "context_window_limit"),
+                                     ("max_tokens", want_mt, "max_tokens")):
+                if wrote in body and fresh and fresh.get(key) != want:
+                    _UNHONOURED.add((aid, key))
+                    msg = f"{label}: server reports {key}={fresh.get(key)} after writing {want}; not re-pushing"
+                    log.warning(msg)
+                    if report is not None:
+                        report.drift.append(msg)
+        if stale_buffer:
+            try:
+                await client.reset_messages(agent["id"])
+                log.info("cleared accumulated message buffer on %s", label)
+            except LettaError as e:  # non-fatal: autoclear still bounds it going forward
+                log.warning("could not clear message buffer on %s: %s", label, e)
     return True
 
 
@@ -823,15 +893,33 @@ async def _sweep_orphans(client: LettaClient, existing: list[dict], report: Flee
     return kept
 
 
-async def ensure_fleet_ctx(client: LettaClient | None = None) -> FleetContext:
+async def ensure_fleet_ctx(client: LettaClient | None = None, force: bool = False) -> FleetContext:
     """Converge the live gf_ fleet on fleet.yaml and return everything a job
     needs from the result. Idempotent: a second run against a converged fleet
     makes zero writes.
+
+    Serialised and cached (DI-08): one pass at a time under a global lock, and
+    a pass younger than FLEET_CACHE_S is reused rather than repeated — a job
+    that starts while another is mid-document gets the same converged
+    context instead of re-reconciling (and resetting buffers) under it.
+    `force=True` skips the cache for callers that need a fresh pass.
 
     Order matters. Orphans are swept first so they cannot be reconciled as if
     declared. The tool is ensured before any agent, and it RAISES on failure —
     the agents' scope enforcement lives inside it. Pending datasets are asked
     of RAGflow once per pass and written into every scope block."""
+    global LAST_REPORT, _CTX_CACHE, _CTX_AT
+    async with _fleet_lock():
+        if not force:
+            cached = fleet_ctx_cached()
+            if cached is not None:
+                return cached
+        ctx = await _ensure_fleet_pass(client)
+        _CTX_CACHE, _CTX_AT = ctx, time.monotonic()
+        return ctx
+
+
+async def _ensure_fleet_pass(client: LettaClient | None) -> FleetContext:
     global LAST_REPORT
     client = client or LettaClient()
     spec = load_fleet()
