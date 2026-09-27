@@ -95,6 +95,8 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       case 'ipm_applied':      return AL(`${a} applied ${p.product} (${p.category})`, `${a} примени ${p.product} (${p.category})`);
       case 'trichome_checked': return AL(`${a}: trichome check on ${p.batch} — ${p.verdict}`,
                                          `${a}: проверка на трихоми за ${p.batch} — ${p.verdict}`);
+      case 'trichome_corrected': return AL(`${a} corrected the trichome check on ${p.batch} (${(p.fields || []).join(', ')})`,
+                                           `${a} ја поправи проверката на трихоми за ${p.batch} (${(p.fields || []).join(', ')})`);
       case 'irrigation_logged': return AL(`${a} logged feeding in ${p.room_name} (${p.method})`,
                                           `${a} запиша наводнување во ${p.room_name} (${p.method})`);
       case 'waste_manifest_sealed':    return AL(`${a} sealed waste manifest ${p.code}`, `${a} го затвори манифестот ${p.code}`);
@@ -216,6 +218,8 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     oos_opened: { en: 'OOS opened', mk: 'Отворени OOS' },
     decon_swab_positive: { en: 'Positive swabs', mk: 'Позитивни брисеви' },
     harvest_recorded: { en: 'Harvests', mk: 'Жетви' },
+    trichome_checked: { en: 'Trichome checks', mk: 'Проверки на трихоми' },
+    trichome_corrected: { en: 'Trichome checks corrected', mk: 'Поправени проверки на трихоми' },
   };
   // No backend code emits batch_closed (review 2026-09-27, FE-18) — the case
   // that handled it was dead and has been dropped; an unknown verb prints as

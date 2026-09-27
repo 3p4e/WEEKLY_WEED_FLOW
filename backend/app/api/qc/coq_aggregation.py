@@ -15,7 +15,6 @@ from .coq_docx import _coq_client, _coq_manifest, _coq_markdown
 from .laboratories import _lab_scope_set, _result_in_scope
 from .potency import disposition_for
 from .products import conformance_of, names_total_thc
-from .specs import _ACID_FACTOR
 from .signatures import _sig_out
 
 
@@ -1012,8 +1011,13 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         {"markdown": md, "out_name": coq["coq_number"],
          "meta": {"code": coq["coq_number"], "title_mk": "Сертификат за квалитет",
                   "title_en": "Certificate of Quality", "version": "01"}},
-        timeout=120.0, client_factory=_coq_client)).json()
+        timeout=120.0, client_factory=_coq_client, org_id=user["org_id"])).json()
     doc_id = build.get("document_id")
+    if not doc_id:
+        # DI-16: DocEngine answers 503 itself when its registry is down, but a
+        # 200 without a document id must never be stamped onto the record as
+        # if a document existed.
+        raise HTTPException(502, "DocEngine built the document but registered no id — not recorded")
     async with rls(user) as c:
         # Re-assert APPROVED when stamping — the CoQ could have been voided
         # during the (up-to-120s) DocEngine build (TOCTOU).

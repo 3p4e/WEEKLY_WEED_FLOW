@@ -654,8 +654,13 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
         {"markdown": md, "out_name": coa["coa_number"],
          "meta": {"code": coa["coa_number"], "title_mk": "Сертификат за квалитет",
                   "title_en": "Certificate of Quality", "version": "01"}},
-        timeout=120.0, client_factory=_coq_client)).json()
+        timeout=120.0, client_factory=_coq_client, org_id=user["org_id"])).json()
     doc_id = build.get("document_id")
+    if not doc_id:
+        # DI-16: DocEngine answers 503 itself when its registry is down, but a
+        # 200 without a document id must never be stamped onto the record as
+        # if a document existed.
+        raise HTTPException(502, "DocEngine built the document but registered no id — not recorded")
     async with rls(user) as c:
         # Re-assert RELEASED when stamping the artifact — the certificate could
         # have transitioned during the (up-to-120s) DocEngine build (TOCTOU).
