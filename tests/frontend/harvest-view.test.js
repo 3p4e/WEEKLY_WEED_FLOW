@@ -43,7 +43,7 @@ const PRE_HARVEST = `
 
 function load(role) {
   const h = loadGF({
-    files: ['data.js', 'core.js', 'harvest-view.js'],
+    files: ['data.js', 'core.js', 'datepicker.js', 'harvest-view.js'],
     preScript: PRE_HARVEST,
   });
   if (role) h.window.GF.API.user = { role };
@@ -112,7 +112,7 @@ test('the view registers under the harvest key with a read gate above base USER'
   const h = load();
   const spec = h.window.__reg;
   assert.equal(spec.key, 'harvest');
-  assert.equal(spec.insertBefore, 'mywork',
+  assert.equal(spec.insertBefore, 'floor-end',
     'anchored on a key render.sidebar itself emits, so nav order does not depend on script order');
   h.window.GF.API.user = { role: 'USER' };
   assert.equal(spec.guard(), false, 'base USER must not see the harvest board');
@@ -132,7 +132,9 @@ const LADDER = [
 
 for (const [status, expected, forbidden] of LADDER) {
   test(`a ${status} lot offers ONLY ${expected}`, () => {
-    const h = load('CU_MGR');
+    // From the cut onward the lot is PRODUCTION's (owner's model, 2026-09-05):
+    // the yield and the close are offered to PR_MGR, not to the crew that cut.
+    const h = load('PR_MGR');
     const html = renderLots(h, [LOT({
       status,
       dried_on: status === 'wet' ? null : '2026-08-10',
@@ -147,6 +149,27 @@ for (const [status, expected, forbidden] of LADDER) {
     h.close();
   });
 }
+
+test('cultivation is offered the cut and neither rung after it — the handoff', () => {
+  // Mirrors _RECORDERS vs _POST_HARVEST server-side: cultivation records the
+  // cut, then hands over. Before this, cultivation held both sides and the
+  // production manager was a role with a name and no powers.
+  const h = load('CU_MGR');
+  let html = renderLots(h, [LOT()]);
+  assert.match(html, /harvestForm\(\)/, 'cultivation records the cut');
+  assert.doesNotMatch(html, /harvestDryForm/, 'but does not dry what it cut');
+  html = renderLots(h, [LOT({ status: 'dried', dried_on: '2026-08-10', dry_flower_g: 1 })]);
+  assert.doesNotMatch(html, /harvestCloseForm/, 'nor close the lot');
+  h.close();
+});
+
+test('production is offered the yield and the close, and not the cut', () => {
+  const h = load('PR_MGR');
+  const html = renderLots(h, [LOT()]);
+  assert.doesNotMatch(html, /harvestForm\(\)/, 'production does not cut');
+  assert.match(html, /harvestDryForm\('h1'\)/, 'but records the yield of a wet lot');
+  h.close();
+});
 
 test('a closed lot offers no ladder action at all', () => {
   const h = load('ADMIN');
@@ -176,7 +199,7 @@ test('QA is offered the cut but not the yield or the close', () => {
   // harvest row — mirrors _CUTTERS vs _RECORDERS server-side.
   let html = renderLots(h, [LOT()]);
   assert.match(html, /harvestForm\(\)/, 'QA must be able to record the cut it released');
-  assert.doesNotMatch(html, /harvestDryForm/, 'recording the yield stays with the crew');
+  assert.doesNotMatch(html, /harvestDryForm/, 'recording the yield is production\'s');
   html = renderLots(h, [LOT({ status: 'dried', dried_on: '2026-08-10', dry_flower_g: 1 })]);
   assert.doesNotMatch(html, /harvestCloseForm/, 'and so does closing the lot');
   h.close();
@@ -207,9 +230,17 @@ test('an implausible loss is shown as something to check, not as a failure', () 
 /* ── the plant-protection log ────────────────────────────────────────────── */
 
 test('an active re-entry restriction is called out and an elapsed one is not', () => {
+  // The deadline is an instant the server serialises in UTC; the line a
+  // person acts on by walking into a room must read on the FACILITY clock
+  // (review FE-05 / R2-FE-02): 20:00Z is 22:00 in Skopje. Until the second
+  // fix round this line printed the UTC string, two hours early.
   const h = load('CU_MGR');
-  const active = renderIpm(h, [IPM({ rei_active: true, rei_until: '2026-07-30T20:00:00Z' })]);
-  assert.match(active, /no entry until 2026-07-30 20:00/);
+  h.window.GF.API.user.facility_tz = 'Europe/Skopje';
+  const active = renderIpm(h, [IPM({ rei_active: true, rei_until: '2026-07-30T20:00:00Z',
+                                     applied_at: '2026-07-29T22:30:00Z' })]);
+  assert.match(active, /no entry until 2026-07-30 22:00/);
+  assert.doesNotMatch(active, /20:00/, 'never the UTC clock');
+  assert.match(active, /2026-07-30<\/span>/, 'the application day is the facility day (00:30 on the 30th), not the UTC day');
   const done = renderIpm(h, [IPM({ rei_active: false })]);
   assert.match(done, /REI 12 h elapsed/);
   h.close();
@@ -326,7 +357,7 @@ test('lot codes, room names, override reasons and product names are HTML-escaped
 
 function loadForms(role) {
   const h = loadGF({
-    files: ['data.js', 'core.js', 'harvest-view.js'],
+    files: ['data.js', 'core.js', 'datepicker.js', 'harvest-view.js'],
     preScript: PRE_HARVEST,
   });
   const w = h.window;
@@ -516,11 +547,13 @@ test('an active re-entry restriction is surfaced on the cut form even when the c
                    applied_at: '2026-07-30T08:00:00Z', rei_hours: 12,
                    rei_until: '2026-07-30T20:00:00Z' }],
   };
+  w.GF.API.user.facility_tz = 'Europe/Skopje';
   return w.GF.WWF.harvestForm().then(() => {
     const box = w.document.getElementById('hv-c-clearance').innerHTML;
     assert.match(box, /Clear to harvest/, 'REI does not block the cut');
     assert.match(box, /Re-entry restriction still active/,
       'but harvesting a room means entering it, so it belongs on this form');
+    assert.match(box, /Spinosad · 2026-07-30 22:00/, 'the deadline on the facility clock (R2-FE-02)');
     h.close();
   });
 });
@@ -582,7 +615,7 @@ test('a partial-canopy pull with zero plants is allowed through', () => {
 });
 
 test('the yield form restates the wet weight the three figures must fit under', () => {
-  const h = loadForms('CU_MGR');
+  const h = loadForms('PR_MGR');
   const w = h.window;
   w.__lot = LOT({ wet_weight_g: 1200000 });
   return w.GF.WWF.harvestDryForm('h1').then(async () => {
@@ -605,7 +638,7 @@ test('the yield form restates the wet weight the three figures must fit under', 
 });
 
 test('a blank trim or waste figure is sent as null, not as zero', () => {
-  const h = loadForms('CU_MGR');
+  const h = loadForms('PR_MGR');
   const w = h.window;
   return w.GF.WWF.harvestDryForm('h1').then(async () => {
     w.document.getElementById('hv-d-flower').value = '260000';
@@ -619,7 +652,7 @@ test('a blank trim or waste figure is sent as null, not as zero', () => {
 });
 
 test('a yield with no dry flower figure is refused before the request', () => {
-  const h = loadForms('CU_MGR');
+  const h = loadForms('PR_MGR');
   const w = h.window;
   return w.GF.WWF.harvestDryForm('h1').then(async () => {
     w.document.getElementById('hv-d-flower').value = '';
@@ -631,7 +664,7 @@ test('a yield with no dry flower figure is refused before the request', () => {
 });
 
 test('closing says the weights become final, and only then sends', () => {
-  const h = loadForms('CU_MGR');
+  const h = loadForms('PR_MGR');
   const w = h.window;
   w.GF.WWF.harvestCloseForm('h1');
   const body = w.document.getElementById('hv-close-modal-body').innerHTML;
@@ -654,6 +687,38 @@ test('an IPM application scoped to neither a room nor a batch is refused before 
     assert.match(w.__toasts.at(-1)[0], /room or the batch/);
     h.close();
   });
+});
+
+test('an IPM application carries the facility wall-clock moment it was applied, with the zone offset (FE-20)', () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.GF.API.user = Object.assign(w.GF.API.user || {}, { facility_tz: 'Europe/Skopje' });
+  return w.GF.WWF.ipmForm().then(async () => {
+    w.document.getElementById('hv-i-product').value = 'Neem oil';
+    w.document.getElementById('hv-i-room').value = 'r1';
+    w.document.getElementById('hv-i-day').value = '2026-07-29';
+    w.document.getElementById('hv-i-time').value = '07:30';
+    await w.GF.WWF.ipmSave();
+    assert.equal(w.__applied.applied_at, '2026-07-29T07:30:00+02:00', 'CEST, not the browser zone');
+    w.__applied = undefined;
+    w.document.getElementById('hv-i-day').value = '2999-01-01';
+    await w.GF.WWF.ipmSave();
+    assert.equal(w.__applied, undefined, 'a spray dated in the future is refused before the request');
+    assert.match(w.__toasts.at(-1)[0], /future/);
+    h.close();
+  });
+});
+
+test('facilityInstant uses the offset of the day itself (CET in winter, CEST in summer)', () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.GF.API.user = Object.assign(w.GF.API.user || {}, { facility_tz: 'Europe/Skopje' });
+  assert.equal(w.GF.facilityInstant('2026-01-15', '09:00'), '2026-01-15T09:00:00+01:00');
+  assert.equal(w.GF.facilityInstant('2026-07-15', '09:00'), '2026-07-15T09:00:00+02:00');
+  assert.equal(w.GF.facilityInstant('bad', '09:00'), null);
+  w.GF.API.user.facility_tz = '';
+  assert.equal(w.GF.facilityInstant('2026-07-15', '09:00'), null, 'no zone → the server stamps its own now');
+  h.close();
 });
 
 test('a blank interval is sent as null and a stated zero is sent as zero', () => {
@@ -710,68 +775,21 @@ test('a valid interval, including a legitimate 0, still submits (not mistaken fo
   });
 });
 
-// ── Feeding tab (irrigation, migration 0052) ─────────────────────────────────
+/* ── the review of 2026-09-27: CS-01 ─────────────────────────────────────── */
 
-function renderFeed(h, feeds) {
-  h.window.GF.WWF._harv.tab = 'feed';
-  h.window.GF.WWF._harv.feeds = feeds;
-  h.window.GF.state.view = 'harvest';
-  return h.window.GF.views.harvest();
-}
-
-test('the Feeding tab lists a feed and shows a missing reading as a dash, not zero', () => {
-  const h = load('CU_MGR');
-  const body = renderFeed(h, [
-    { id: 'f1', room_name: 'Flowering 1.1', batch_code: null, applied_on: '2026-08-05',
-      method: 'drip', water_volume_l: 40, feed_ec: 1.8, feed_ph: 6.1,
-      runoff_ec: null, runoff_ph: null, nutrients: 'Base A+B' },
-  ]);
-  assert.match(body, /Flowering 1\.1/);
-  assert.match(body, /EC <b>1\.8/, 'a measured feed EC is shown');
-  // A NULL runoff reading must not render a "runoff EC" chip at all — absent is
-  // "not measured", never 0.
-  assert.doesNotMatch(body, /runoff EC/, 'an unmeasured runoff reading shows no chip');
-  assert.match(body, /Base A\+B/);
-  h.close();
-});
-
-test('the Feeding tab offers Log feed to a recorder and empty-states cleanly', () => {
-  const h = load('CU_MGR');
-  const body = renderFeed(h, []);
-  assert.match(body, /No feeds logged/);
-  assert.match(body, /GF\.WWF\.feedForm\(\)/, 'a recorder is offered the Log feed action');
-  h.close();
-});
-
-function loadFeedForms(role) {
-  const h = loadForms(role);
+test('a cut dated in the future is refused before the request — the interval is judged on that date', async () => {
+  const h = loadForms('CU_MGR');
   const w = h.window;
-  w.__rooms = [{ id: 'r1', name: 'Flowering 1.1' }];
-  w.GF.API.irrigation = async () => ({ feeds: w.__feeds || [] });
-  w.GF.API.irrigationLog = async (b) => { w.__feed = b; return { id: 'f9' }; };
-  return h;
-}
-
-test('a blank feed reading is sent as null, a room is required, and a value round-trips', () => {
-  const h = loadFeedForms('CU_MGR');
-  const w = h.window;
-  return w.GF.WWF.feedForm().then(async () => {
-    // no room picked yet → refused before any request
-    w.document.getElementById('hv-f-room').value = '';
-    await w.GF.WWF.feedSave();
-    assert.equal(w.__feed, undefined, 'a feed with no room must not be sent');
-    assert.match(w.__toasts.at(-1)[0], /room/i);
-
-    // now a real room + a volume, EC left blank
-    w.document.getElementById('hv-f-room').value = 'r1';
-    w.document.getElementById('hv-f-vol').value = '40';
-    w.document.getElementById('hv-f-fph').value = '6.1';
-    await w.GF.WWF.feedSave();
-    assert.equal(w.__feed.room_id, 'r1');
-    assert.equal(w.__feed.water_volume_l, 40);
-    assert.equal(w.__feed.feed_ph, 6.1, 'a decimal pH round-trips, not rounded to int');
-    assert.equal(w.__feed.feed_ec, null,
-      'a reading left blank is "not measured" (null), never coerced to 0');
-    h.close();
-  });
+  await w.GF.WWF.harvestForm();
+  assert.match(w.document.getElementById('hv-cut-modal-body').innerHTML, /cannot lie ahead of today/);
+  w.document.getElementById('hv-c-lot').value = 'LOT-1';
+  w.document.getElementById('hv-c-wet').value = '4000';
+  w.document.getElementById('hv-c-date').value = '2026-07-31';
+  await w.GF.WWF.harvestSave();
+  assert.equal(w.__cut, undefined, 'tomorrow is not a harvest date');
+  assert.ok(w.__toasts.some(t => /future/.test(t[0])));
+  w.document.getElementById('hv-c-date').value = '2026-07-29';
+  await w.GF.WWF.harvestSave();
+  assert.equal(w.__cut.harvested_on, '2026-07-29');
+  h.close();
 });

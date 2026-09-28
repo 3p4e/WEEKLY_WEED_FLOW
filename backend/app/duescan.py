@@ -16,6 +16,7 @@ from datetime import date
 from app.worktime import SITE_TZ_SQL
 
 from app.db import rls, rls_users, users_admin_pool
+from app.deps import dept_lineage
 from app.notify import safe_emit
 from app.roles import DEPT_SCOPED_ROLES
 
@@ -28,14 +29,20 @@ async def _admin_users() -> list[dict]:
     return [{"id": r["id"], "org_id": r["org_id"], "role": r["role"]} for r in rows]
 
 
-async def _dept_managers(admin: dict, department_id) -> list[str]:
+async def _dept_managers(c, admin: dict, department_id) -> list[str]:
+    """The managers answerable for a task's department: those assigned to it
+    OR to any department above it. Cloning and Nursery have no manager of
+    their own — the cultivation manager runs them — so an exact department
+    match escalated an overdue Cloning task to nobody (review 2026-09-27,
+    BC-05). `c` is the tasks-DB connection the lineage walk needs."""
     if not department_id:
         return []
+    lineage = await dept_lineage(c, department_id)
     async with rls_users(admin) as uc:
         rows = await uc.fetch(
-            "SELECT id FROM profiles WHERE org_id=$1 AND department_id=$2"
+            "SELECT id FROM profiles WHERE org_id=$1 AND department_id = ANY($2::uuid[])"
             " AND is_deleted=false AND is_active AND role=ANY($3::text[])",
-            admin["org_id"], department_id, DEPT_SCOPED_ROLES)
+            admin["org_id"], lineage, DEPT_SCOPED_ROLES)
     return [str(r["id"]) for r in rows]
 
 
@@ -59,7 +66,7 @@ async def run_for_org(admin: dict, today: date) -> dict:
                 continue
             recipients = [(str(u), "due") for u in [t["user_id"], *t["assignees"]] if u]
             if verb == "overdue":
-                recipients += [(m, "due") for m in await _dept_managers(admin, t["department_id"])]
+                recipients += [(m, "due") for m in await _dept_managers(c, admin, t["department_id"])]
             await safe_emit(c, admin, verb=verb, object_type="task", object_id=t["id"],
                        recipients=recipients, task_id=t["id"],
                        department_id=t["department_id"],

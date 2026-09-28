@@ -7,5 +7,10 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY server.py .
+# Unprivileged, like docengine (uid 1000). This is the only internet-facing
+# Python service in the stack and it ran as root beside both databases
+# (review 2026-09-27, DI-22). It needs no write access anywhere.
+RUN useradd -u 1000 -m -r connector
+USER connector
 EXPOSE 8000
 CMD ["python", "server.py"]

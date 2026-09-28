@@ -39,7 +39,7 @@ GF.DEPT_TEMPLATES = {
   },
   production: {
     fields: [
-      { key: 'batch_ref', en: 'Batch', mk: 'Серија', type: 'text', ph: 'B-2026-041', chip: true },
+      { key: 'batch_ref', en: 'Batch', mk: 'Серија', type: 'batch', ph: 'GP072501', chip: true },
       { key: 'process_step', en: 'Process step', mk: 'Процесен чекор', type: 'select', chip: true,
         opts: [{ v: 'drying', en: 'Drying', mk: 'Сушење' }, { v: 'trimming', en: 'Trimming', mk: 'Тримување' },
                { v: 'extraction', en: 'Extraction', mk: 'Екстракција' }, { v: 'packaging', en: 'Packaging', mk: 'Пакување' }] },
@@ -51,6 +51,23 @@ GF.DEPT_TEMPLATES = {
     ],
     home: [{ kind: 'group', attr: 'batch_ref', en: 'By batch', mk: 'По серија' }],
   },
+  irrigation: {
+    fields: [
+      { key: 'room', en: 'Room', mk: 'Просторија', type: 'text', ph: 'GR-2', chip: true },
+      { key: 'method', en: 'Method', mk: 'Метод', type: 'select', chip: true,
+        opts: [{ v: 'drip', en: 'Drip', mk: 'Капково' }, { v: 'hand', en: 'Hand', mk: 'Рачно' },
+               { v: 'flood', en: 'Flood / ebb', mk: 'Поплавно' }, { v: 'boom', en: 'Boom', mk: 'Прскалка' }] },
+      { key: 'feed_ec', en: 'Feed EC', mk: 'EC храна', type: 'number', unit: 'mS' },
+      { key: 'feed_ph', en: 'Feed pH', mk: 'pH храна', type: 'number' },
+    ],
+    presets: [
+      { en: 'Fertigation run', mk: 'Фертигација' },
+      { en: 'EC / pH check', mk: 'Проверка EC / pH' },
+      { en: 'Reservoir change', mk: 'Промена на резервоар' },
+      { en: 'Line flush', mk: 'Промивање на линии' },
+    ],
+    home: [{ kind: 'group', attr: 'room', en: 'By room', mk: 'По просторија' }],
+  },
   qc: {
     fields: [
       { key: 'sample_ref', en: 'Sample', mk: 'Примерок', type: 'text', ph: 'S-0412', chip: true },
@@ -58,7 +75,7 @@ GF.DEPT_TEMPLATES = {
         opts: [{ v: 'lab', en: 'Lab', mk: 'Лабораторија' }, { v: 'incoming', en: 'Incoming', mk: 'Влезна' },
                { v: 'in_process', en: 'In-process', mk: 'Процесна' }, { v: 'final', en: 'Final', mk: 'Финална' },
                { v: 'environmental', en: 'Environmental', mk: 'Амбиентална' }] },
-      { key: 'batch_ref', en: 'Batch', mk: 'Серија', type: 'text', ph: 'B-2026-041' },
+      { key: 'batch_ref', en: 'Batch', mk: 'Серија', type: 'batch', ph: 'GP072501' },
       // QCSOP 001's five-phase lab-testing lifecycle and QCSOP 019's OOx
       // deviation flag, exactly as the design's task-create-qc.html offers
       // them at creation. Both are template ATTRS (the informational layer —
@@ -101,7 +118,7 @@ GF.DEPT_TEMPLATES = {
     fields: [
       { key: 'flow', en: 'Flow', mk: 'Тек', type: 'select', chip: true,
         opts: [{ v: 'in', en: 'Inbound', mk: 'Влез' }, { v: 'out', en: 'Outbound', mk: 'Излез' }] },
-      { key: 'batch_ref', en: 'Batch', mk: 'Серија', type: 'text', ph: 'B-2026-041', chip: true },
+      { key: 'batch_ref', en: 'Batch', mk: 'Серија', type: 'batch', ph: 'GP072501', chip: true },
     ],
     presets: [
       { en: 'Goods receipt', mk: 'Прием на стока', attrs: { flow: 'in' } },
@@ -147,7 +164,18 @@ GF.DEPT_TEMPLATES = {
 };
 
 GF.deptCode = (deptId) => (GF.DEPTS.find(d => d.id === deptId) || {}).code || null;
-GF.deptTemplate = (deptId) => GF.DEPT_TEMPLATES[GF.deptCode(deptId)] || null;
+// A sub-department without a template of its own (Cloning, Nursery) uses its
+// parent's — the clone room is cultivation work, filed with cultivation's
+// fields and presets. Bounded walk: a parent_id cycle terminates.
+GF.deptTemplate = (deptId) => {
+  let d = (GF.DEPTS || []).find(x => x.id === deptId);
+  for (let hops = 0; d && hops < 8; hops++) {
+    const tpl = GF.DEPT_TEMPLATES[d.code];
+    if (tpl) return tpl;
+    d = d.parent_id ? (GF.DEPTS || []).find(x => x.id === d.parent_id) : null;
+  }
+  return null;
+};
 GF.tplLabel = (o) => (GF.state.lang === 'mk' ? (o.mk || o.en) : o.en);
 
 // The signed-in user's own department (null for cross-org roles: Owner/CEO/
@@ -185,6 +213,18 @@ GF.renderDeptFields = (deptId, current) => {
         options: [{ v: '', label: '—' }].concat(f.opts.map(o => ({ v: o.v, label: GF.tplLabel(o) }))),
         onPick: () => GF.renderAddPreview && GF.renderAddPreview(),
       });
+    }
+    // A batch reference is the facility's batch code (<cultivar><MMYY><nn>,
+    // GP072501): the strain chooser + constant-head field the QC forms use
+    // (codefield.js, INS-12), not free text with an invented placeholder
+    // (review 2026-09-27, FE-11 / R2-FE-18). The strain list arrives once
+    // per session; a form rendered before it lands gets its options patched.
+    if (f.type === 'batch' && GF.batchCodeField) {
+      const id = `attr-f-${f.key}`;
+      const cvs = GF.batchCodeCultivars ? GF.batchCodeCultivars((list) => GF.batchCodeRefill && GF.batchCodeRefill(id, list)) : [];
+      return GF.batchCodeField(id, { cultivars: cvs, value: v, placeholder: f.ph || '', cls: 'attr-batch',
+        selCls: 'attr-batch-cv', selPlaceholder: AL('strain', 'сорта'), selTitle: AL('Strain', 'Сорта'),
+        oninput: 'GF.renderAddPreview&&GF.renderAddPreview()' });
     }
     const t = f.type === 'number' ? 'number' : 'text';
     return `<input id="attr-f-${f.key}" data-attr="${f.key}" data-type="${f.type}" type="${t}"`

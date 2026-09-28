@@ -16,7 +16,7 @@
 
 (function () {
   GF.WWF._decon = { cycles: null, loading: false, error: null, campaign: '',
-                    corridors: null, biosecurity: null };
+                    corridors: null, biosecurity: null, roomKinds: null };
 
   // The plan's §12 sequence, in order. Labels are bilingual per house style.
   const STEPS = [
@@ -39,12 +39,33 @@
   const stLbl = (s) => AL(STATUS[s]?.en || s, STATUS[s]?.mk || s);
   const stCol = (s) => (STATUS[s] || {}).color || 'var(--ink-3)';
   const role = () => (GF.API.user || {}).role;
-  const canClean = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR'].includes(role());
+  // Mirrors decon.py _CLEAN_WRITERS / _QA_WRITERS. Production (PR_MGR) runs
+  // the decontamination of the post-harvest rooms — `dry` only, per
+  // decon.assert_room_authority (shared with biosecurity.py); a corridor is
+  // an `other` room and stays the cultivation crew's. The room pickers and
+  // the cycle-card actions below apply the same kind rule, so the button a
+  // production manager sees is one the server accepts (review 2026-09-27,
+  // R2-FE-03 / R2-BC-01; DECISIONS A-2).
+  const canClean = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'PR_MGR'].includes(role());
   const canQA    = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'QA_MGR'].includes(role());
+  const PRODUCTION_ROOM_KINDS = ['dry'];
+  const isProduction = () => role() === 'PR_MGR';
+  // May this role record against a room of this kind? An UNKNOWN kind (the
+  // room registry could not be read) fails open: the server has the final
+  // say, and hiding a button the server allows is the wrong side to err on.
+  const roomKindOk = (kind) => !isProduction() || kind == null || PRODUCTION_ROOM_KINDS.includes(kind);
+  const roomOk = (roomId) => roomKindOk((GF.WWF._decon.roomKinds || {})[roomId]);
+  // The room picker for this role: production sees only its rooms.
+  const pickableRooms = (rooms) => rooms.filter(r => roomKindOk(r.kind));
 
   GF.WWF.loadDecon = async () => {
     const st = GF.WWF._decon;
     st.loading = true; st.error = null;
+    // Stale-response guard (same as qcpotency-view.js): two quick reloads —
+    // a campaign change, or a save followed by a poll — must let only the
+    // newest answer write the board, or an older response landing last shows
+    // the previous campaign under the new filter (review 2026-09-27, FE-16).
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       // Both in one round trip: the corridor cadence is part of the same
       // campaign picture, and a second render pass would make the panel flash in
@@ -59,15 +80,33 @@
       // migration 0053, newer than the cycles endpoint, so a frontend deployed
       // ahead of its backend degrades this panel to absent rather than losing
       // the room-cycle board underneath it.
-      const [r, cor, bio] = await Promise.all([
+      //
+      // The biosecurity list is fetched WITHOUT open_only: that filter is
+      // fail/below_spec only, and a check logged as pending (a contact plate
+      // read days later) vanished from the board the moment it was saved,
+      // with no screen left to record its result (review 2026-09-27, FE-10).
+      // The panel splits the recent events into open failures and pending
+      // reads itself.
+      //
+      // The cycle list does not carry the room's kind, and a production
+      // manager's cycle-card actions depend on it (dry rooms only). Read the
+      // room registry for that role alone, and let it fail to "unknown" —
+      // roomKindOk then fails open and the server's 403 is the gate.
+      const [r, cor, bio, fac] = await Promise.all([
         GF.API.deconCycles(st.campaign || undefined),
         GF.API.deconCorridors(st.campaign || undefined).catch(() => null),
-        GF.API.biosecurity({ open_only: 'true', limit: 20 }).catch(() => null),
+        GF.API.biosecurity({ limit: 200 }).catch(() => null),
+        (isProduction() && GF.API.facility) ? GF.API.facility().catch(() => null) : null,
       ]);
+      if (my !== st.lseq) return;
       st.cycles = r.cycles || [];
       st.corridors = cor;
       st.biosecurity = bio;
-    } catch (e) { st.error = e.message; }
+      if (fac && fac.rooms) {
+        st.roomKinds = {};
+        fac.rooms.forEach(rm => { st.roomKinds[rm.id] = rm.kind; });
+      }
+    } catch (e) { if (my !== st.lseq) return; st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'decon') GF.render.all();
   };
@@ -95,7 +134,7 @@
         mark = '✓'; col = '#2BE8A0';
       }
     }
-    const when = entry ? new Date(entry.signed_at).toLocaleString() : '';
+    const when = entry ? GF.fmtDateTime(entry.signed_at) : '';
     return `<div class="dc-step" style="display:flex;gap:8px;align-items:center;padding:3px 0">
       <span style="color:${col};width:14px;text-align:center">${mark}</span>
       <span style="flex:1">${GF.esc(AL(s.en, s.mk))}${extra}</span>
@@ -119,12 +158,13 @@
         : AL(`${blocking} swab(s) not negative`, `${blocking} брис(еви) не се негативни`);
     }
     const actions = [];
-    if (canClean() && cyc.status === 'in_progress' && next) {
+    const mayClean = canClean() && roomOk(cyc.room_id);
+    if (mayClean && cyc.status === 'in_progress' && next) {
       const label = STEPS.find(s => s.key === next);
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.deconSignStep('${cyc.id}','${next}')">
         ${GF.icon('check', 'icon')}${GF.esc(AL('Sign: ', 'Потпиши: ') + AL(label.en, label.mk))}</button>`);
     }
-    if (canClean()) {
+    if (mayClean) {
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.deconBleachForm('${cyc.room_id}','${cyc.id}')">
         ${GF.icon('drop', 'icon')}${AL('Log bucket', 'Внеси кофа')}</button>`);
     }
@@ -141,6 +181,16 @@
         actions.push(`<button class="btn btn-orange btn-sm" onclick="GF.WWF.deconRelease('${cyc.id}')">
           ${GF.icon('shield', 'icon', 'currentColor')}${AL('Release room', 'Ослободи соба')}</button>`);
       }
+      // A positive or inconclusive swab makes the cycle a dead end: it cannot
+      // be released, cannot take more steps, and blocks a new cycle for the
+      // room in this campaign. Failing it — the QA judgement that the room did
+      // not pass, with the reason on file — is what opens the re-clean
+      // (review 2026-09-27, FE-03 / BC-10).
+      const open = cyc.status === 'in_progress' || cyc.status === 'awaiting_verification';
+      if (open && (sw.positive || 0) + (sw.inconclusive || 0) > 0) {
+        actions.push(`<button class="btn btn-sm" style="color:var(--red)" onclick="GF.WWF.deconFailForm('${cyc.id}')">
+          ${GF.icon('x', 'icon', 'currentColor')}${AL('Fail cycle — re-clean', 'Неуспешен циклус — повторно чистење')}</button>`);
+      }
     }
     return `<div class="card" style="padding:12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -149,7 +199,7 @@
       </div>
       <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">
         ${GF.esc(cyc.campaign)} · ${GF.esc(cyc.started_on)}
-        ${cyc.released_at ? ' · ' + AL('released ', 'ослободена ') + GF.esc(String(cyc.released_at).slice(0, 10)) : ''}
+        ${cyc.released_at ? ' · ' + AL('released ', 'ослободена ') + GF.esc(GF.fmtDate(cyc.released_at)) : ''}
       </div>
       <div style="margin-bottom:8px">${STEPS.map(s => stepRow(cyc, s)).join('')}</div>
       <div style="font-size:11px;color:var(--ink-3);margin-bottom:8px">
@@ -195,7 +245,9 @@
     if (!cor || !(cor.corridors || []).length) return '';
     const rows = cor.corridors.map(c => {
       const col = c.overdue ? '#E5484D' : '#2BE8A0';
-      const btn = canClean()
+      // Corridors are `other` rooms: a production manager's dry-room
+      // authority does not extend to them (decon.py record_corridor_clean).
+      const btn = canClean() && !isProduction()
         ? `<button class="btn btn-sm" onclick="GF.WWF.deconCorridorForm('${c.room_id}')">
             ${AL('Record clean', 'Запиши чистење')}</button>`
         : '';
@@ -232,7 +284,7 @@
             `${moves.length} waste movement(s) left the site with no corridor cleaning recorded after them:`,
             `${moves.length} движење(а) на отпад без запишано чистење на коридор потоа:`)}</div>
           ${moves.map(m => `<div style="font-size:11px;color:var(--ink-3)">
-            ${GF.esc(m.manifest_code)} · ${GF.esc(String(m.disposed_at).slice(0, 16).replace('T', ' '))}
+            ${GF.esc(m.manifest_code)} · ${GF.esc(GF.fmtDateTime(m.disposed_at))}
           </div>`).join('')}
         </div>`
       : '';
@@ -260,7 +312,7 @@
     GF.$('dc-cor-modal-title').textContent = AL('Record corridor cleaning', 'Запиши чистење на коридор');
     const manOpts = [{ v: '', label: AL('— none —', '— ништо —') }]
       .concat(manifests.map(m => ({ v: m.id, label: m.manifest_code,
-                                    sub: String(m.disposed_at || '').slice(0, 16).replace('T', ' ') })));
+                                    sub: GF.fmtDateTime(m.disposed_at) })));
     GF.$('dc-cor-modal-body').innerHTML = `
       <div class="field"><label>${AL('What prompted this clean', 'Што го предизвика чистењето')}</label>
         ${GF.selectField('dc-cor-trigger', { value: 'four_hourly',
@@ -346,15 +398,42 @@
     { v: 'pending', en: 'Pending', mk: 'Во исчекување' },
   ];
 
+  // Two kinds of event earn a place on the board: a failure (fail /
+  // below_spec, with the response taken) and a check still waiting for its
+  // result (pending, or logged with no result yet). The second kind used to
+  // disappear the moment it was saved — the list was fetched open-only and
+  // no screen could record the read (review 2026-09-27, FE-10 / BC-10).
+  const isOpenFail = (e) => e.result === 'fail' || e.result === 'below_spec';
+  const isPending = (e) => e.result === 'pending' || e.result == null;
+
+  const bioRow = (e, kind) => {
+    const col = kind === 'fail' ? '#E5484D' : '#E0A73E';
+    const act = kind === 'pending' && canBio()
+      ? `<button class="btn btn-sm" data-act="bio-result" data-id="${GF.esc(e.id)}">${AL('Enter result', 'Внеси резултат')}</button>`
+      : `<span style="color:var(--ink-3);font-size:11px;flex:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
+          GF.esc(e.action_taken || '')}</span>`;
+    return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;background:${
+        kind === 'fail' ? 'rgba(229,72,77,.06)' : 'rgba(224,167,62,.06)'}">
+        <span style="width:8px;height:8px;border-radius:50%;background:${col};flex:none"></span>
+        <span style="min-width:110px;font-size:11px;color:var(--ink-3)">${GF.esc(kindLbl(e.kind))}</span>
+        <strong style="flex:1;font-size:12px">${GF.esc(e.subject || e.room_name || '—')}</strong>
+        <span style="color:var(--ink-3);font-size:11px;min-width:80px;text-align:right">${GF.esc(e.occurred_on || '')}</span>
+        ${act}
+      </div>`;
+  };
+
   const biosecurityPanel = () => {
     const bio = GF.WWF._decon.biosecurity;
     const events = (bio && bio.events) || [];
+    const fails = events.filter(isOpenFail);
+    const pending = events.filter(isPending);
     const logBtn = canBio()
       ? `<button class="btn btn-sm" onclick="GF.WWF.bioForm()">${AL('Log check', 'Запиши проверка')}</button>`
       : '';
-    if (!events.length) {
-      // No open failures — a quiet panel is the correct steady state, but the
-      // action to log a new check must still be reachable from here.
+    if (!fails.length && !pending.length) {
+      // No open failures and nothing awaiting a read — a quiet panel is the
+      // correct steady state, but the action to log a new check must still be
+      // reachable from here.
       return canBio() ? `<div class="card" style="padding:12px;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:8px">
           <strong style="flex:1">${AL('Biosecurity monitoring', 'Биобезбедносен мониторинг')}</strong>
@@ -363,23 +442,20 @@
         </div>
       </div>` : '';
     }
-    const rows = events.map(e => `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;background:rgba(229,72,77,.06)">
-        <span style="width:8px;height:8px;border-radius:50%;background:#E5484D;flex:none"></span>
-        <span style="min-width:110px;font-size:11px;color:var(--ink-3)">${GF.esc(kindLbl(e.kind))}</span>
-        <strong style="flex:1;font-size:12px">${GF.esc(e.subject || e.room_name || '—')}</strong>
-        <span style="color:var(--ink-3);font-size:11px;min-width:80px;text-align:right">${GF.esc(e.occurred_on || '')}</span>
-        <span style="color:var(--ink-3);font-size:11px;flex:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
-          GF.esc(e.action_taken || '')}</span>
-      </div>`).join('');
-    return `<div class="card" style="padding:12px;margin-bottom:12px">
+    const failHead = fails.length ? `<div style="color:#E5484D;font-size:12px;margin-bottom:6px">${AL(
+        `${fails.length} open failure(s) — AHU filters, mats, contact plates and gowning checks that failed with the response taken.`,
+        `${fails.length} отворен(и) неуспех(и) — филтри, прострелки, плочи и проверки со преземена реакција.`)}</div>`
+      + fails.map(e => bioRow(e, 'fail')).join('') : '';
+    const pendHead = pending.length ? `<div style="color:#E0A73E;font-size:12px;margin:${fails.length ? '8px' : '0'} 0 6px">${AL(
+        `${pending.length} check(s) awaiting a result — contact plates and bioassays are read after incubation; enter the result when it is in.`,
+        `${pending.length} проверка(и) чекаат резултат — плочите и биоесеите се читаат по инкубација; внесете го резултатот кога ќе пристигне.`)}</div>`
+      + pending.map(e => bioRow(e, 'pending')).join('') : '';
+    return `<div class="card" style="padding:12px;margin-bottom:12px" id="dc-bio-panel">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <strong style="flex:1">${AL('Biosecurity monitoring', 'Биобезбедносен мониторинг')}</strong>
         ${logBtn}
       </div>
-      <div style="color:#E5484D;font-size:12px;margin-bottom:6px">${AL(
-        `${events.length} open failure(s) — AHU filters, mats, contact plates and gowning checks that failed with the response taken.`,
-        `${events.length} отворен(и) неуспех(и) — филтри, прострелки, плочи и проверки со преземена реакција.`)}</div>
-      ${rows}
+      ${failHead}${pendHead}
     </div>`;
   };
 
@@ -389,8 +465,10 @@
     try { rooms = (await GF.API.facility()).rooms || []; } catch (e) { rooms = []; }
     GF.WWF._ensureModal('dc-bio-modal', '440px');
     GF.$('dc-bio-modal-title').textContent = AL('Log biosecurity check', 'Запиши биобезбедносна проверка');
+    // A record with no room is not kind-restricted (biosecurity.py); a room
+    // offered to production is one it runs.
     const roomOpts = [{ v: '', label: AL('— no room —', '— без соба —') }]
-      .concat(rooms.map(r => ({ v: r.id, label: r.name })));
+      .concat(pickableRooms(rooms).map(r => ({ v: r.id, label: r.name })));
     GF.$('dc-bio-modal-body').innerHTML = `
       <div class="field"><label>${AL('Kind', 'Вид')}</label>
         ${GF.selectField('dc-bio-kind', { value: 'ahu_filter', title: AL('Kind', 'Вид'),
@@ -399,6 +477,12 @@
         ${GF.selectField('dc-bio-room', { value: '', title: AL('Room', 'Соба'), options: roomOpts })}</div>
       <div class="field"><label>${AL('Subject', 'Предмет')}</label>
         <input id="dc-bio-subject" maxlength="200" placeholder="${AL('AHU-3, Mat entrance, Cure bench 2, J. Doe…', 'AHU-3, прострелка на влез, клупа за сушење 2…')}"></div>
+      <div class="field"><label>${AL('Date of the check', 'Датум на проверката')}</label>
+        ${GF.dateField ? GF.dateField('dc-bio-date', { value: GF.facilityToday(), clearable: false, title: AL('Date of the check', 'Датум на проверката') })
+                       : `<input type="hidden" id="dc-bio-date" value="${GF.esc(GF.facilityToday())}">`}
+        <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
+          'Pre-filled with the facility’s today — a check logged the next morning belongs to the day it was made.',
+          'Однапред е денешниот датум на објектот — проверка запишана следното утро припаѓа на денот кога е направена.')}</div></div>
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1"><label>${AL('Reading (optional)', 'Мерење (опционално)')}</label>
           <input id="dc-bio-value" type="number" min="0" step="0.01"></div>
@@ -452,10 +536,15 @@
       return;
     }
     try {
+      // The date is sent explicitly: left out, the server stamps its own
+      // today, and a check logged the next morning lands on the wrong day
+      // (review 2026-09-27, FE-20).
+      const occurredOn = ((GF.$('dc-bio-date') || {}).value || '').trim();
       await GF.API.biosecurityLog({
         kind: (GF.$('dc-bio-kind') || {}).value,
         room_id: ((GF.$('dc-bio-room') || {}).value || '') || null,
         subject: ((GF.$('dc-bio-subject') || {}).value || '').trim() || null,
+        occurred_on: occurredOn || null,
         measure_value: measureValue,
         measure_unit: ((GF.$('dc-bio-unit') || {}).value || '').trim() || null,
         result: result || null,
@@ -465,6 +554,63 @@
       GF.toast(AL('Biosecurity check logged', 'Проверката е запишана'), 'success');
       await GF.WWF.loadDecon();
     } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
+  // Second phase of the two-phase record: the read of a check logged as
+  // pending. Same fail-needs-action gate as logging one; `pending` is not
+  // offered here because the server refuses to resolve a read to pending.
+  GF.WWF.bioResultForm = (eventId) => {
+    if (!canBio()) return;
+    const ev = ((GF.WWF._decon.biosecurity || {}).events || []).find(e => e.id === eventId) || {};
+    GF.WWF._ensureModal('dc-bres-modal', '440px');
+    GF.$('dc-bres-modal-title').textContent = AL('Biosecurity result', 'Резултат од проверка')
+      + (ev.subject || ev.room_name ? ' — ' + (ev.subject || ev.room_name) : '');
+    GF.$('dc-bres-modal-body').innerHTML = `
+      <div class="field"><label>${AL('Result', 'Резултат')}</label>
+        ${GF.selectField('dc-bres-val', { value: 'pass', title: AL('Result', 'Резултат'),
+          options: RESULTS.filter(r => r.v !== 'pending').map(r => ({ v: r.v, label: AL(r.en, r.mk) })),
+          onPick: (v) => GF.WWF._bioResultSync(v) })}</div>
+      <div class="field" id="dc-bres-action-field" style="display:none">
+        <label>${AL('Action taken', 'Преземена мерка')}</label>
+        <input id="dc-bres-action" maxlength="1000"></div>
+      <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
+        'A Fail or Below spec result must state what was done about it.',
+        'Резултат Неуспешно или Под спецификација мора да наведе што е преземено.')}</div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="dc-bres-save" onclick="GF.WWF.bioResultSave('${GF.esc(eventId)}')">${GF.t('save')}</button>
+      </div>`;
+    GF.openModal('dc-bres-modal');
+  };
+
+  GF.WWF._bioResultSync = (result) => {
+    const field = GF.$('dc-bres-action-field');
+    if (field) field.style.display = (result === 'fail' || result === 'below_spec') ? '' : 'none';
+  };
+
+  GF.WWF.bioResultSave = (eventId) => GF.once('dc-bres-save', async () => {
+    const result = (GF.$('dc-bres-val') || {}).value || '';
+    const action = ((GF.$('dc-bres-action') || {}).value || '').trim();
+    if (!result) { GF.toast(AL('Pick a result', 'Изберете резултат'), 'error'); return; }
+    if ((result === 'fail' || result === 'below_spec') && !action) {
+      GF.toast(AL('State the action taken for a failing result',
+                  'Наведете каква мерка е преземена за неуспешен резултат'), 'error');
+      return;
+    }
+    try {
+      await GF.API.biosecurityResult(eventId, { result, action_taken: action || null });
+      GF.closeModal('dc-bres-modal');
+      GF.toast(AL('Result recorded', 'Резултатот е запишан'), result === 'pass' ? 'success' : 'error');
+      await GF.WWF.loadDecon();
+    } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
+  // The pending rows are re-rendered into #panels on every render, so their
+  // action is delegated once at document level, keyed on a data- attribute —
+  // the same rule as the swab list (no record data in inline handlers).
+  document.addEventListener('click', (ev) => {
+    const b = ev.target && ev.target.closest ? ev.target.closest('[data-act="bio-result"]') : null;
+    if (b) GF.WWF.bioResultForm(b.dataset.id);
   });
 
   GF.views.decon = () => {
@@ -594,6 +740,45 @@
     } catch (e) { GF.toast(e.message, 'error'); }
   });
 
+  // The mirror image of the release: QA records that the room did NOT pass
+  // verification. Same modal discipline, and the reason is mandatory — a
+  // failed cycle with nothing on file is the undocumented quality call the
+  // record exists to prevent (decon.py fail_cycle).
+  GF.WWF.deconFailForm = (cycleId) => {
+    if (!canQA()) return;
+    GF.WWF._ensureModal('dc-fail-modal', '460px');
+    GF.$('dc-fail-modal-title').textContent = AL('Fail cycle — re-clean', 'Неуспешен циклус — повторно чистење');
+    GF.$('dc-fail-modal-body').innerHTML = `
+      <div style="margin-bottom:10px">${AL(
+        'You are recording that this room did not pass verification. The cycle closes as failed, the room stays unreleased, and a fresh cycle can then be started for the re-clean. This decision is recorded against your name.',
+        'Запишувате дека собата не ја помина верификацијата. Циклусот се затвора како неуспешен, собата останува неослободена и потоа може да се започне нов циклус за повторно чистење. Одлуката се запишува на ваше име.')}</div>
+      <div class="field"><label>${AL('Reason', 'Причина')}</label>
+        <input id="dc-fail-reason" maxlength="1000"
+          placeholder="${AL('e.g. swab RR-01-003 positive (Ct 24.1) — full re-clean ordered', 'пр. брис RR-01-003 позитивен (Ct 24,1) — наредено целосно повторно чистење')}"></div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn" style="color:var(--red)" id="dc-fail-save"
+          onclick="GF.WWF.deconFailSave('${cycleId}')">
+          ${AL('Fail cycle', 'Неуспешен циклус')}</button>
+      </div>`;
+    GF.openModal('dc-fail-modal');
+    setTimeout(() => { const f = GF.$('dc-fail-reason'); if (f) f.focus(); }, 60);
+  };
+
+  GF.WWF.deconFailSave = (cycleId) => GF.once('dc-fail-save', async () => {
+    const reason = ((GF.$('dc-fail-reason') || {}).value || '').trim();
+    if (!reason) {
+      GF.toast(AL('A failed cycle must state its reason', 'Неуспешен циклус мора да има причина'), 'error');
+      return;
+    }
+    try {
+      await GF.API.deconFail(cycleId, { reason });
+      GF.closeModal('dc-fail-modal');
+      GF.toast(AL('Cycle failed — start a new cycle for the re-clean', 'Циклусот е неуспешен — започнете нов за повторно чистење'), 'error');
+      await GF.WWF.loadDecon();
+    } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
   // ── forms ─────────────────────────────────────────────────────────────────
   // Real modals, not prompt(): this record is filled in many times a shift by a
   // gloved operator on a tablet, where a native prompt is a single unlabelled
@@ -707,10 +892,17 @@
     GF.WWF._ensureModal('dc-swablist-modal', '520px');
     GF.$('dc-swablist-modal-title').textContent = AL('Swab results', 'Резултати од брисеви');
     const COL = { negative: '#2BE8A0', positive: '#E5484D', pending: '#E0A73E', inconclusive: '#E0A73E' };
+    // Record data never goes inside an inline handler. GF.esc is HTML
+    // escaping, and the browser decodes it back BEFORE the handler text is
+    // parsed as JavaScript — so a swab code carrying a quote broke out of the
+    // JS string and ran with the reader's token (review 2026-09-27, FE-04:
+    // a QA writer could run script in an ADMIN's session). The button carries
+    // the id and the code as data- attributes, which stay HTML-escaped data,
+    // and one delegated listener on the modal body reads them back.
     const rows = mine.map(x => {
       const act = x.result === 'pending'
-        ? `<button class="btn btn-sm" onclick="GF.WWF.deconSwabResultForm('${x.id}','${GF.esc(x.swab_code)}')">${AL('Enter result', 'Внеси резултат')}</button>`
-        : `<span style="color:var(--ink-3);font-size:11px">${x.ct_value != null ? 'Ct ' + x.ct_value : ''}</span>`;
+        ? `<button class="btn btn-sm" data-act="swab-result" data-id="${GF.esc(x.id)}" data-code="${GF.esc(x.swab_code)}">${AL('Enter result', 'Внеси резултат')}</button>`
+        : `<span style="color:var(--ink-3);font-size:11px">${x.ct_value != null ? 'Ct ' + GF.esc(String(x.ct_value)) : ''}</span>`;
       return `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)">
         <strong style="min-width:110px">${GF.esc(x.swab_code)}</strong>
         <span style="flex:1;color:var(--ink-3);font-size:11px">${GF.esc(x.location_desc || '—')}</span>
@@ -718,8 +910,16 @@
         ${act}
       </div>`;
     }).join('');
-    GF.$('dc-swablist-modal-body').innerHTML = rows
+    const body = GF.$('dc-swablist-modal-body');
+    body.innerHTML = rows
       || `<div class="ntf-empty">${AL('No swabs for this cycle yet', 'Нема брисеви за овој циклус')}</div>`;
+    // Assigned rather than addEventListener'd: the modal body persists across
+    // opens, and a listener added per open would stack one call per visit.
+    body.onclick = (ev) => {
+      const b = ev.target && ev.target.closest ? ev.target.closest('[data-act="swab-result"]') : null;
+      if (!b || !body.contains(b)) return;
+      GF.WWF.deconSwabResultForm(b.dataset.id, b.dataset.code);
+    };
     GF.openModal('dc-swablist-modal');
   };
 
@@ -781,6 +981,14 @@
                   'Нема соби — прво додајте соби на Капацитет'), 'error');
       return;
     }
+    rooms = pickableRooms(rooms);
+    if (!rooms.length) {
+      // Production's rooms only (decon.py assert_room_authority): none
+      // registered means nothing this role may start a cycle for.
+      GF.toast(AL('No post-harvest (dry) room is registered — the production manager records only those',
+                  'Нема регистрирана соба за сушење — менаџерот за производство запишува само за такви'), 'error');
+      return;
+    }
     GF.WWF._ensureModal('dc-cycle-modal', '420px');
     GF.$('dc-cycle-modal-title').textContent = AL('Start room cycle', 'Почни циклус за соба');
     const roomOpts = rooms.map(r => ({ v: r.id, label: r.name }));
@@ -823,7 +1031,7 @@
   GF.WWF._registerFullPageView({
     key: 'decon', icon: 'shield',
     label: () => AL('Decontamination', 'Деконтаминација'),
-    insertBefore: 'mywork',
+    insertBefore: 'floor-end',
     guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
   });
 })();

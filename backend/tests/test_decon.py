@@ -255,6 +255,154 @@ async def test_positive_swab_on_awaiting_verification_cycle_can_be_failed_and_re
     assert fresh.json()["status"] == "in_progress"
 
 
+async def test_release_racing_a_new_pending_swab_never_releases_on_a_pending_result(client, admin_headers):
+    """Review 2026-09-27, BC-06. release_room read the cycle and the swab
+    summary with plain SELECTs; a pending swab inserted in between was
+    invisible to it and the room was released with a pending result on file
+    — the exact case the module says never happens. Both paths lock the
+    cycle row now: the release waits for the in-flight swab, re-reads it and
+    refuses.
+
+    The in-flight swab is an open transaction that has locked the cycle
+    (what record_swab does) and inserted its row, so the interleaving is
+    fixed rather than left to scheduling."""
+    import asyncio
+    from app.db import tasks_admin_pool
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    qa, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    room = await _room(client, admin_headers, "c177_t", "Flowering 1.8")
+    cid = await _run_full_cycle(client, cu_h, room["id"])
+    neg = await client.post("/decon/swabs", json={
+        "room_id": room["id"], "cycle_id": cid, "swab_code": "RR-01-300"}, headers=qa_h)
+    await client.patch(f"/decon/swabs/{neg.json()['id']}/result", json={"result": "negative"}, headers=qa_h)
+
+    conn = await tasks_admin_pool().acquire()
+    tx = conn.transaction()
+    await tx.start()
+    try:
+        await conn.execute("SELECT 1 FROM decon_room_cycles WHERE id=$1 FOR UPDATE", cid)
+        org_id = await conn.fetchval("SELECT org_id FROM decon_room_cycles WHERE id=$1", cid)
+        await conn.execute(
+            "INSERT INTO decon_swabs(org_id, room_id, cycle_id, swab_code, taken_by)"
+            " VALUES ($1,$2,$3,'RR-01-301',$4)", org_id, room["id"], cid, qa["id"])
+    except Exception:
+        # never leak an aborted transaction — it holds the audit advisory
+        # lock and stalls every audited write in the suite
+        await tx.rollback()
+        await tasks_admin_pool().release(conn)
+        raise
+    try:
+        release = asyncio.create_task(
+            client.post(f"/decon/cycles/{cid}/release", json={}, headers=qa_h))
+        await asyncio.sleep(0.5)
+        assert not release.done(), "the release must block on the cycle lock, not race past it"
+    finally:
+        await tx.commit()
+        await tasks_admin_pool().release(conn)
+    r = await release
+    assert r.status_code == 409, r.text
+    assert "pending=1" in r.json()["detail"]
+    assert (await client.get(f"/decon/cycles/{cid}", headers=qa_h)).json()["status"] == "awaiting_verification"
+
+
+async def test_release_and_fail_racing_resolve_to_one_terminal_state(client, admin_headers):
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    room = await _room(client, admin_headers, "c175_t", "Flowering 1.9")
+    cid = await _run_full_cycle(client, cu_h, room["id"])
+    sw = await client.post("/decon/swabs", json={
+        "room_id": room["id"], "cycle_id": cid, "swab_code": "RR-01-400"}, headers=qa_h)
+    await client.patch(f"/decon/swabs/{sw.json()['id']}/result", json={"result": "negative"}, headers=qa_h)
+    import asyncio
+    r1, r2 = await asyncio.gather(
+        client.post(f"/decon/cycles/{cid}/release", json={}, headers=qa_h),
+        client.post(f"/decon/cycles/{cid}/fail", json={"reason": "late positive"}, headers=qa_h))
+    assert sorted([r1.status_code, r2.status_code]) == [200, 409], (r1.text, r2.text)
+    final = (await client.get(f"/decon/cycles/{cid}", headers=qa_h)).json()["status"]
+    assert final in ("released", "failed")
+
+
+async def test_child_records_must_name_the_cycles_own_room(client, admin_headers):
+    """Review 2026-09-27, BC-25: a swab posted with room A and room B's cycle
+    fell out of both rooms' release gates, so a positive result could be
+    orphaned. 422 on the mismatch, for swabs, bleach readings and tool checks."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    room_a = await _room(client, admin_headers, "c174_t", "Room A")
+    room_b = await _room(client, admin_headers, "c173_t", "Room B")
+    cyc_b = await _cycle(client, cu_h, room_b["id"])
+    r = await client.post("/decon/swabs", json={
+        "room_id": room_a["id"], "cycle_id": cyc_b["id"], "swab_code": "RR-MIX-1"}, headers=qa_h)
+    assert r.status_code == 422 and "different room" in r.json()["detail"]
+    r = await client.post("/decon/bleach-log", json={
+        "room_id": room_a["id"], "cycle_id": cyc_b["id"], "ppm_strip_reading": 5000}, headers=cu_h)
+    assert r.status_code == 422
+    r = await client.post("/decon/tool-log", json={
+        "room_id": room_a["id"], "cycle_id": cyc_b["id"], "tool_set": "x",
+        "ppm_strip_reading": 10000}, headers=cu_h)
+    assert r.status_code == 422
+    # the matching pair is still fine
+    ok = await client.post("/decon/swabs", json={
+        "room_id": room_b["id"], "cycle_id": cyc_b["id"], "swab_code": "RR-MIX-2"}, headers=qa_h)
+    assert ok.status_code == 201, ok.text
+
+
+async def test_duplicate_swab_codes_racing_are_both_answered_409(client, admin_headers):
+    """Review 2026-09-27, BC-26: the loser of a create/create race on the same
+    swab code hit decon_swabs_org_id_swab_code_key unmapped — a 500."""
+    import asyncio
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    room = await _room(client, admin_headers, "c172_t", "Race room", "other")
+    payload = {"room_id": room["id"], "swab_code": "RR-RACE-1"}
+    r1, r2 = await asyncio.gather(
+        client.post("/decon/swabs", json=payload, headers=qa_h),
+        client.post("/decon/swabs", json=payload, headers=qa_h))
+    assert sorted([r1.status_code, r2.status_code]) == [201, 409]
+
+
+async def test_production_manager_cleans_dry_rooms_only(client, admin_headers):
+    """Review 2026-09-27, BC-12: production runs the dry room (DEPARTMENT-
+    MODEL-2026-09) but could not record its decontamination — the cultivation
+    manager had to. PR_MGR is a cleaning writer for `dry` rooms and nothing
+    else; QA still owns swabs and release."""
+    _, pr_h = await _actor(client, admin_headers, "PR_MGR")
+    dry = await _room(client, admin_headers, "c190_dry", "Drying 2", "dry")
+    flower = await _room(client, admin_headers, "c190_flw", "Flowering 2", "flower")
+    cyc = await _cycle(client, pr_h, dry["id"], campaign="dry-2026-09")
+    assert cyc["status"] == "in_progress"
+    assert (await client.post(f"/decon/cycles/{cyc['id']}/steps", json={"step": "dry_clean"},
+                              headers=pr_h)).status_code == 201
+    assert (await client.post("/decon/bleach-log", json={"room_id": dry["id"], "ppm_strip_reading": 5000},
+                              headers=pr_h)).status_code == 201
+    denied = await client.post("/decon/cycles", json={"room_id": flower["id"], "campaign": "x"}, headers=pr_h)
+    assert denied.status_code == 403, denied.text
+    assert (await client.post("/decon/bleach-log", json={"room_id": flower["id"], "ppm_strip_reading": 5000},
+                              headers=pr_h)).status_code == 403
+    assert (await client.post("/decon/swabs", json={"room_id": dry["id"], "swab_code": "RR-PR-1"},
+                              headers=pr_h)).status_code == 403, "swabs stay QA's"
+
+
+async def test_cycle_started_on_is_the_facility_date(client, admin_headers):
+    """Review 2026-09-27, BC-15: the column defaults to CURRENT_DATE, which
+    renders under the database's UTC zone, so a cycle started between
+    facility midnight and UTC midnight was dated yesterday. The INSERT now
+    passes the facility's date explicitly — pinned structurally (the
+    statement must carry started_on from SITE_TODAY_SQL) because the clock
+    cannot be moved into the nightly window from a test, and behaviourally
+    at whatever hour this runs."""
+    import inspect
+    from app.api import decon
+    from app.worktime import facility_today
+    src = inspect.getsource(decon.create_cycle)
+    assert "started_on" in src and "SITE_TODAY_SQL" in src
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "c191_t", "Clock room")
+    before = facility_today()
+    cyc = await _cycle(client, cu_h, room["id"])
+    after = facility_today()
+    assert before.isoformat() <= cyc["started_on"] <= after.isoformat()
+
+
 async def test_only_qa_can_release_not_the_cleaning_crew(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c181_t", "Flowering 1.2")

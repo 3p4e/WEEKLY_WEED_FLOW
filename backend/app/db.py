@@ -61,16 +61,8 @@ async def close_pools() -> None:
     _pools.clear()
 
 
-def users_user_pool() -> asyncpg.Pool:
-    return _pools["users_user"]
-
-
 def users_admin_pool() -> asyncpg.Pool:
     return _pools["users_admin"]
-
-
-def tasks_user_pool() -> asyncpg.Pool:
-    return _pools["tasks_user"]
 
 
 def tasks_admin_pool() -> asyncpg.Pool:

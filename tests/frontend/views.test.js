@@ -77,6 +77,29 @@ test('dash() renders an alert row (no task_id) without adding a stray onclick', 
   h.close();
 });
 
+test('dash() batch alerts read the contract keys with the old shape as fallback, never "undefined" (R2-FE-04)', () => {
+  const h = loadViews();
+  const { GF } = h;
+  GF.WWF = {
+    _notif: {
+      loaded: true, unread: 0,
+      items: [
+        { id: 'n1', verb: 'batch_added', params: { code: 'GP072501', strain: 'Gorilla Punch', room: 'Flowering 1.1', plant_count: 2000, phase: 'clone' }, created_at: new Date().toISOString() },
+        { id: 'n2', verb: 'batch_moved', params: { code: 'GP072501', strain: 'Gorilla Punch', room: 'Flowering 1.2', plant_count: 2000, phase: 'veg', old_room: 'Flowering 1.1', old_phase: 'clone' }, created_at: new Date().toISOString() },
+        { id: 'n3', verb: 'batch_added', params: { code: 'GP072501', cultivar: 'GP', plant_count: 2000, phase: 'clone' }, created_at: new Date().toISOString() },
+        { id: 'n4', verb: 'batch_moved', params: { code: 'GP072501', old_phase: 'clone', phase: 'veg', room_change: false }, created_at: new Date().toISOString() },
+      ],
+    },
+  };
+  const html = GF.views.dash();
+  assert.doesNotMatch(html, /undefined/);
+  assert.match(html, /GP072501 · 2000× Gorilla Punch → Flowering 1\.1/);
+  assert.match(html, /Gorilla Punch: Flowering 1\.1 → Flowering 1\.2/);
+  assert.match(html, /GP072501 · 2000× GP/);
+  assert.match(html, /: clone → veg/);
+  h.close();
+});
+
 test('exec() excludes archived tasks from the KPI/blocked/overdue counts', () => {
   const h = loadViews();
   const { GF } = h;
@@ -94,5 +117,39 @@ test('exec() excludes archived tasks from the KPI/blocked/overdue counts', () =>
   assert.equal(html.includes('Archived stuck task'), false,
     'an archived task must not appear in the needs-attention risk zone');
   assert.ok(html.includes('Live stuck task'), 'the live (non-archived) stuck task must still appear');
+  h.close();
+});
+
+/* ── INV-06 / R2-FE-14: ADMIN sets a department head from the Team view ─── */
+function loadTeam(role, isAdmin) {
+  const h = loadGF({ files: ['data.js', 'core.js', 'views.js'] });
+  const { GF } = h;
+  GF.state.tasks = [];
+  GF.state.user = 'me';
+  GF.PEOPLE = { me: { name: 'Me', role, roleLabel: '' }, h1: { name: 'Head One', role: 'pr_mgr', roleLabel: '' } };
+  GF.DEPTS = [
+    { id: 'd1', name: 'Production', mk: 'Производство', color: '#123', head_user_id: 'h1' },
+    { id: 'd2', name: 'Cultivation', mk: 'Одгледување', color: '#456', head_user_id: null },
+  ];
+  GF.WWF = { isAdmin: () => isAdmin, canProvision: () => isAdmin };
+  GF.avatar = () => '';
+  return h;
+}
+
+test('team() lists every department with its head and a Set-head control for ADMIN', () => {
+  const h = loadTeam('admin', true);
+  const html = h.GF.views.team();
+  assert.match(html, /team-dept[^>]*data-dept="d1"/);
+  assert.match(html, /Head One/);
+  assert.match(html, /no head/, 'a department without a head says so');
+  assert.equal((html.match(/GF\.WWF\.openDeptHeadForm\('d[12]'\)/g) || []).length, 2);
+  h.close();
+});
+
+test('team() shows no department strip to a non-admin', () => {
+  const h = loadTeam('qa_mgr', false);
+  const html = h.GF.views.team();
+  assert.doesNotMatch(html, /team-dept/);
+  assert.doesNotMatch(html, /openDeptHeadForm/);
   h.close();
 });

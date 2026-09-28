@@ -4,10 +4,11 @@ from app.deps import require_role
 from app.notify import safe_emit
 from fastapi import Depends, HTTPException
 
-from .common import _COQ_ROLES, _evaluate, _uuid_or_404, check_derived_total_units, router
+from .common import (OPEN_OOS_SQL, _COQ_ROLES, _evaluate, _uuid_or_404, assert_batch_not_rejected,
+                     assert_no_confirmed_oos, check_derived_total_units, derived_total, fmt_limit,
+                     router)
 from .laboratories import _lab_scope_set, _result_in_scope
 from .signatures import _sig_out
-from .specs import _ACID_FACTOR
 
 
 def _coq_client(timeout: float = 20.0):
@@ -17,10 +18,22 @@ def _coq_client(timeout: float = 20.0):
 
 def _coq_cell(s) -> str:
     """Sanitize a value for a DocEngine table/heading cell — strip the grammar
-    separators (| heading split, ||| column split, ~~ MK/EN split)."""
+    separators (| heading split, ||| column split, ~~ MK/EN split).
+
+    The DocEngine parser is LINE-based (review 2026-09-27 QC-26): a value
+    carrying a newline closed the [[TABLE]] / [[FORM:grid]] block early — the
+    rows after it fell out as paragraphs — and a line starting with `#` or
+    `[[` injected a heading or a block into an issued certificate. Line breaks
+    collapse to one space; a leading block/heading marker is neutralised."""
     if s is None:
         return ""
-    return str(s).replace("|||", "/").replace("~~", "-").replace("|", "/")
+    t = str(s).replace("\r", " ").replace("\n", " ")
+    t = " ".join(t.split())
+    t = t.replace("|||", "/").replace("~~", "-").replace("|", "/")
+    t = t.replace("[[", "[ [").replace("]]", "] ]")
+    if t.startswith("#") or t.startswith("<!--"):
+        t = "​" + t          # zero-width space: prints as-is, parses as text
+    return t
 
 
 def _coq_manifest(coa: dict, spec: dict, params_by_id: dict, results: list,
@@ -80,6 +93,7 @@ _COQ_SIG_ROLE = {
     "AUTHORED": "Изготвил~~Prepared by", "REVIEWED": "Прегледал~~Reviewed by",
     "APPROVED": "Одобрил~~Approved by", "RELEASED": "Пуштил~~Released by",
     "VERIFIED": "Верификувал~~Verified by", "COQ_ISSUED": "Издал CoQ~~CoQ issued by",
+    "COMPILED": "Составил~~Compiled by",
 }
 
 
@@ -88,11 +102,39 @@ def _d(x) -> str:
     return x.isoformat() if hasattr(x, "isoformat") else (str(x) if x else "")
 
 
-def _coq_potency(spec: dict) -> str:
-    """The cannabinoid strength line from the specification's THC acceptance
-    window + grade. Empty when the spec carries neither — never invented."""
+def _coq_period(coa: dict) -> tuple[str, str]:
+    """The testing period a CoQ certifies, MK and EN (QC-15 / QR-04):
+    "Initial release" for an INITIAL CoQ, "Re-test 6M" for a RETEST one at
+    timepoint '6M'. A single-certificate CoQ carries no purpose and reads as
+    the initial release."""
+    purpose = coa.get("purpose") or "INITIAL"
+    tp = (coa.get("timepoint") or "").strip()
+    if purpose == "RETEST":
+        return (f"Ретест {tp}".strip(), f"Re-test {tp}".strip())
+    return ("Првично пуштање", "Initial release")
+
+
+def _coq_potency(spec: dict, params_by_id: dict | None = None) -> str:
+    """The cannabinoid strength line of the meta grid. Review 2026-09-27
+    QC-08: this used to print the specification HEADER's THC window
+    (thc_acceptance_min/max), a pair of numbers nothing graded against — a
+    batch measuring 19.5 % printed "THC 23.4–28.59 %" beside "Conforms". The
+    range printed now is the one the Total THC line is actually judged by:
+    the computed total_thc parameter's own limits (specs.update_spec refuses
+    to approve a header window that disagrees with them). The grade label is
+    the header's. Empty when the spec carries neither — never invented.
+
+    The limits print through fmt_limit (review 2026-09-27 QR-06): two
+    decimals, as the catalogue prints a window. A `total_thc` parameter
+    created before limits were bound as Decimal holds a float's binary
+    expansion in its `numeric` column, and this row printed
+    "THC 23.39999999999999857891452847979962825775146484375–…" — the
+    comparison path was immune, only the print was raw."""
     parts = []
-    lo, hi = spec.get("thc_acceptance_min"), spec.get("thc_acceptance_max")
+    total = next((p for p in (params_by_id or {}).values()
+                  if p.get("computed_kind") == "total_thc"), None)
+    lo = fmt_limit(total.get("lower_limit")) if total else None
+    hi = fmt_limit(total.get("upper_limit")) if total else None
     if lo is not None and hi is not None:
         parts.append(f"THC {lo}–{hi}%")
     elif lo is not None:
@@ -182,13 +224,45 @@ def _coq_sources(results: list, lab: dict | None):
 
 
 def _coq_grade_value(potency: dict | None) -> str | None:
-    """The potency-grade cell for the meta grid, from the CoQ's frozen ladder
-    disposition (Phase B). The cultivar name is its OWN meta row, so this carries
-    only the grade: Spec tier · nominal · measured Total Δ9-THC · ladder version.
-    Language-neutral (numbers), like the batch/spec cells. None when there's no
-    grade to show — never invented."""
+    """The potency-grade cell for the meta grid, from the CoQ's frozen grade
+    source. The cultivar name is its OWN meta row, so this carries only the
+    grade. Language-neutral (numbers and codes), like the batch/spec cells.
+    None when there's no grade to show — never invented.
+
+    Product (the official catalogue, 2026-09-05): product code · nominal ·
+    window — verdict (measured Total Δ9-THC) — document. When the value is
+    outside the chosen product's window the owner's out-of-grade rule
+    (2026-09-06) prints on the same line: the lot is REGRADED to the product
+    whose window holds it, or, when none does, stated as fitting no grade —
+    followed by the state of the formal OOS on the batch disposition the
+    rule asks for (review 2026-09-27 INS2-01: a tracked follow-up, never a
+    gate): "formal OOS on the batch disposition: PP-OOS-2026-0007" or
+    "… NOT YET OPENED". The document says which, rather than the record
+    silently lacking one.
+    Ladder (Phase B, legacy): Spec tier · nominal · measured Total Δ9-THC ·
+    ladder version."""
     if not potency:
         return None
+    if potency.get("kind") == "product":
+        code = potency.get("product_code") or "?"
+        nom, lo, hi = potency.get("nominal"), potency.get("window_min"), potency.get("window_max")
+        gv = f"{code} · nominal {nom:.2f} % · window {lo:.2f}–{hi:.2f} %"
+        tot, conf = potency.get("total_d9_thc"), potency.get("conforms")
+        if conf is True:
+            gv += f" — conforms (Total Δ9-THC {tot:.2f} %)"
+        elif conf is False:
+            gv += f" — does NOT conform (Total Δ9-THC {tot:.2f} %)"
+            if potency.get("regrade_to"):
+                gv += f" · REGRADED from {code} to {potency['regrade_to']}"
+            else:
+                gv += " · fits no grade of this strain"
+            oos = potency.get("regrade_oos")
+            gv += (f" — formal OOS on the batch disposition: {oos}" if oos
+                   else " — formal OOS on the batch disposition: NOT YET OPENED")
+        else:
+            gv += " — Total Δ9-THC not measured"
+        doc = " ".join(x for x in (potency.get("doc_code"), potency.get("doc_version")) if x)
+        return gv + (f" — {doc}" if doc else "")
     disp = potency.get("disposition")
     if disp:
         gv = " · ".join(x for x in (disp.get("spec"), f"nominal {disp['nominal']}%") if x)
@@ -205,10 +279,18 @@ def _coq_grade_value(potency: dict | None) -> str | None:
     return None
 
 
+# Signature meanings a Certificate of Quality may print (review 2026-09-27
+# QC-07). RELEASED is the Qualified Person's Annex-16 act; the CoQ states in
+# its own disposition line that it is NOT QP batch release, so a "Released by"
+# row on it asserted an authority the document disclaims.
+_COQ_PRINTABLE_MEANINGS = ("AUTHORED", "REVIEWED", "APPROVED", "VERIFIED", "COQ_ISSUED",
+                           "COMPILED")
+
+
 def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
                   lab: dict | None = None, scope_note: str | None = None,
                   sigs: list | None = None, signer_names: dict | None = None,
-                  potency: dict | None = None) -> str:
+                  potency: dict | None = None, labs_accredited: bool | None = None) -> str:
     """Assemble the Certificate of Quality as DocEngine bilingual Markdown in the
     approved house layout (CoQ_Template_v02_VariationF): product/identity meta
     grid → §01 Analytical Results (№ · parameter · method · acceptance · result ·
@@ -230,14 +312,21 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
         if decision == "PASS" else "Не ја задоволува спецификацијата — QC диспозиција"
     v_en = "Conforms to Specification — QC Disposition (not QP batch release)" \
         if decision == "PASS" else "Does NOT conform to Specification — QC Disposition"
+    # QC-15 / review 2026-09-27 QR-04: a re-test-period CoQ says so in its
+    # title and in the grid, so the two live certificates of one batch (the
+    # initial release and the 6-month re-test) are told apart on paper.
+    period_mk, period_en = _coq_period(coa)
+    retest = (coa.get("purpose") or "INITIAL") == "RETEST"
+    t_mk = "Сертификат за квалитет" + (f" — {period_mk}" if retest else "")
+    t_en = "Certificate of Quality" + (f" — {period_en}" if retest else "")
     head = ("<!--HEADERDATA\n"
             "doctype: FORM\n"
             f"code: {c(coa['coa_number'])}\n"
             "version: 01\n"
-            "mk_title: Сертификат за квалитет\n"
-            "en_title: Certificate of Quality\n"
+            f"mk_title: {c(t_mk)}\n"
+            f"en_title: {c(t_en)}\n"
             "-->\n\n")
-    title = "# Сертификат за квалитет|Certificate of Quality\n\n"
+    title = f"# {c(t_mk)}|{c(t_en)}\n\n"
 
     # ── product / identity meta grid ────────────────────────────────────────
     cannabis = coa.get("cert_type") in _COQ_CANNABIS_CERTS
@@ -257,10 +346,11 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
         lab_line = coa.get("source_lab") or ""
     grid_rows = [
         ("№ на сертификат", "Certificate №", coa.get("coa_number"), True),
+        ("Период на тестирање", "Testing period", f"{period_mk} / {period_en}" if coa.get("purpose") else None, False),
         ("Материјал", "Material", material, True),
         ("Сорта", "Cultivar", coa.get("cultivar_name"), False),
         ("Ботаничко потекло", "Botanical origin", " · ".join(bot), False),
-        ("Јачина", "Potency", _coq_potency(spec), False),
+        ("Јачина", "Potency", _coq_potency(spec, params_by_id), False),
         ("Производна серија", "Production batch", coa.get("batch_id"), True),
         ("Серија на одгледување", "Cultivation batch", coa.get("cultivation_batch"), False),
         ("Код на производ", "Product code", coa.get("product_code"), False),
@@ -305,18 +395,25 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
         s01 += (f"{i + 1} ||| {c(r.get('test_name'))} ||| {c(method)} ||| "
                 f"{c(limits)} ||| {c(val)} ||| {letters[i]}\n")
     s01 += "[[/TABLE]]\n\n"
+    # Footnotes are DERIVED from the results table (review 2026-09-27 QC-25):
+    # the ∑ note cites the monograph the source column names (Ph. Eur. 3028 —
+    # 2.2.29 is the HPLC method, not the 0.877 sum), and the Q note names the
+    # tests the in-house QC Department actually performed on this batch
+    # instead of asserting Foreign Matter / Macroscopic Identification
+    # whatever the table holds.
     if has_computed:
-        s01 += ("_∑ — Вкупен THC/CBD е пресметан како збир на киселинската и"
-                " декарбоксилираната форма (Ph. Eur. 2.2.29)._"
-                "|||_∑ — Total THC/CBD is computed as the sum of the acidic and"
-                " decarboxylated forms (Ph. Eur. 2.2.29)._\n\n")
+        s01 += ("_∑ — Вкупен THC/CBD е пресметан како неутрална форма + 0,877 × киселинска"
+                " форма (Ph. Eur. монографија 3028, Cannabis flos)._"
+                "|||_∑ — Total THC/CBD is computed as neutral form + 0.877 × acid form"
+                " (Ph. Eur. Monograph 3028, Cannabis flos)._\n\n")
     if has_internal:
-        s01 += ("_Q — Странска материја и макроскопска идентификација ги изведува"
-                " внатрешната QC служба на Purely Plant пред земање мостра за"
-                " финалното QC пуштање (QCSOP-005 v.02)._"
-                "|||_Q — Foreign Matter and Macroscopic Identification are performed"
-                " by the in-house Purely Plant QC Department prior to sampling for"
-                " final QC release testing (QCSOP-005 v.02)._\n\n")
+        internal_tests = [c(r.get("test_name") or "—") for r, letter in zip(results, letters)
+                          if letter == "Q"]
+        listed = ", ".join(dict.fromkeys(internal_tests))
+        s01 += (f"_Q — {listed}: изведено од внатрешната QC служба на Purely Plant"
+                " (внатрешна контрола на пуштање)._"
+                f"|||_Q — {listed}: performed by the in-house Purely Plant QC Department"
+                " (internal release control)._\n\n")
 
     # ── §02 laboratory & CoA cross-reference (each source traced once) ───────
     s02 = ("# 02 Лаборатории и вкрстена референца на CoA|"
@@ -341,23 +438,39 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
     # certificates (a water/other CoQ conforms to its own spec, not to 3028).
     mono_mk = " и со Ph. Eur. монографија 3028" if cannabis else ""
     mono_en = " and Ph. Eur. Monograph 3028" if cannabis else ""
+    # QC-25: the accreditation adjective is printed only when the caller has
+    # established it — every external source laboratory carries an
+    # accreditation record and no result is outside its scope. Otherwise the
+    # statement names the laboratories plainly; the §02 cross-reference shows
+    # what each one holds.
+    has_external = any(letter not in ("Q", "∑", "—") for letter in letters)
+    if labs_accredited is True:
+        ext_mk, ext_en = (" и од надворешни ISO/IEC 17025 акредитирани лаборатории",
+                          " and from outsourced ISO/IEC 17025 accredited laboratories")
+    elif has_external:
+        ext_mk, ext_en = (" и од надворешни лаборатории наведени во делот 02",
+                          " and from the outsourced laboratories cross-referenced in section 02")
+    else:
+        ext_mk = ext_en = ""
     comp = ("**Изјава за усогласеност на QC.** Оваа серија е произведена, спакувана и"
             " тестирана во согласност со одобрението за ставање на пазар и МК ГМП"
             " прописите на Република Северна Македонија (МАЛМЕД). Сите аналитички"
-            " резултати од внатрешната QC служба и од надворешни ISO/IEC 17025"
-            " акредитирани лаборатории се усогласени со критериумите за прифаќање"
+            f" резултати од внатрешната QC служба{ext_mk}"
+            " се усогласени со критериумите за прифаќање"
             f"{mono_mk}."
             "|||**QC Compliance Statement.** This batch was manufactured, packaged and"
             " tested in compliance with the Marketing Authorisation and MK GMP"
             " regulations of the Republic of North Macedonia (MALMED). All analytical"
-            " results from the in-house QC Department and from outsourced ISO/IEC 17025"
-            f" accredited laboratories conform to the acceptance criteria{mono_en}.\n\n")
+            f" results from the in-house QC Department{ext_en}"
+            f" conform to the acceptance criteria{mono_en}.\n\n")
     note = (f"_{scope_note}_\n\n") if scope_note else ""
 
     # ── e-signatures (Annex 11) ─────────────────────────────────────────────
     sig = "# Потписи|Signatures\n\n"
     sig_rows = []
     for s in (sigs or []):
+        if s.get("meaning") not in _COQ_PRINTABLE_MEANINGS:
+            continue
         role = _COQ_SIG_ROLE.get(s.get("meaning"), s.get("meaning") or "—")
         sig_rows.append((role, s.get("signer_name") or "—", s.get("signer_role") or "—",
                          (s.get("signed_at") or "")[:10] or "—"))
@@ -428,9 +541,7 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
         # QCSOP 012 §6.4.1/§6.6 (URS gate): no COQ for a batch with an open OOS
         # investigation — the COQ is compiled only on the investigation-
         # confirmed result set. Explicit, logged reason; never a silent pass.
-        open_oos = await c.fetchval(
-            "SELECT count(*) FROM qc_oos_records WHERE batch_id=$1 AND status <> 'CLOSED'",
-            coa["batch_id"])
+        open_oos = await c.fetchval(OPEN_OOS_SQL, coa["batch_id"])
     if open_oos:
         # §6.16 (C8) — an attempted CoQ on an open-OOS batch is itself a
         # reportable deviation (QASOP 010). Recorded in its own transaction so
@@ -445,12 +556,19 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
                  " — a COQ cannot be issued until the investigation is closed"
                  " (QCSOP 012 §6.4.1; attempt recorded as a deviation, §6.16)")
     async with rls(user) as c:
+        # Review 2026-09-27 QR-03 — the same investigation gates the
+        # aggregation CoQ runs (QC-01): no certificate for a batch whose
+        # investigation closed with the QP disposition REJECT, and none over
+        # a result a closed, non-invalidated OOS on the batch CONFIRMED.
+        await assert_batch_not_rejected(c, coa["batch_id"])
         spec = await c.fetchrow("SELECT * FROM qc_specifications WHERE id=$1",
                                 coa["specification_id"])
         params = await c.fetch(
             "SELECT * FROM qc_spec_parameters WHERE spec_id=$1", coa["specification_id"])
         results = await c.fetch(
             "SELECT * FROM qc_results WHERE coa_id=$1 ORDER BY created_at", coa_id)
+        await assert_no_confirmed_oos(c, user["org_id"], coa["batch_id"],
+                                      [dict(r) for r in results])
         lab = await c.fetchrow("SELECT * FROM qc_laboratories WHERE id=$1",
                                coa["laboratory_id"]) if coa["laboratory_id"] else None
         # Annex 11 e-signatures captured on this certificate — rendered in the
@@ -484,20 +602,34 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
     # simply leaves the total uncovered, so the completeness gate names it.
     by_param = {str(r["parameter_id"]): r for r in results if r["parameter_id"]}
     for p in params:
-        if not p["computed_kind"] or str(p["id"]) in by_param:
+        if not p["computed_kind"]:
             continue
+        if str(p["id"]) in by_param:
+            # Review 2026-09-27 QC-10: this path used to certify a TRANSCRIBED
+            # total in preference to the computation — the lab's own figure,
+            # possibly on another formula or rounding, skipping the unit check
+            # — while the aggregation CoQ computed its own for the same batch.
+            # A derived total is never transcribed (add_result and the eCoA
+            # mapping both refuse it now); a row that predates that rule is
+            # invalid data and is named, not certified.
+            nm = p["test_name_en"] or p["test_name_mk"] or "?"
+            raise HTTPException(
+                409, f"'{nm}' is a Ph. Eur. 3028 derived total but the certificate carries a"
+                     " transcribed result for it — a derived total is computed from its"
+                     " components, never transcribed; revise the certificate without that row")
         ra = by_param.get(str(p["component_a_id"])) if p["component_a_id"] else None
         rb = by_param.get(str(p["component_b_id"])) if p["component_b_id"] else None
         if not (ra and rb and ra["result_numeric"] is not None and rb["result_numeric"] is not None):
             continue
         check_derived_total_units(dict(p), ra, rb)
-        val = round(float(ra["result_numeric"]) + _ACID_FACTOR * float(rb["result_numeric"]), 2)
+        # ONE computation for every path (QC-10/QC-20): Decimal, half-up.
+        val = derived_total(ra["result_numeric"], rb["result_numeric"])
         lo = float(p["lower_limit"]) if p["lower_limit"] is not None else None
         hi = float(p["upper_limit"]) if p["upper_limit"] is not None else None
-        complies, _st = _evaluate(val, lo, hi)
+        complies, _st = _evaluate(val, p["lower_limit"], p["upper_limit"])
         results.append({
             "parameter_id": p["id"], "test_name": p["test_name_en"] or p["test_name_mk"],
-            "result_value": None, "result_numeric": val, "unit": p["unit"],
+            "result_value": None, "result_numeric": float(val), "unit": p["unit"],
             "lower_limit": lo, "upper_limit": hi, "complies": complies,
             "source_document_code": "Пресметано / Computed — Ph. Eur. 3028",
             "source_institution": None,
@@ -545,17 +677,31 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
         names = ", ".join(out_of_scope[:5])
         scope_note = (f"Тестови надвор од ISO 17025 опсегот на лабораторијата: {names}"
                       f"|||Tests outside the laboratory's ISO 17025 scope: {names}")
+    # QC-25: the "ISO/IEC 17025 accredited" claim is made only when the
+    # certificate's laboratory holds an accreditation record and nothing is
+    # out of its scope; an external result with no registered lab is unproven.
+    external = [r for r in results if (r.get("source_institution") or r.get("source_document_code"))
+                and not str(r.get("source_document_code") or "").startswith("Пресметано")]
+    labs_accredited = None
+    if external:
+        labs_accredited = bool(lab and (lab["accreditation_number"] or lab["accreditation_body"])
+                               and not out_of_scope)
     md = _coq_markdown(dict(coa), dict(spec) if spec else {}, params_by_id, results,
                        lab=dict(lab) if lab else None, scope_note=scope_note,
-                       sigs=sigs, signer_names=signer_names)
+                       sigs=sigs, signer_names=signer_names, labs_accredited=labs_accredited)
     # DocEngine build (house-style PASS gate). A pp_verify FAIL surfaces as 422.
     build = (await docengine.de_forward(
         "POST", "/build",
         {"markdown": md, "out_name": coa["coa_number"],
          "meta": {"code": coa["coa_number"], "title_mk": "Сертификат за квалитет",
                   "title_en": "Certificate of Quality", "version": "01"}},
-        timeout=120.0, client_factory=_coq_client)).json()
+        timeout=120.0, client_factory=_coq_client, org_id=user["org_id"])).json()
     doc_id = build.get("document_id")
+    if not doc_id:
+        # DI-16: DocEngine answers 503 itself when its registry is down, but a
+        # 200 without a document id must never be stamped onto the record as
+        # if a document existed.
+        raise HTTPException(502, "DocEngine built the document but registered no id — not recorded")
     async with rls(user) as c:
         # Re-assert RELEASED when stamping the artifact — the certificate could
         # have transitioned during the (up-to-120s) DocEngine build (TOCTOU).

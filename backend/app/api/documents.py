@@ -28,22 +28,16 @@ from pydantic import BaseModel, Field, field_validator
 from app.api.ai import _letta_message
 from app.api.ai import normalize_ai_reply as _normalize_ai_reply
 from app.api.weekwindow import TASK_COLS as _COLS
-from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
+from app.api.weekwindow import (activity_window_sql, fri_thu as _fri_thu, task_row as _task_row,
+                                week_label, window_iso_week)
 from app.db import rls, rls_users
 from app.deps import dept_scope, is_dept_scoped_role, require_role, uuid_or_404
 from app.roles import DEPT_SCOPED_ROLES, ELEVATED_ROLES, EXECUTIVE_ROLES, MANAGER_ROLES
 from app.roster import roster
 from app.notify import safe_emit
-from app.worktime import TZ, classify, session_hours
+from app.worktime import TZ, facility_today, session_buckets, session_hours
 
 router = APIRouter(prefix="/reports/documents", tags=["documents"])
-
-
-def _today() -> date:
-    """Facility-local 'today' — never the container's naive UTC clock, which
-    resolves to the previous day (and thus the previous Fri→Thu week) for the
-    hour or two after local midnight."""
-    return datetime.now(TZ).date()
 
 
 def _effective_dept_id(user: dict, requested: str | None) -> str | None:
@@ -108,9 +102,19 @@ def _iso(v) -> str | None:
     return v.isoformat() if v is not None else None
 
 
+# A department document covers the department AND its sub-departments —
+# `= ANY(app.dept_family($n))`, the predicate every other scope surface uses.
+# Exact match left Cloning's and Nursery's weekly work in no manager's
+# record: their manager is the cultivation manager, who is forced to their own
+# department here (review 2026-09-27, BC-05). A department with no children
+# degrades to the exact match it replaced.
+def _dept_clause(param: str) -> str:
+    return f" AND t.department_id = ANY(app.dept_family({param})) "
+
+
 async def _fetch_window_tasks(c, fri: date, thu: date, kind: str,
                               dept_id: str | None = None) -> list[dict]:
-    dept_clause = " AND t.department_id=$4 " if dept_id else " "
+    dept_clause = _dept_clause("$4") if dept_id else " "
     if kind == "report":
         args = [fri, thu, TZ.key] + ([dept_id] if dept_id else [])
         rows = await c.fetch(
@@ -126,7 +130,7 @@ async def _fetch_window_tasks(c, fri: date, thu: date, kind: str,
         # over — plus undated backlog (no week_start and no due_date). Tasks
         # explicitly scheduled for a LATER week are excluded, so different weeks
         # now produce different Plans instead of one identical all-open dump.
-        plan_clause = " AND t.department_id=$2 " if dept_id else " "
+        plan_clause = _dept_clause("$2") if dept_id else " "
         args = [thu] + ([dept_id] if dept_id else [])
         rows = await c.fetch(
             f"SELECT {_COLS} FROM tasks t "
@@ -158,7 +162,7 @@ async def _attach_notes(c, tasks: list[dict]) -> None:
 
 async def _fetch_sessions(c, start: date, end: date, dept_id: str | None = None) -> list:
     """Work sessions whose facility-local start falls in [start, end]."""
-    dept_clause = " AND t.department_id=$4" if dept_id else ""
+    dept_clause = _dept_clause("$4").rstrip() if dept_id else ""
     args = [start, end, TZ.key] + ([dept_id] if dept_id else [])
     return await c.fetch(
         "SELECT ws.id, ws.task_id, ws.user_id, ws.started_at, ws.ended_at, ws.hours,"
@@ -216,7 +220,6 @@ def _metrics(tasks: list[dict], sessions, prior_sessions) -> dict:
     per_dept: dict[str, dict] = {}
     for s in sessions:
         h = session_hours(s)
-        cls = classify(s["started_at"])
         sop = s["reference_code"] or (s["department"] or "—")
         b = per_sop.setdefault(sop, {"sop": sop, "color": _sop_color(sop), "hours": 0.0,
                                      "sessions": 0, "tasks": set(),
@@ -225,8 +228,11 @@ def _metrics(tasks: list[dict], sessions, prior_sessions) -> dict:
         b["hours"] += h
         b["sessions"] += 1
         b["tasks"].add(str(s["task_id"]))
-        if cls in ("night", "weekend", "overtime"):
-            b[cls] += h
+        # Split across the bucket boundaries the session crosses, not
+        # classified whole by its start hour (BC-24).
+        for cls, part in session_buckets(s).items():
+            if cls in ("night", "weekend", "overtime"):
+                b[cls] += part
         dn = s["department"] or "—"
         d = per_dept.setdefault(dn, {"name": dn, "hours": 0.0, "sessions": 0})
         d["hours"] += h
@@ -249,7 +255,7 @@ def _metrics(tasks: list[dict], sessions, prior_sessions) -> dict:
     # (counting it as on-time inflated the rate on the submitted record).
     with_due = [t for t in completed if t["due_date"]]
     on_time = [t for t in with_due if t["completed_date"] and t["completed_date"] <= t["due_date"]]
-    today = _today()
+    today = facility_today()
     overdue_open = [
         {"id": t["id"], "title": t["title"], "due_date": t["due_date"],
          "age_days": (today - date.fromisoformat(t["due_date"])).days}
@@ -534,14 +540,17 @@ def _doc_row(r) -> dict:
 
 def _period(start: date, end: date, custom: bool) -> dict:
     """Period header for the compiled content. A scheduled week keeps its
-    ISO-week label; a custom range reads as an explicit date interval. `days`
-    is the row count the ribbon renderers use (7 for a week)."""
+    ISO-week label — weekwindow.week_label, the SAME label /reports/weekly
+    prints (the document used the Friday's week and year and disagreed with
+    the live report by one every week, BC-16); a custom range reads as an
+    explicit date interval. `days` is the row count the ribbon renderers use
+    (7 for a week)."""
     span = (end - start).days + 1
-    iso_week = start.isocalendar()[1]
+    _, iso_week = window_iso_week(start)
     if custom:
         label = f"{start.strftime('%a %b %d')} → {end.strftime('%a %b %d, %Y')} ({span} days)"
     else:
-        label = f"W{iso_week} {start.year} ({start.strftime('%a %b %d')} → {end.strftime('%a %b %d')})"
+        label = week_label(start, end)
     return {"start": start.isoformat(), "end": end.isoformat(), "iso_week": iso_week,
             "days": span, "label": label}
 
@@ -634,7 +643,7 @@ async def compile_document(body: CompileReq, user: dict = Depends(require_role(*
     if body.kind not in ("report", "plan"):
         raise HTTPException(422, "kind must be 'report' or 'plan'")
     try:
-        ref = date.fromisoformat(body.ref_date) if body.ref_date else _today()
+        ref = date.fromisoformat(body.ref_date) if body.ref_date else facility_today()
     except ValueError:
         raise HTTPException(422, "ref_date must be ISO format YYYY-MM-DD")
     fri, thu = _fri_thu(ref)
@@ -728,7 +737,7 @@ async def get_document(kind: str = "report", ref_date: str | None = None,
     # read it — tasks_read RLS and reports.py's per-user filtering both hide that
     # data from them, and this pre-compiled blob would otherwise bypass both.
     try:
-        ref = date.fromisoformat(ref_date) if ref_date else _today()
+        ref = date.fromisoformat(ref_date) if ref_date else facility_today()
     except ValueError:
         raise HTTPException(422, "ref_date must be ISO format YYYY-MM-DD")
     fri, _thu = _fri_thu(ref)
@@ -759,7 +768,7 @@ async def documents_status(kind: str = "report", ref_date: str | None = None,
     if kind not in ("report", "plan"):
         raise HTTPException(422, "kind must be 'report' or 'plan'")
     try:
-        ref = date.fromisoformat(ref_date) if ref_date else _today()
+        ref = date.fromisoformat(ref_date) if ref_date else facility_today()
     except ValueError:
         raise HTTPException(422, "ref_date must be ISO format YYYY-MM-DD")
     fri, _thu = _fri_thu(ref)
@@ -771,8 +780,13 @@ async def documents_status(kind: str = "report", ref_date: str | None = None,
         raise HTTPException(403, "No department assigned — ask an admin to set your department")
 
     async with rls(user) as c:
+        # Top-level departments only: a sub-department (Cloning, Nursery) has
+        # no manager of its own and its work is compiled into its parent's
+        # document (see _dept_clause), so listing it here reported it
+        # "missing" every week forever (BC-05).
         depts = await c.fetch(
-            "SELECT id, code, name, name_mk FROM departments WHERE is_active=true ORDER BY name")
+            "SELECT id, code, name, name_mk FROM departments"
+            " WHERE is_active=true AND parent_id IS NULL ORDER BY name")
         docs = await c.fetch(
             "SELECT id, department_id, status, updated_at FROM weekly_documents"
             " WHERE kind=$1 AND week_start=$2", kind, fri)
@@ -801,58 +815,31 @@ async def documents_status(kind: str = "report", ref_date: str | None = None,
 # chars; its task-progress note caps at 2,000). Unlike those, these fields
 # hold real document prose (a section narrative can legitimately run to a
 # full page), so the bound is generous rather than tight — it exists to stop
-# an elevated caller from PATCHing an arbitrarily large JSONB blob/string
-# into weekly_documents.content (bloating storage and slowing the PDF
-# export), not to constrain normal reviewer editing.
+# an elevated caller from posting an arbitrarily large JSONB blob/string
+# (bloating storage and slowing the PDF export), not to constrain normal
+# reviewer editing.
 _SECTION_TEXT_MAX = 20_000        # body / body_en / body_mk / narrative_en / narrative_mk
 _FIELD_VALUE_MAX = 5_000          # one template-section field's value
-_PATCH_CONTENT_MAX_CHARS = 5_000_000  # whole-document content dict, serialized
+_CONTENT_MAX_CHARS = 5_000_000    # a whole-document content dict, serialized
 
 
-class PatchReq(BaseModel):
-    content: dict
-
-    @field_validator("content")
-    @classmethod
-    def _bound_content_size(cls, v: dict) -> dict:
-        # `content: dict` can't carry a plain Field(max_length=...) — that
-        # constrains a dict's ITEM COUNT, not the size of what's inside it —
-        # so the whole-document blob needs its own size check, matching the
-        # spirit of the per-field caps below.
-        size = len(json.dumps(v))
-        if size > _PATCH_CONTENT_MAX_CHARS:
-            raise ValueError(
-                f"content too large ({size} chars, max {_PATCH_CONTENT_MAX_CHARS})")
-        return v
+def _bounded_content(v: dict) -> dict:
+    # `content: dict` can't carry a plain Field(max_length=...) — that
+    # constrains a dict's ITEM COUNT, not the size of what's inside it —
+    # so a whole-document blob needs its own size check.
+    size = len(json.dumps(v))
+    if size > _CONTENT_MAX_CHARS:
+        raise ValueError(f"content too large ({size} chars, max {_CONTENT_MAX_CHARS})")
+    return v
 
 
-@router.patch("/{doc_id}")
-async def patch_document(doc_id: str, body: PatchReq,
-                         user: dict = Depends(require_role(*ELEVATED_ROLES))):
-    uuid_or_404(doc_id, "Document not found")
-    async with rls(user) as c:
-        cur = await c.fetchrow("SELECT id, status, department_id FROM weekly_documents WHERE id=$1", doc_id)
-        if cur is None:
-            raise HTTPException(404, "Document not found")
-        _scope_guard(user, cur)
-        if cur["status"] == "locked":
-            raise HTTPException(409, "Locked documents are immutable")
-        # FOR UPDATE: this replaces the WHOLE content jsonb, so the row must
-        # stay locked until commit — same reasoning as patch_section's own row
-        # lock (right below): without it, a concurrent patch_section's own
-        # read-modify-write on this row could land between this handler's
-        # checks and its UPDATE, and this wholesale overwrite would silently
-        # discard that concurrent edit.
-        locked = await c.fetchrow(
-            "SELECT status FROM weekly_documents WHERE id=$1 AND status='draft' FOR UPDATE", doc_id)
-        if locked is None:
-            raise HTTPException(409, "Document is no longer editable")
-        row = await c.fetchrow(
-            "UPDATE weekly_documents SET content=$2, updated_at=now()"
-            " WHERE id=$1 AND status='draft' RETURNING *", doc_id, body.content)
-        if row is None:
-            raise HTTPException(404, "Document not found")
-    return _doc_row(row)
+# PATCH /{doc_id} — the whole-document content replace — is gone (review
+# 2026-09-27, BC-07). It accepted any 5 MB JSON and overwrote `tasks`,
+# `ribbon`, `metrics` and `ai_sections`: an elevated user could invent tasks
+# and hours, lock the result, and the "immutable submitted record" carried
+# fabricated evidence. The evidence rule (module docstring) is that those
+# come only from real logged data. The UI only ever used the section route
+# below, which edits reviewer text and approvals and nothing else.
 
 
 class SectionReq(BaseModel):
@@ -1006,22 +993,6 @@ def _color(v, fallback: str = "#8A99B0") -> str:
     allowed; anything else falls back to a neutral grey."""
     s = str(v or "").strip()
     return s if _COLOR_RE.match(s) else fallback
-
-
-def _numf(v, nd: int = 1) -> str:
-    """Format a client-supplied number for PDF interpolation without a 500 on a
-    non-numeric value (a hostile/legacy field never crashes the export)."""
-    try:
-        return f"{float(v):.{nd}f}"
-    except (TypeError, ValueError):
-        return "0" if nd == 0 else "0." + "0" * nd
-
-
-def _numi(v) -> int:
-    try:
-        return int(float(v))
-    except (TypeError, ValueError):
-        return 0
 
 
 def _ribbon_svg(segments: list[dict], week_start: str, days: int = 7) -> str:
@@ -1260,7 +1231,7 @@ def _pdf_task_tables(c: dict, who) -> str:
             days = "/".join(_e(d) for d in (t.get("days") or []))
             sub = ""
             if t.get("description") or notes or days:
-                sub = (f'<tr class="trow-sub"><td colspan="5">'
+                sub = ('<tr class="trow-sub"><td colspan="5">'
                        + (f'<span class="sub">Days: {days}</span> ' if days else "")
                        + (f'{_nl(t["description"])}' if t.get("description") else "")
                        + (f'<ul>{notes}</ul>' if notes else "") + "</td></tr>")
@@ -1312,7 +1283,7 @@ def _pdf_html(doc: dict, people: dict) -> str:
     is_locked = doc["status"] == "locked"
     who = lambda uid: (people.get(uid or "", {}) or {}).get("full_name") or (people.get(uid or "", {}) or {}).get("username") or ""
 
-    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", _today().isoformat()),
+    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", facility_today().isoformat()),
                          period.get("days", 7)) if c.get("ribbon") else ""
     legend = "".join(f'<span class="lg"><span class="dot" style="background:{_color(b.get("color"))}"></span>{_e(b.get("sop"))}</span>'
                      for b in c.get("metrics", {}).get("per_sop", [])[:12])
@@ -1510,7 +1481,7 @@ def _html_export(doc: dict, people: dict) -> str:
                  if dept else "All departments / Сите оддели")
     status_chip = ('<span class="chip locked">LOCKED · SUBMITTED</span>' if is_locked
                    else '<span class="chip draft">DRAFT / НАЦРТ</span>')
-    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", _today().isoformat()),
+    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", facility_today().isoformat()),
                          period.get("days", 7)) if c.get("ribbon") else ""
     legend = "".join(
         f'<span class="lg"><span class="dot" style="background:{_color(b.get("color"))}"></span>{_e(b.get("sop"))}</span>'
@@ -1559,8 +1530,16 @@ async def export_html(doc_id: str, user: dict = Depends(require_role(*ELEVATED_R
 
 
 class RangeExportReq(BaseModel):
+    # Bounded like the section edits: this dict is laid out by WeasyPrint in a
+    # worker thread, and it was unbounded up to the 32 MB middleware cap
+    # (review 2026-09-27, BC-20).
     content: dict
     kind: str = "report"
+
+    @field_validator("content")
+    @classmethod
+    def _bound_content_size(cls, v: dict) -> dict:
+        return _bounded_content(v)
 
 
 @router.post("/export-range.pdf")
@@ -1603,7 +1582,7 @@ async def export_range_pdf(body: RangeExportReq, user: dict = Depends(require_ro
             raise HTTPException(422, "content.period.start must be ISO format YYYY-MM-DD")
     kind = content.get("kind") if content.get("kind") in ("report", "plan") else body.kind
     doc = {"content": content, "status": "preview", "kind": kind,
-           "week_start": start_s or _today().isoformat(),
+           "week_start": start_s or facility_today().isoformat(),
            "locked_by": None, "locked_at": None}
     people = await roster(user)
     try:

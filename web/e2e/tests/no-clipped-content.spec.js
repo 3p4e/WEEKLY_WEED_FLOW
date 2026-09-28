@@ -68,7 +68,12 @@ test('no growing region clips content without a scroll affordance', async ({ pag
   // overflowing by a comfortable margin — the author-anticipated "shorter
   // viewport" maintenance (see the note at the sanity check). Both measured
   // regions are overflow-y:auto, so the real invariant is unaffected by height.
-  await page.setViewportSize({ width: 1440, height: 760 });
+  // Height lowered 760 -> 660 (2026-09-27): the review fixes retired the two
+  // "retired" QMS stub views and moved Workload / Executive overview into the
+  // Analytics rail, so the admin task rail measures 546px of content against
+  // a 592px box at 760 and no longer overflows. At 660 the box is 492px and
+  // the rail overflows by ~54px — the same comfortable margin as before.
+  await page.setViewportSize({ width: 1440, height: 660 });
   await login(page, creds.username, creds.password);
   await page.waitForSelector('.side-scroll', { timeout: 10_000 });
 

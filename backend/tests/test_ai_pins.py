@@ -68,9 +68,11 @@ async def test_pins_isolated_across_orgs(client, admin_headers, org):
 
 
 async def test_user_pins_visible_only_to_subject_and_elevated(client, admin_headers, org):
-    """Two USER-role members: each must see the org-level pin and their OWN
-    weekly_report_user pin, never a colleague's. The ADMIN sees everything.
-    This is the privacy line for individual AI performance reports."""
+    """Two USER-role members: each must see their OWN weekly_report_user pin,
+    never a colleague's — and not the org-level report either (review
+    2026-09-27, BC-02: it is every task and owner in the organisation). The
+    ADMIN sees everything. This is the privacy line for individual AI
+    performance reports."""
     alice, alice_otp = await create_user(client, admin_headers, full_name="Alice")
     bob, bob_otp = await create_user(client, admin_headers, full_name="Bob")
     alice_tok = await login_and_set_password(client, alice["username"], alice_otp)
@@ -85,7 +87,7 @@ async def test_user_pins_visible_only_to_subject_and_elevated(client, admin_head
     r = await client.get("/ai/pins", headers={"Authorization": f"Bearer {alice_tok}"})
     assert r.status_code == 200, r.text
     titles = [p["title"] for p in r.json()]
-    assert "Org report — W1" in titles
+    assert "Org report — W1" not in titles       # the org-wide narrative is elevated-only
     assert "Report — Alice" in titles
     assert "Report — Bob" not in titles          # a colleague's report is invisible
 
@@ -96,6 +98,73 @@ async def test_user_pins_visible_only_to_subject_and_elevated(client, admin_head
     r = await client.get("/ai/pins", headers=admin_headers)  # elevated: sees all
     titles = [p["title"] for p in r.json()]
     assert {"Org report — W1", "Report — Alice", "Report — Bob"} <= set(titles)
+
+
+# ── BC-02 (review 2026-09-27): the org-wide narratives are elevated, org-wide reading ──
+# The scheduler writes the raw digest as `weekly_snapshot` and the AI report as
+# `weekly_report` — neither is an invoke key, so the FUNCTION_ROLES filter never
+# covered them and a base USER (or a department-scoped manager) read the whole
+# organisation's task list, owners, overdue items and declined assignments.
+
+async def _scoped_manager_headers(client, admin_headers, org):
+    from app.db import tasks_admin_pool
+    dept = await tasks_admin_pool().fetchval(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'pins_d','Pins Dept') RETURNING id",
+        org["org_id"])
+    mgr, otp = await create_user(client, admin_headers, role="QC_MGR", department_id=str(dept))
+    tok = await login_and_set_password(client, mgr["username"], otp)
+    return {"Authorization": f"Bearer {tok}"}
+
+
+async def test_base_user_cannot_read_the_org_wide_digest_or_ai_report(client, admin_headers, org):
+    user, otp = await create_user(client, admin_headers, full_name="Digest Reader")
+    uh = {"Authorization": f"Bearer {await login_and_set_password(client, user['username'], otp)}"}
+    await _pin(org["org_id"], "weekly_snapshot", "Weekly snapshot — W39", "every task, every owner")
+    await _pin(org["org_id"], "weekly_report", "Weekly report — W39", "org narrative")
+    await _pin(org["org_id"], "next_week_plan", "Next week plan — W40", "org plan")
+
+    for key in ("weekly_snapshot", "weekly_report", "next_week_plan"):
+        r = await client.get("/ai/pins", params={"function_key": key}, headers=uh)
+        assert r.status_code == 200, r.text
+        assert r.json() == [], f"USER must not read the org-wide {key} pin"
+    titles = {p["title"] for p in (await client.get("/ai/pins", headers=uh)).json()}
+    assert not titles & {"Weekly snapshot — W39", "Weekly report — W39", "Next week plan — W40"}
+    # ADMIN (org-wide, elevated) still reads all three.
+    titles = {p["title"] for p in (await client.get("/ai/pins", headers=admin_headers)).json()}
+    assert {"Weekly snapshot — W39", "Weekly report — W39", "Next week plan — W40"} <= titles
+
+
+async def test_department_scoped_manager_cannot_read_the_org_wide_pins(client, admin_headers, org):
+    """A manager's AI context is their own department tree (DEPARTMENT-MODEL
+    2026-09, "AI context"); the archived org-wide digest is every other
+    department's work too, so it is for org-wide roles only. QP is manager
+    rank but org-wide, and keeps it."""
+    mgr_h = await _scoped_manager_headers(client, admin_headers, org)
+    qp, otp = await create_user(client, admin_headers, role="QP", full_name="Qualified Person")
+    qp_h = {"Authorization": f"Bearer {await login_and_set_password(client, qp['username'], otp)}"}
+    await _pin(org["org_id"], "weekly_snapshot", "Org digest", "all departments")
+
+    assert (await client.get("/ai/pins", params={"function_key": "weekly_snapshot"},
+                             headers=mgr_h)).json() == []
+    assert any(p["title"] == "Org digest" for p in
+               (await client.get("/ai/pins", params={"function_key": "weekly_snapshot"},
+                                 headers=qp_h)).json())
+
+
+async def test_a_personal_pin_under_an_org_wide_key_stays_readable_by_its_subject(client, admin_headers, org):
+    """The gate is on SUBJECT-LESS pins only — a per-person report archived
+    under weekly_report with a subject is that person's own."""
+    user, otp = await create_user(client, admin_headers, full_name="Own Report")
+    uh = {"Authorization": f"Bearer {await login_and_set_password(client, user['username'], otp)}"}
+    await _pin(org["org_id"], "weekly_report", "Mine", "personal", subject_user_id=user["id"])
+    assert any(p["title"] == "Mine" for p in
+               (await client.get("/ai/pins", params={"function_key": "weekly_report"}, headers=uh)).json())
+
+
+async def test_pins_garbage_week_id_is_422_not_500(client, admin_headers):
+    """BC-14: week_id was bound straight into a uuid comparison."""
+    r = await client.get("/ai/pins", params={"week_id": "abc"}, headers=admin_headers)
+    assert r.status_code == 422
 
 
 async def test_pins_expose_prompt_version(client, admin_headers, org):

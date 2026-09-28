@@ -6,11 +6,30 @@
 # themselves assume. Only the endpoints the DocEngine needs, nothing more.
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 
 import httpx
 
 from .config import settings
+
+log = logging.getLogger("docengine.letta")
+
+# Listings are paged. Letta's default page is small enough that a tenant with
+# orphan clones or other stacks' agents could push a declared gf_* agent off
+# page 1, and ensure_fleet would then CREATE it again on every job (and a
+# ragflow_search off page 1 would be re-registered into a name conflict) —
+# review 2026-09-27, DI-19. Page size is generous; the cursor is the last id.
+_PAGE = 100
+
+# One retry, for the failures that mean "the request did not get through" —
+# a refused connection, a reset before the response, a gateway 502/503/504.
+# A read timeout is deliberately NOT retried: the request was delivered and
+# the model may be mid-turn, so a second copy would double the wait and the
+# spend. Review 2026-09-27, DI-18.
+_TRANSIENT_STATUS = (502, 503, 504)
+_RETRY_DELAY_S = 2.0
 
 
 class LettaError(RuntimeError):
@@ -71,11 +90,27 @@ class LettaClient:
         if self._client_instance is not None and not self._client_instance.is_closed:
             await self._client_instance.aclose()
 
-    async def _req(self, method: str, path: str, **kw) -> Any:
+    async def _req(self, method: str, path: str, retry_transient: bool = False, **kw) -> Any:
         if not self.configured:
             raise LettaError("Letta not configured")
         c = self._client()
-        r = await c.request(method, path, **kw)
+        attempts = 2 if retry_transient else 1
+        for attempt in range(1, attempts + 1):
+            try:
+                r = await c.request(method, path, **kw)
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.RemoteProtocolError) as e:
+                if attempt < attempts:
+                    log.warning("%s %s: %s — retrying once in %.0fs",
+                                method, path, type(e).__name__, _RETRY_DELAY_S)
+                    await asyncio.sleep(_RETRY_DELAY_S)
+                    continue
+                raise
+            if r.status_code in _TRANSIENT_STATUS and attempt < attempts:
+                log.warning("%s %s -> %d — retrying once in %.0fs",
+                            method, path, r.status_code, _RETRY_DELAY_S)
+                await asyncio.sleep(_RETRY_DELAY_S)
+                continue
+            break
         if r.status_code >= 400:
             raise LettaError(f"{method} {path} -> {r.status_code}: {r.text[:300]}",
                              status=r.status_code)
@@ -83,14 +118,31 @@ class LettaClient:
             return None
         return r.json()
 
+    async def _list_all(self, path: str, params: dict | None = None) -> list[dict]:
+        """Every row of a paged listing, following the `after` cursor until a
+        short page. A non-list answer (older server, a fake) is one page."""
+        out: list[dict] = []
+        after: str | None = None
+        while True:
+            q = dict(params or {})
+            q["limit"] = _PAGE
+            if after:
+                q["after"] = after
+            page = await self._req("GET", path, params=q)
+            if not isinstance(page, list):
+                return out or (page or [])
+            out.extend(page)
+            if len(page) < _PAGE or not page[-1].get("id"):
+                return out
+            after = page[-1]["id"]
+
     # ---- reads ----
     async def list_agents(self, name: str | None = None) -> list[dict]:
         params = {"name": name} if name else None
-        out = await self._req("GET", "/agents/", params=params)
-        return out or []
+        return await self._list_all("/agents/", params)
 
     async def list_tools(self) -> list[dict]:
-        return await self._req("GET", "/tools/") or []
+        return await self._list_all("/tools/")
 
     async def list_models(self) -> list[dict]:
         """LLM handles the server will accept. Note this is a registry, not a
@@ -263,16 +315,28 @@ class LettaClient:
         await self._req("DELETE", f"/agents/{agent_id}")
 
     # ---- conversation ----
-    async def send_message(self, agent_id: str, text: str) -> str:
-        """Send one user message; return the agent's assistant text reply."""
+    async def send_message_full(self, agent_id: str, text: str) -> dict:
+        """Send one user message; return the assistant text AND the tool
+        traffic of that turn: {"text", "tool_calls", "tool_returns"}.
+
+        The tool traffic is what makes a section's provenance recordable
+        (which retrievals fed the text an author spliced verbatim into a
+        controlled document — review 2026-09-27, DI-14). Letta's v1 reply is
+        {"messages": [...]} with `tool_call_message` / `tool_return_message`
+        entries beside the `assistant_message` ones; each is reduced to what
+        the record needs and nothing that could carry a credential (the
+        sandbox environment is never part of a message)."""
         out = await self._req(
             "POST",
             f"/agents/{agent_id}/messages",
             json={"messages": [{"role": "user", "content": text}]},
+            retry_transient=True,
         )
         # v1 returns {"messages": [...]} with assistant_message entries
         msgs = (out or {}).get("messages", [])
         parts: list[str] = []
+        calls: list[dict] = []
+        returns: list[dict] = []
         for m in msgs:
             t = m.get("message_type") or m.get("role")
             if t in ("assistant_message", "assistant"):
@@ -283,4 +347,19 @@ class LettaClient:
                     parts.extend(
                         x.get("text", "") for x in c if isinstance(x, dict)
                     )
-        return "\n".join(p for p in parts if p).strip()
+            elif t == "tool_call_message":
+                tc = m.get("tool_call") or {}
+                calls.append({"id": tc.get("tool_call_id"), "name": tc.get("name"),
+                              "arguments": (tc.get("arguments") or "")[:2000]})
+            elif t == "tool_return_message":
+                ret = m.get("tool_return")
+                if not isinstance(ret, str):
+                    ret = "" if ret is None else str(ret)
+                returns.append({"id": m.get("tool_call_id"), "name": m.get("name"),
+                                "status": m.get("status"), "return": ret[:20000]})
+        return {"text": "\n".join(p for p in parts if p).strip(),
+                "tool_calls": calls, "tool_returns": returns}
+
+    async def send_message(self, agent_id: str, text: str) -> str:
+        """Send one user message; return the agent's assistant text reply."""
+        return (await self.send_message_full(agent_id, text))["text"]

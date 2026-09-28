@@ -30,7 +30,9 @@
 #   runner : gh-runner-wwf container is Up; its bin/Runner.Listener and
 #            bin/Runner.Worker are present (the exact past failure mode)
 #   prod   : /health/ready is 200 with users:ok AND tasks:ok; both database
-#            containers are accepting connections
+#            containers are accepting connections; the DocEngine answers
+#            /health with its registry pool up; the newest local dumps (and
+#            the DocEngine archive) are fresh; the offsite copy is landing
 #   ci     : the newest ci.yml run is neither stuck queued nor failing
 #            (needs a token — degrades to SKIP when none is configured)
 #
@@ -64,6 +66,20 @@ PUBLIC_URL="${WWF_WATCHDOG_PUBLIC_URL:-https://wwf.srv1231216.hstgr.cloud/health
 # "container:database" pairs. Both databases must round-trip for the app to be
 # usable at all, which is why /health/ready checks both and so does this.
 DB_TARGETS="${WWF_WATCHDOG_DB_TARGETS:-wwf-db-users:wwf_users wwf-db-tasks:wwf_tasks}"
+# The DocEngine (document AI service) — internal only, so probed from inside
+# its own container. Until 2026-09-27 nothing watched it: a 3.5 h crash loop
+# after the 2026-09-07 reboot served nothing and no check noticed (DI-11).
+DOCENGINE_CONTAINER="${WWF_WATCHDOG_DOCENGINE_CONTAINER:-wwf-docengine}"
+# Backup freshness. The only freshness check used to be a warning in the
+# nightly rehearsal; a wedged db-backup, or an offsite copy that stopped
+# after the 2026-09-19 VM migration, was invisible here (DI-10).
+BACKUP_CONTAINER="${WWF_WATCHDOG_BACKUP_CONTAINER:-wwf-db-backup}"
+OFFSITE_CONTAINER="${WWF_WATCHDOG_OFFSITE_CONTAINER:-wwf-backup-offsite}"
+OFFSITE_REMOTE="${WWF_WATCHDOG_OFFSITE_REMOTE:-wwf-crypt:}"
+# One daily cycle plus slack. db-backup sleeps 86400 s between dumps and
+# drifts against the wall clock across restarts, so 24 would false-alarm.
+BACKUP_MAX_AGE_H="${WWF_WATCHDOG_BACKUP_MAX_AGE_H:-30}"
+OFFSITE_MAX_AGE_H="${WWF_WATCHDOG_OFFSITE_MAX_AGE_H:-48}"
 GH_REPO="${WWF_WATCHDOG_REPO:-3p4e/WEEKLY_WEED_FLOW}"
 # The CI-freshness check targets ci.yml BY NAME rather than "the newest run in
 # the repo". watchdog.yml runs every 15 minutes, so it would otherwise always
@@ -496,6 +512,165 @@ check_db_containers() {
   return 0
 }
 
+# The DocEngine has no published port, so /health is read from inside its own
+# container with the python the image ships. `ok` is liveness; `db` is the
+# registry pool (without it every document job is a 503); `ready` folds in
+# Letta, RAGflow and every declared dataset resolving. A live service whose
+# upstreams are down is a WARN — it serves the registry and downloads and
+# will fail document jobs loudly — and a service that is not serving at all
+# is a FAIL.
+check_docengine_ready() {
+  local state out
+  if ! docker_ready; then
+    emit SKIP docengine_ready "docker unusable (see docker_access) — cannot probe ${DOCENGINE_CONTAINER}"
+    return 0
+  fi
+  state="$(docker_field "$DOCENGINE_CONTAINER" '{{.State.Status}}')"
+  if [ -z "$state" ]; then
+    emit FAIL docengine_ready "container ${DOCENGINE_CONTAINER} not found"
+    return 1
+  fi
+  if [ "$state" != running ]; then
+    emit FAIL docengine_ready "${DOCENGINE_CONTAINER} state=${state} restarts=$(docker_field "$DOCENGINE_CONTAINER" '{{.RestartCount}}') (expected running)"
+    return 1
+  fi
+  out="$(bounded 40 docker exec "$DOCENGINE_CONTAINER" python -c '
+import json, urllib.request
+try:
+    b = json.loads(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=20).read().decode())
+except Exception as e:  # noqa: BLE001 - reported, not raised
+    print("error=" + type(e).__name__)
+    raise SystemExit(0)
+print("ok=%s db=%s letta=%s ragflow=%s ready=%s unresolved=%s" % (
+    b.get("ok"), b.get("db"), b.get("letta"), b.get("ragflow"), b.get("ready"),
+    ",".join(b.get("datasets_unresolved") or []) or "-"))
+' 2>/dev/null)"
+  case "$out" in
+    *"ok=True db=True"*"ready=True"*)
+      emit PASS docengine_ready "$out" ;;
+    *"ok=True db=True"*)
+      emit WARN docengine_ready "serving, but not ready for document jobs (${out}) — Letta, RAGflow or a declared dataset is unresolved" ;;
+    "")
+      emit FAIL docengine_ready "no answer from /health inside ${DOCENGINE_CONTAINER} (restarts=$(docker_field "$DOCENGINE_CONTAINER" '{{.RestartCount}}'))"
+      return 1 ;;
+    *)
+      emit FAIL docengine_ready "${out} — the registry pool is down or the service is not serving"
+      return 1 ;;
+  esac
+  return 0
+}
+
+# Age of the newest local dump of each database and of the DocEngine
+# archive, read from inside the backup container (the volume is not on the
+# host path). Dumps older than BACKUP_MAX_AGE_H mean db-backup stopped
+# producing, which nothing else reports. The DocEngine archive is a FAIL
+# when stale, and when ABSENT while the DocEngine container is running: a
+# stack that produces controlled documents and archives none has lost the
+# docengine_out mount on db-backup (review 2026-09-27, DI2-05). It is only
+# a WARN when there is no DocEngine container to archive from.
+check_backup_fresh() {
+  local state out line name age
+  if ! docker_ready; then
+    emit SKIP backup_fresh "docker unusable (see docker_access)"
+    return 0
+  fi
+  state="$(docker_field "$BACKUP_CONTAINER" '{{.State.Status}}')"
+  if [ -z "$state" ] || [ "$state" != running ]; then
+    emit FAIL backup_fresh "backup container ${BACKUP_CONTAINER} ${state:-not found} — no local dumps are being produced"
+    return 1
+  fi
+  # shellcheck disable=SC2016  # expanded by the sh INSIDE the container
+  out="$(bounded 30 docker exec "$BACKUP_CONTAINER" sh -c '
+now=$(date +%s)
+for p in wwf_users wwf_tasks docengine_out; do
+  case $p in docengine_out) g="/backups/${p}_*.tar.gz" ;; *) g="/backups/${p}_*.sql.gz" ;; esac
+  f=$(ls -1t $g 2>/dev/null | head -n 1)
+  if [ -n "$f" ]; then echo "$p=$(( (now - $(stat -c %Y "$f")) / 3600 ))"; else echo "$p=none"; fi
+done' 2>/dev/null)"
+  if [ -z "$out" ]; then
+    emit FAIL backup_fresh "could not list /backups inside ${BACKUP_CONTAINER}"
+    return 1
+  fi
+  local worst=PASS detail=""
+  while IFS='=' read -r name age; do
+    [ -n "$name" ] || continue
+    detail="${detail}${name}=${age}h "
+    case "$name" in
+      docengine_out)
+        if [ "$age" = none ]; then
+          if [ "$(docker_field "$DOCENGINE_CONTAINER" '{{.State.Status}}')" = running ]; then
+            worst=FAIL
+            detail="${detail}(${DOCENGINE_CONTAINER} is running but NO DocEngine archive exists — docengine_out is not mounted into ${BACKUP_CONTAINER}; its documents are not backed up) "
+          else
+            [ "$worst" = PASS ] && worst=WARN
+            detail="${detail}(no DocEngine archive and no running ${DOCENGINE_CONTAINER}) "
+          fi
+        elif [ "$age" -gt "$BACKUP_MAX_AGE_H" ]; then
+          worst=FAIL
+        fi ;;
+      *)
+        if [ "$age" = none ] || [ "$age" -gt "$BACKUP_MAX_AGE_H" ]; then
+          worst=FAIL
+        fi ;;
+    esac
+  done <<EOF
+${out}
+EOF
+  case "$worst" in
+    PASS) emit PASS backup_fresh "${detail}(limit ${BACKUP_MAX_AGE_H}h)" ;;
+    WARN) emit WARN backup_fresh "${detail}(limit ${BACKUP_MAX_AGE_H}h)" ;;
+    *)    emit FAIL backup_fresh "${detail}— a dump is missing or older than ${BACKUP_MAX_AGE_H}h; db-backup has stopped producing"
+          return 1 ;;
+  esac
+  return 0
+}
+
+# The offsite copy. Its container has been down since the 2026-09-19 VM
+# migration (docs/HANDOFF.md), so a missing or stopped container is a WARN
+# that names the known state rather than a page; a RUNNING container whose
+# newest remote object is older than OFFSITE_MAX_AGE_H is a FAIL, because
+# then the copy is silently not happening. rclone lists the remote from
+# inside the container (the config with the crypt password lives only there).
+check_offsite_fresh() {
+  local state newest age_h
+  if ! docker_ready; then
+    emit SKIP offsite_fresh "docker unusable (see docker_access)"
+    return 0
+  fi
+  state="$(docker_field "$OFFSITE_CONTAINER" '{{.State.Status}}')"
+  if [ -z "$state" ] || [ "$state" != running ]; then
+    emit WARN offsite_fresh "offsite container ${OFFSITE_CONTAINER} ${state:-not found} — no offsite copy is being made (known since the 2026-09-19 migration; see docs/BACKUP.md)"
+    return 0
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    emit WARN offsite_fresh "python3 not available to parse the remote listing"
+    return 0
+  fi
+  # `rclone lsl` prints "<size> <YYYY-MM-DD> <HH:MM:SS.fff> <name>"; the
+  # newest modification time is the age of the offsite set.
+  newest="$(bounded 60 docker exec "$OFFSITE_CONTAINER" rclone lsl "$OFFSITE_REMOTE" --max-depth 1 2>/dev/null \
+    | awk 'NF >= 4 {print $2 "T" substr($3, 1, 8)}' | sort | tail -n 1)"
+  if [ -z "$newest" ]; then
+    emit FAIL offsite_fresh "remote ${OFFSITE_REMOTE} lists nothing (or rclone failed) from ${OFFSITE_CONTAINER}"
+    return 1
+  fi
+  age_h="$(WD_TS="$newest" python3 -c '
+import os, datetime
+ts = datetime.datetime.fromisoformat(os.environ["WD_TS"]).replace(tzinfo=datetime.timezone.utc)
+print(int((datetime.datetime.now(datetime.timezone.utc) - ts).total_seconds() // 3600))
+' 2>/dev/null)"
+  if [ -z "$age_h" ]; then
+    emit WARN offsite_fresh "could not parse the newest remote timestamp (${newest})"
+    return 0
+  fi
+  if [ "$age_h" -gt "$OFFSITE_MAX_AGE_H" ]; then
+    emit FAIL offsite_fresh "newest offsite object is ${age_h}h old (limit ${OFFSITE_MAX_AGE_H}h) — the copy is running but not landing"
+    return 1
+  fi
+  emit PASS offsite_fresh "newest offsite object ${age_h}h old (limit ${OFFSITE_MAX_AGE_H}h)"
+  return 0
+}
+
 # ----------------------------------------------------------------- group: ci
 # Optional and non-fatal when unconfigured: this check needs a GitHub token with
 # actions:read, and the whole watchdog must stay useful on a host that has none.
@@ -708,7 +883,7 @@ if want runner || want prod; then
   check_docker_access
 fi
 want runner && { check_runner_container; check_runner_listener; check_runner_process; }
-want prod   && { check_app_ready; check_db_containers; }
+want prod   && { check_app_ready; check_db_containers; check_docengine_ready; check_backup_fresh; check_offsite_fresh; }
 want ci     && check_ci_freshness
 
 RESULT=OK

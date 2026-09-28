@@ -9,9 +9,25 @@ rather than warnings.
 Access model:
   read     — every role above USER (ELEVATED_ROLES);
   record   — draft a manifest, add/remove lines, seal it, close it out against
-             the carrier reference: cultivation crew (CU_MGR) + executives +
-             ADMIN. They are the people physically loading the consignment;
+             the carrier reference: the crews physically loading the
+             consignment — cultivation (CU_MGR) for the plant and its
+             substrate, production (PR_MGR) for everything from the harvest
+             cut onward (trim, packaging, a failed dried lot) — plus
+             executives + ADMIN. Production was missing (review 2026-09-27,
+             BC-12): the register offered `trim` and `packaging` while only
+             the cultivation manager could sign for them;
   witness  — QA_MGR + executives + ADMIN, and NEVER the person who weighed it.
+
+EVERY STATE CHANGE LOCKS THE MANIFEST ROW. The gates below are check-then-act
+over several statements; under READ COMMITTED two concurrent requests each
+read the pre-commit state and both pass a gate that is, together, false
+(seal racing delete_line → a sealed manifest with no lines; add_line racing
+seal → a line added after the seal; two seals → the last writer in
+`weighed_by`, which Gate 3 reads). `_manifest_or_404(lock=True)` takes
+`SELECT … FOR UPDATE OF m` in every mutating path, so the second request
+waits and re-reads the committed state, and each ladder UPDATE additionally
+carries `AND status=<expected>` and answers 409 on zero rows (review
+2026-09-27, BC-06).
 
 THE FOUR GATES, all enforced here rather than left to discipline:
 
@@ -53,6 +69,7 @@ manifested. That combination is invisible to both modules on their own.
 """
 from datetime import datetime, timezone
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -63,7 +80,7 @@ from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 
 router = APIRouter(prefix="/waste", tags=["waste"])
 
-_RECORDERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR")
+_RECORDERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR", "PR_MGR")
 _WITNESSES = (ADMIN, *EXECUTIVE_ROLES, "QA_MGR")
 
 # Must stay in step with the CHECK constraints in migration 0048.
@@ -144,7 +161,12 @@ def _manifest_out(row, lines=None) -> dict:
     return out
 
 
-async def _manifest_or_404(c, manifest_id: str):
+async def _manifest_or_404(c, manifest_id: str, *, lock: bool = False):
+    """The manifest with its line totals. `lock=True` takes the row FOR
+    UPDATE (of the manifest only — the rooms side of the outer join stays
+    unlocked) so the status and line counts read here are the ones the
+    caller's write will act on, not a snapshot a concurrent request can
+    still change before commit (see the module docstring)."""
     uuid_or_404(manifest_id, "Manifest not found")
     row = await c.fetchrow(
         "SELECT m.*, r.name AS origin_room_name,"
@@ -152,9 +174,19 @@ async def _manifest_or_404(c, manifest_id: str):
         " (SELECT sum(l.plant_qty) FROM waste_manifest_lines l WHERE l.manifest_id=m.id) AS plant_qty_total,"
         " (SELECT sum(l.weight_kg) FROM waste_manifest_lines l WHERE l.manifest_id=m.id) AS weight_kg_total"
         " FROM waste_manifests m LEFT JOIN rooms r ON r.id = m.origin_room_id"
-        " WHERE m.id=$1", manifest_id)
+        " WHERE m.id=$1" + (" FOR UPDATE OF m" if lock else ""), manifest_id)
     if row is None:
         raise HTTPException(404, "Manifest not found")
+    return row
+
+
+def _transitioned(row, manifest_id: str, expected: str):
+    """The row a status-guarded UPDATE returned, or a 409 that names the
+    race: zero rows means the manifest left `expected` between this
+    request's read and its write."""
+    if row is None:
+        raise HTTPException(
+            409, f"manifest is no longer {expected}; it was changed by a concurrent request")
     return row
 
 
@@ -169,7 +201,8 @@ async def _room_or_422(c, room_id: str):
 async def _batch_or_422(c, batch_id: str):
     uuid_or_422(batch_id, "Unknown batch")
     b = await c.fetchrow(
-        "SELECT b.id, b.code, b.plant_count, b.room_id FROM plant_batches b WHERE b.id=$1",
+        "SELECT b.id, b.code, b.plant_count, b.room_id, b.phase, b.is_active"
+        " FROM plant_batches b WHERE b.id=$1",
         batch_id)
     if b is None:
         raise HTTPException(422, "Unknown batch")
@@ -246,14 +279,21 @@ async def create_manifest(body: ManifestIn, user: dict = Depends(require_role(*_
             user["org_id"], body.manifest_code)
         if dup is not None:
             raise HTTPException(409, f"manifest code {body.manifest_code} already exists")
-        row = await c.fetchrow(
-            "INSERT INTO waste_manifests(org_id, manifest_code, waste_type, reason,"
-            " campaign, origin_room_id, destination, carrier_name, note,"
-            " created_by, updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) RETURNING *",
-            user["org_id"], body.manifest_code, body.waste_type, body.reason,
-            body.campaign, body.origin_room_id, body.destination, body.carrier_name,
-            body.note, user["id"])
+        try:
+            row = await c.fetchrow(
+                "INSERT INTO waste_manifests(org_id, manifest_code, waste_type, reason,"
+                " campaign, origin_room_id, destination, carrier_name, note,"
+                " created_by, updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) RETURNING *",
+                user["org_id"], body.manifest_code, body.waste_type, body.reason,
+                body.campaign, body.origin_room_id, body.destination, body.carrier_name,
+                body.note, user["id"])
+        except asyncpg.UniqueViolationError:
+            # Two creates with the same code racing past the pre-check: the
+            # index (waste_manifests_org_id_manifest_code_key) decides, and the
+            # loser gets the same answer as a caller who was merely second
+            # (review 2026-09-27, BC-26).
+            raise HTTPException(409, f"manifest code {body.manifest_code} already exists")
     return {"id": str(row["id"]), "manifest_code": row["manifest_code"],
             "status": row["status"], "waste_type": row["waste_type"],
             "reason": row["reason"]}
@@ -267,11 +307,22 @@ async def add_line(manifest_id: str, body: LineIn,
     if body.plant_qty is None and body.weight_kg is None:
         raise HTTPException(422, "a line must state a plant count or a weight")
     async with rls(user) as c:
-        m = await _manifest_or_404(c, manifest_id)
+        # Locked: a seal committing between this status read and the INSERT
+        # would otherwise leave a line added after the seal (Gate 2), with a
+        # gross weight that no longer covers it.
+        m = await _manifest_or_404(c, manifest_id, lock=True)
         _require_draft(m)
         room_id = body.room_id
         if body.batch_id is not None:
             b = await _batch_or_422(c, body.batch_id)
+            # A closed batch settled its plants when it closed (harvested or
+            # destroyed: the headcount was reconciled then). A line declaring
+            # more of it afterwards would re-open that reconciliation from the
+            # waste side, where nothing checks it (review 2026-09-27, CS2-03).
+            if b["phase"] in ("harvested", "destroyed") or not b["is_active"]:
+                raise HTTPException(
+                    409, f"batch {b['code']} is {b['phase']} — its plants were settled when "
+                         "it closed; a manifest line cannot be added for a closed batch")
             # Default the line's room to the batch's own, so the physical origin
             # is recorded even when the person entering it does not restate it.
             if room_id is None and b["room_id"] is not None:
@@ -323,7 +374,9 @@ async def delete_line(manifest_id: str, line_id: str,
                       user: dict = Depends(require_role(*_RECORDERS))):
     uuid_or_404(line_id, "Line not found")
     async with rls(user) as c:
-        m = await _manifest_or_404(c, manifest_id)
+        # Locked: the seal reads line_count under the same lock, so a delete
+        # racing it can no longer produce a sealed manifest with no lines.
+        m = await _manifest_or_404(c, manifest_id, lock=True)
         _require_draft(m)
         row = await c.fetchrow(
             "DELETE FROM waste_manifest_lines WHERE id=$1 AND manifest_id=$2 RETURNING id",
@@ -341,18 +394,18 @@ async def seal_manifest(manifest_id: str, body: SealIn,
     """Fix the contents and record the gross weight. Gate 1 lives here: a sealed
     manifest with no lines asserts nothing while looking complete."""
     async with rls(user) as c:
-        m = await _manifest_or_404(c, manifest_id)
+        m = await _manifest_or_404(c, manifest_id, lock=True)
         _require_draft(m)
         if not m["line_count"]:
             raise HTTPException(
                 409, "an empty manifest cannot be sealed — add what is in the load first")
         now = datetime.now(timezone.utc)
-        row = await c.fetchrow(
+        row = _transitioned(await c.fetchrow(
             "UPDATE waste_manifests SET status='sealed', gross_weight_kg=$1,"
             " weighed_at=$2, weighed_by=$3, sealed_at=$2,"
             " note=COALESCE($4, note), updated_by=$3, updated_at=now()"
-            " WHERE id=$5 RETURNING *",
-            body.gross_weight_kg, now, user["id"], body.note, manifest_id)
+            " WHERE id=$5 AND status='draft' RETURNING *",
+            body.gross_weight_kg, now, user["id"], body.note, manifest_id), manifest_id, "draft")
         await safe_emit(c, user, verb="waste_manifest_sealed", object_type="waste_manifest",
                         object_id=manifest_id, recipients=[],
                         params={"code": m["manifest_code"],
@@ -368,7 +421,7 @@ async def witness_manifest(manifest_id: str, body: WitnessIn,
     """Gate 3: the two-person rule. Whoever weighed the load cannot also witness
     it — that is not a witnessed destruction regardless of their role."""
     async with rls(user) as c:
-        m = await _manifest_or_404(c, manifest_id)
+        m = await _manifest_or_404(c, manifest_id, lock=True)
         if m["status"] == "draft":
             raise HTTPException(409, "manifest is not sealed yet; there is nothing to witness")
         if m["status"] in ("witnessed", "disposed"):
@@ -377,10 +430,11 @@ async def witness_manifest(manifest_id: str, body: WitnessIn,
             raise HTTPException(
                 409, "the person who weighed and sealed this load cannot also witness it")
         now = datetime.now(timezone.utc)
-        row = await c.fetchrow(
+        row = _transitioned(await c.fetchrow(
             "UPDATE waste_manifests SET status='witnessed', witnessed_at=$1,"
             " witnessed_by=$2, note=COALESCE($3, note), updated_by=$2, updated_at=now()"
-            " WHERE id=$4 RETURNING *", now, user["id"], body.note, manifest_id)
+            " WHERE id=$4 AND status='sealed' RETURNING *",
+            now, user["id"], body.note, manifest_id), manifest_id, "sealed")
         await safe_emit(c, user, verb="waste_manifest_witnessed", object_type="waste_manifest",
                         object_id=manifest_id, recipients=[],
                         params={"code": m["manifest_code"]})
@@ -394,7 +448,7 @@ async def dispose_manifest(manifest_id: str, body: DisposeIn,
     """Gate 4: the carrier reference closes a chain that must already exist, so
     an unwitnessed load cannot be closed out."""
     async with rls(user) as c:
-        m = await _manifest_or_404(c, manifest_id)
+        m = await _manifest_or_404(c, manifest_id, lock=True)
         if m["status"] != "witnessed":
             raise HTTPException(
                 409, f"manifest is {m['status']}; it must be witnessed before disposal is recorded")
@@ -403,12 +457,12 @@ async def dispose_manifest(manifest_id: str, body: DisposeIn,
         ref = body.carrier_ref.strip()
         if not ref:
             raise HTTPException(422, "carrier_ref is required — it is what ties our record to theirs")
-        row = await c.fetchrow(
+        row = _transitioned(await c.fetchrow(
             "UPDATE waste_manifests SET status='disposed', carrier_ref=$1,"
             " carrier_name=COALESCE($2, carrier_name), disposed_at=$3, disposed_by=$4,"
             " note=COALESCE($5, note), updated_by=$4, updated_at=now()"
-            " WHERE id=$6 RETURNING *",
-            ref, body.carrier_name, now, user["id"], body.note, manifest_id)
+            " WHERE id=$6 AND status='witnessed' RETURNING *",
+            ref, body.carrier_name, now, user["id"], body.note, manifest_id), manifest_id, "witnessed")
         await safe_emit(c, user, verb="waste_manifest_disposed", object_type="waste_manifest",
                         object_id=manifest_id, recipients=[],
                         params={"code": m["manifest_code"], "carrier_ref": ref})

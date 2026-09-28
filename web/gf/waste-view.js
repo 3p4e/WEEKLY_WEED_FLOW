@@ -72,7 +72,11 @@
   const stCol = (s) => (STATUS[s] || {}).color || 'var(--ink-3)';
 
   const role = () => (GF.API.user || {}).role;
-  const canRecord = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR'].includes(role());
+  // Mirrors waste.py _RECORDERS / _WITNESSES. Production (PR_MGR) records
+  // manifests too — trim, de-bucking and packaging waste are theirs (owner
+  // 2026-09-05, DECISIONS A-2); waste.py puts no room-kind rule on it, so
+  // neither does this view (review 2026-09-27, R2-FE-03 / R2-BC-01).
+  const canRecord = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'PR_MGR'].includes(role());
   const canWitness = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'QA_MGR'].includes(role());
   // Mirrors ManifestIn.manifest_code server-side (slashes allowed: carrier
   // dockets are routinely written WM/2026/0731-04).
@@ -82,14 +86,23 @@
   GF.WWF.loadWaste = async () => {
     const st = GF.WWF._waste;
     st.loading = true; st.error = null;
+    // Stale-response guard (same as qcpotency-view.js): the status filter
+    // fires one load per click, and two quick clicks could let the older
+    // response land last — the register then listed a status the buttons no
+    // longer showed as selected (review 2026-09-27, FE-16).
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       if (st.tab === 'recon') {
-        st.recon = (await GF.API.wasteReconciliation()).batches || [];
+        const recon = (await GF.API.wasteReconciliation()).batches || [];
+        if (my !== st.lseq) return;
+        st.recon = recon;
       } else {
         const q = st.statusFilter ? { status: st.statusFilter } : {};
-        st.manifests = (await GF.API.wasteManifests(q)).manifests || [];
+        const manifests = (await GF.API.wasteManifests(q)).manifests || [];
+        if (my !== st.lseq) return;
+        st.manifests = manifests;
       }
-    } catch (e) { st.error = e.message; }
+    } catch (e) { if (my !== st.lseq) return; st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'waste') GF.render.all();
   };
@@ -325,9 +338,9 @@
     // The signature block: who did what, when. Present on every rung the
     // manifest has actually reached, absent on the ones it has not.
     const sig = [];
-    if (m.sealed_at) sig.push(`${AL('Weighed &amp; sealed', 'Измерено и затворено')}: ${GF.esc(String(m.sealed_at).slice(0, 16).replace('T', ' '))} · ${kg(m.gross_weight_kg)}`);
-    if (m.witnessed_at) sig.push(`${AL('Witnessed', 'Потврдено')}: ${GF.esc(String(m.witnessed_at).slice(0, 16).replace('T', ' '))}`);
-    if (m.disposed_at) sig.push(`${AL('Disposed', 'Уништено')}: ${GF.esc(String(m.disposed_at).slice(0, 16).replace('T', ' '))} · ${GF.esc(m.carrier_ref || '')}`);
+    if (m.sealed_at) sig.push(`${AL('Weighed &amp; sealed', 'Измерено и затворено')}: ${GF.esc(GF.fmtDateTime(m.sealed_at))} · ${kg(m.gross_weight_kg)}`);
+    if (m.witnessed_at) sig.push(`${AL('Witnessed', 'Потврдено')}: ${GF.esc(GF.fmtDateTime(m.witnessed_at))}`);
+    if (m.disposed_at) sig.push(`${AL('Disposed', 'Уништено')}: ${GF.esc(GF.fmtDateTime(m.disposed_at))} · ${GF.esc(m.carrier_ref || '')}`);
     body.innerHTML = `
       <div style="color:var(--ink-3);font-size:11px;margin-bottom:10px">
         ${GF.esc(lbl(WASTE_TYPES, m.waste_type))} · ${GF.esc(lbl(REASONS, m.reason))} ·
@@ -639,7 +652,7 @@
     // Anchored on a key render.sidebar() itself emits, not on a sibling view:
     // _registerFullPageView wraps render.sidebar, so an anchor on another
     // registered view would depend on <script> order.
-    insertBefore: 'mywork',
+    insertBefore: 'floor-end',
     guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
   });
 })();

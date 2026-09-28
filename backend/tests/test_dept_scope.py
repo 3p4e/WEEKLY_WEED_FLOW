@@ -23,13 +23,19 @@ def test_every_task_id_route_calls_the_scope_guard():
     which is exactly how it reopened for 11+ endpoints before. If a new such
     route legitimately needs no guard, add it to _EXEMPT with a reason."""
     from app.main import app
+    from tests.conftest import iter_routes
 
     # Routes that take a task id but genuinely don't need the guard, with why.
     _EXEMPT: dict[str, str] = {}  # none today: every {task_id} route is by-id task access
 
     offenders = []
-    for route in app.routes:
+    seen = 0
+    # iter_routes, not app.routes: the newer FastAPI nests included routers,
+    # and a walk over app.routes found no {task_id} route and passed without
+    # checking anything — the structural guard had gone vacuous.
+    for route in iter_routes(app):
         path = getattr(route, "path", "")
+        seen += "{task_id}" in path
         endpoint = getattr(route, "endpoint", None)
         if endpoint is None:
             continue
@@ -40,9 +46,48 @@ def test_every_task_id_route_calls_the_scope_guard():
         if "_assert_scope_visible" not in src:
             methods = ",".join(sorted(getattr(route, "methods", []) or []))
             offenders.append(f"{methods} {path} ({endpoint.__name__})")
+    assert seen >= 10, f"only {seen} {{task_id}} routes found — the route walk is not seeing the app"
     assert not offenders, (
         "these task-id routes don't call _assert_scope_visible — a dept-scoped "
         "manager could reach a foreign task through them:\n  " + "\n  ".join(offenders))
+
+
+def test_every_task_id_write_route_evaluates_scope_without_the_handoff_arm():
+    """Companion to the guard test above (review 2026-09-27, R2-BC-04). The
+    pending-handoff arm of _assert_scope_visible is READ scope: it lets the
+    receiving manager open a task offered to their department. Every route
+    that WRITES to a task by id must evaluate the rule without it
+    (include_handoffs=False), or a proposal that has not been accepted lets
+    the receiver edit, sign off and hang records off a task that still
+    belongs to the source department. Reads keep the arm; the comment thread
+    is the one write that does (the discussion around the proposal)."""
+    from app.main import app
+    from tests.conftest import iter_routes
+
+    _KEEP_ARM: dict[str, str] = {
+        "add_comment": "the comment thread is where the proposal is discussed",
+    }
+    offenders, seen = [], 0
+    for route in iter_routes(app):
+        path = getattr(route, "path", "")
+        endpoint = getattr(route, "endpoint", None)
+        if endpoint is None:
+            continue
+        targets_a_task = "{task_id}" in path or path == "/sessions/{session_id}"
+        methods = set(getattr(route, "methods", []) or [])
+        if not targets_a_task or methods <= {"GET", "HEAD", "OPTIONS"}:
+            continue
+        seen += 1
+        if endpoint.__name__ in _KEEP_ARM:
+            continue
+        src = inspect.getsource(endpoint)
+        if "include_handoffs=False" not in src:
+            offenders.append(f"{','.join(sorted(methods))} {path} ({endpoint.__name__})")
+    assert seen >= 8, f"only {seen} writing task-id routes found — the route walk is not seeing the app"
+    assert not offenders, (
+        "these task-id WRITE routes evaluate scope with the pending-handoff arm — "
+        "a receiving manager could edit a task that has not been handed over yet:\n  "
+        + "\n  ".join(offenders))
 
 
 async def _two_departments(org):
@@ -411,3 +456,117 @@ async def test_audit_prep_includes_managers_own_task_in_another_department(clien
     assert body["traceability"]["rate"] == 1.0
 
     assert body["status_distribution"].get("completed") == 1
+
+
+# ── sub-departments (migration 0064: departments.parent_id + app.dept_family) ──
+
+async def _child_department(org, parent_id, code="cloning"):
+    from app.db import tasks_admin_pool
+    return str(await tasks_admin_pool().fetchval(
+        "INSERT INTO departments(org_id, code, name, parent_id) VALUES ($1,$2,$3,$4) RETURNING id",
+        org["org_id"], code, code.title(), parent_id))
+
+
+@pytest.mark.asyncio
+async def test_a_parent_departments_manager_sees_its_sub_departments_work(client, admin_headers, org):
+    """Cloning and Nursery are sub-departments of Cultivation, run by the
+    cultivation manager. Their tasks are that manager's OWN scope — in the list
+    and through the by-id guard every task route calls — not foreign work."""
+    d1, d2 = await _two_departments(org)
+    child = await _child_department(org, d1)
+    in_child = await _mk_task(client, admin_headers, "scoped: in my sub-department", child)
+    other = await _mk_task(client, admin_headers, "scoped: other dept", d2)
+    _, mgr = await _manager(client, admin_headers, d1)
+
+    ids = {t["id"] for t in (await client.get("/tasks", headers=mgr)).json()}
+    assert in_child["id"] in ids
+    assert other["id"] not in ids
+    assert (await client.get(f"/tasks/{in_child['id']}", headers=mgr)).status_code == 200
+    assert (await client.get(f"/tasks/{other['id']}", headers=mgr)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_sub_departments_manager_does_not_inherit_the_parents_scope(client, admin_headers, org):
+    """Scope flows DOWN the tree only."""
+    d1, _ = await _two_departments(org)
+    child = await _child_department(org, d1)
+    in_parent = await _mk_task(client, admin_headers, "scoped: parent-level", d1)
+    _, sub_mgr = await _manager(client, admin_headers, child)
+    ids = {t["id"] for t in (await client.get("/tasks", headers=sub_mgr)).json()}
+    assert in_parent["id"] not in ids
+    assert (await client.get(f"/tasks/{in_parent['id']}", headers=sub_mgr)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_parent_manager_files_work_directly_into_a_sub_department(client, admin_headers, org):
+    d1, d2 = await _two_departments(org)
+    child = await _child_department(org, d1)
+    _, mgr = await _manager(client, admin_headers, d1)
+    ok = await client.post("/tasks", json={"title": "clone run", "department_id": child}, headers=mgr)
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["department_id"] == child
+    # …and still not into an unrelated department
+    assert (await client.post("/tasks", json={"title": "x", "department_id": d2},
+                              headers=mgr)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_parent_manager_moves_work_between_their_department_and_a_sub_department(client, admin_headers, org):
+    """Review 2026-09-27, BC-03: create_task admitted the family, update_task
+    compared against the bare scope — so a cultivation manager re-filing a
+    task from Cultivation to Cloning (their own task included) got 403, and
+    moving a Cloning task back needed them to own it."""
+    d1, d2 = await _two_departments(org)
+    child = await _child_department(org, d1)
+    _, mgr = await _manager(client, admin_headers, d1)
+    # a task in the parent department, owned by someone else (the admin)
+    t = await _mk_task(client, admin_headers, "move: parent -> child", d1)
+    r = await client.patch(f"/tasks/{t['id']}", json={"department_id": child}, headers=mgr)
+    assert r.status_code == 200, r.text
+    assert str(r.json()["department_id"]) == child
+    # and back up: a sub-department task the manager does not own
+    in_child = await _mk_task(client, admin_headers, "move: child -> parent", child)
+    r = await client.patch(f"/tasks/{in_child['id']}", json={"department_id": d1}, headers=mgr)
+    assert r.status_code == 200, r.text
+    assert str(r.json()["department_id"]) == d1
+    # a subtask under a parent that lives in the SUB-department is delegable too
+    sub = await _mk_task(client, mgr, "move: subtask under child", child, parent_id=in_child["id"])
+    r = await client.patch(f"/tasks/{sub['id']}", json={"department_id": d2}, headers=mgr)
+    assert r.status_code == 200, r.text
+    # …and the family still ends at the tree: out to an unrelated department stays 403
+    r = await client.patch(f"/tasks/{t['id']}", json={"department_id": d2}, headers=mgr)
+    assert r.status_code == 403, r.text
+
+
+@pytest.mark.asyncio
+async def test_departments_can_be_created_under_a_parent(client, admin_headers, org):
+    d1, _ = await _two_departments(org)
+    r = await client.post("/departments", json={"code": "nursery", "name": "Nursery", "parent_id": d1},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert str(r.json()["parent_id"]) == d1
+    listed = {d["code"]: d for d in (await client.get("/departments", headers=admin_headers)).json()}
+    assert str(listed["nursery"]["parent_id"]) == d1
+    bad = await client.post("/departments", json={"code": "orphan", "name": "Orphan",
+                                                  "parent_id": "00000000-0000-0000-0000-000000000000"},
+                            headers=admin_headers)
+    assert bad.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_a_parent_manager_staffs_a_sub_department(client, admin_headers, org):
+    """The account guard follows the same tree: the cultivation manager
+    provisions a clone-room operator INTO Cloning, and still not into an
+    unrelated department."""
+    d1, d2 = await _two_departments(org)
+    child = await _child_department(org, d1)
+    _, mgr = await _manager(client, admin_headers, d1)
+    ok = await client.post("/auth/users", json={
+        "username": f"clone_op_{child[:8]}", "full_name": "Clone Operator",
+        "role": "USER", "department_id": child}, headers=mgr)
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["user"]["department_id"] == child
+    no = await client.post("/auth/users", json={
+        "username": f"foreign_op_{d2[:8]}", "full_name": "Foreign Operator",
+        "role": "USER", "department_id": d2}, headers=mgr)
+    assert no.status_code == 403

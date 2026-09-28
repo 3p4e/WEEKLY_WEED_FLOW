@@ -69,11 +69,14 @@ async def test_compile_review_lock_export_lifecycle(client, admin_headers, org):
     r = await client.get("/reports/documents", params={"kind": "report"}, headers=admin_headers)
     assert r.status_code == 200 and r.json()["id"] == doc["id"]
 
-    # PATCH the draft: approve a section / add edited content
-    c["ai_sections"] = [{**s, "approved": True, "body": s["body"] or "Edited narrative."}
-                        for s in c["ai_sections"]]
-    r = await client.patch(f"/reports/documents/{doc['id']}", json={"content": c}, headers=admin_headers)
-    assert r.status_code == 200, r.text
+    # Review the draft: approve a section / add edited narrative — through the
+    # section route, the only write the reviewer has (the whole-document
+    # PATCH is gone, BC-07).
+    for s in c["ai_sections"]:
+        r = await client.patch(f"/reports/documents/{doc['id']}/sections/{s['key']}",
+                               json={"approved": True, "body": s["body"] or "Edited narrative."},
+                               headers=admin_headers)
+        assert r.status_code == 200, r.text
     assert r.json()["content"]["ai_sections"][0]["approved"] is True
 
     # PDF export of the draft
@@ -86,7 +89,9 @@ async def test_compile_review_lock_export_lifecycle(client, admin_headers, org):
     # LOCK -> immutable
     r = await client.post(f"/reports/documents/{doc['id']}/lock", headers=admin_headers)
     assert r.status_code == 200 and r.json()["status"] == "locked"
-    r = await client.patch(f"/reports/documents/{doc['id']}", json={"content": c}, headers=admin_headers)
+    key = c["ai_sections"][0]["key"]
+    r = await client.patch(f"/reports/documents/{doc['id']}/sections/{key}",
+                           json={"body": "after the lock"}, headers=admin_headers)
     assert r.status_code == 409
     r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
     assert r.status_code == 409
@@ -124,15 +129,33 @@ async def test_documents_operator_denied_all_access(client, admin_headers, org):
     assert r.status_code == 403
     r = await client.get(f"/reports/documents/{doc_id}/export.pdf", headers=h)
     assert r.status_code == 403
-    r = await client.patch(f"/reports/documents/{doc_id}", json={"content": {}}, headers=h)
+    r = await client.patch(f"/reports/documents/{doc_id}/sections/weekly_summary",
+                           json={"approved": True}, headers=h)
     assert r.status_code == 403
+
+
+async def test_whole_document_patch_route_is_gone(client, admin_headers, org):
+    """Review 2026-09-27, BC-07: PATCH /reports/documents/{id} replaced the
+    whole content — tasks, ribbon, metrics, AI sections — with any 5 MB JSON
+    an elevated caller sent, and a lock then made the fabricated evidence
+    the immutable submitted record. No screen ever called it; only the
+    section route (reviewer text and approvals) is a write."""
+    await _seed_task_with_session(client, admin_headers, org, title="evidence task")
+    doc = (await client.post("/reports/documents/compile", json={"kind": "report"},
+                             headers=admin_headers)).json()
+    forged = {**doc["content"], "tasks": [{"id": "0" * 32, "title": "invented task", "status": "completed"}]}
+    r = await client.patch(f"/reports/documents/{doc['id']}", json={"content": forged}, headers=admin_headers)
+    assert r.status_code in (404, 405), r.text
+    stored = (await client.get("/reports/documents", params={"kind": "report"}, headers=admin_headers)).json()
+    titles = [t["title"] for t in stored["content"]["tasks"]]
+    assert "evidence task" in titles and "invented task" not in titles
 
 
 async def test_documents_malformed_id_is_404_not_500(client, admin_headers, org):
     """A non-uuid path param is a clean 404, not a 500 from asyncpg casting."""
-    for method, suffix in (("patch", ""), ("post", "/lock"), ("get", "/export.pdf")):
+    for method, suffix in (("patch", "/sections/weekly_summary"), ("post", "/lock"), ("get", "/export.pdf")):
         call = getattr(client, method)
-        kw = {"json": {"content": {}}} if method == "patch" else {}
+        kw = {"json": {"approved": True}} if method == "patch" else {}
         r = await call(f"/reports/documents/not-a-uuid{suffix}", headers=admin_headers, **kw)
         assert r.status_code == 404, f"{method} {suffix}: {r.status_code}"
 
@@ -161,10 +184,12 @@ async def test_section_approve_endpoint(client, admin_headers, org):
 
 
 async def test_oversized_section_and_patch_content_rejected(client, admin_headers, org):
-    """SectionReq's text fields and PatchReq.content used to carry no size
-    bound at all — an elevated caller could PATCH an arbitrarily large
-    JSONB blob/string into weekly_documents.content. Every oversized variant
-    below must be a clean 422 (Pydantic validation), never accepted."""
+    """SectionReq's text fields used to carry no size bound at all — an
+    elevated caller could PATCH an arbitrarily large JSONB blob/string into
+    weekly_documents.content. Every oversized variant below must be a clean
+    422 (Pydantic validation), never accepted. The same 5 MB cap bounds the
+    client-authored content POST /export-range.pdf lays out in WeasyPrint
+    (review 2026-09-27, BC-20)."""
     r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
     assert r.status_code == 200, r.text
     doc = r.json()
@@ -205,16 +230,10 @@ async def test_oversized_section_and_patch_content_rejected(client, admin_header
                            headers=admin_headers)
     assert r.status_code == 200, r.text
 
-    # PatchReq.content: a whole-document dict blob well over the size cap.
-    r = await client.patch(f"/reports/documents/{doc_id}",
-                           json={"content": {"bloat": "z" * 5_000_001}}, headers=admin_headers)
+    # RangeExportReq.content: a whole-document dict blob well over the size cap.
+    r = await client.post("/reports/documents/export-range.pdf",
+                          json={"content": {"bloat": "z" * 5_000_001}}, headers=admin_headers)
     assert r.status_code == 422, r.text
-
-    # A normal-sized content PATCH still works.
-    small_content = {**doc["content"], "note": "small edit"}
-    r = await client.patch(f"/reports/documents/{doc_id}", json={"content": small_content},
-                           headers=admin_headers)
-    assert r.status_code == 200, r.text
 
 
 async def test_locked_document_immutable_at_db_layer(client, admin_headers, org):
@@ -452,7 +471,6 @@ async def test_manager_denied_orgwide_document_by_id(client, admin_headers, org)
                                  headers=admin_headers)).json()
 
     for method, path, body in [
-        ("patch", f"/reports/documents/{org_doc['id']}", {"content": {}}),
         ("patch", f"/reports/documents/{org_doc['id']}/sections/weekly_summary", {"approved": True}),
         ("post", f"/reports/documents/{org_doc['id']}/lock", None),
     ]:
@@ -568,9 +586,11 @@ async def test_v1_content_document_renders_without_500(client, admin_headers, or
         "ai_sections": [{"key": "weekly_summary", "title": "Executive summary",
                          "body": "v1 legacy body", "approved": True, "status": "draft"}],
     }
-    r = await client.patch(f"/reports/documents/{doc['id']}", json={"content": v1_content},
-                           headers=admin_headers)
-    assert r.status_code == 200, r.text
+    # A v1 document can only be what an OLD compile stored — no API writes
+    # whole content any more (BC-07) — so plant it the way history did.
+    from app.db import tasks_admin_pool
+    await tasks_admin_pool().execute(
+        "UPDATE weekly_documents SET content=$2 WHERE id=$1", doc["id"], v1_content)
     r = await client.get("/reports/documents", params={"kind": "report"}, headers=admin_headers)
     assert r.status_code == 200 and "content_version" not in r.json()["content"]
     r = await client.get(f"/reports/documents/{doc['id']}/export.pdf", headers=admin_headers)
@@ -613,6 +633,55 @@ async def test_pdf_html_bilingual_and_locked_rules(client, admin_headers, org):
     assert "Narr EN" not in h2, "unapproved narrative dropped from locked export"
     assert "Отворени CAPA" in h2, "metric grid always kept in the record"
     assert "Sum EN" not in h2, "unapproved AI section dropped from locked export"
+
+
+async def test_manager_document_covers_their_sub_departments_and_the_board_folds_them(client, admin_headers, org):
+    """Review 2026-09-27, BC-05. Cloning and Nursery have no manager of their
+    own — the cultivation manager runs them — yet the document was exact-
+    match and the manager forced to their own department, so a sub-
+    department's weekly work appeared in no manager-submitted record, and
+    the status board reported the sub-department "missing" every week.
+    Now a department document covers its sub-departments (tasks and the
+    session ribbon), and the board lists top-level departments only."""
+    from app.db import tasks_admin_pool
+    depts = await _dept_pair(org)
+    clone = str(await tasks_admin_pool().fetchval(
+        "INSERT INTO departments(org_id, code, name, parent_id) VALUES ($1,'cloning','Cloning',$2) RETURNING id",
+        org["org_id"], depts["cultivation"]))
+    await _task_in(client, admin_headers, "cultivation task", depts["cultivation"])
+    await _task_in(client, admin_headers, "clone-room task", clone)
+    await _task_in(client, admin_headers, "qc task", depts["qc"])
+    _, mgr = await _dept_manager(client, admin_headers, depts["cultivation"])
+
+    doc = (await client.post("/reports/documents/compile", json={"kind": "report"}, headers=mgr)).json()
+    titles = [t["title"] for t in doc["content"]["tasks"]]
+    assert "cultivation task" in titles and "clone-room task" in titles, titles
+    assert "qc task" not in titles
+    assert doc["department_id"] == depts["cultivation"]
+
+    board = (await client.get("/reports/documents/status", params={"kind": "report"},
+                              headers=admin_headers)).json()
+    codes = {d["code"] for d in board["departments"]}
+    assert "cloning" not in codes, "a sub-department folds into its parent's document"
+    assert codes == {"cultivation", "qc"}
+
+
+def test_period_label_matches_the_live_report_and_never_names_week_53_of_next_year():
+    """Review 2026-09-27, BC-16: the document labelled the window from its
+    Friday's ISO week and calendar year — "W39 2026" for the week
+    /reports/weekly called "W40 2026", and "W53 2027" for Fri 2027-01-01, a
+    week that does not exist."""
+    from datetime import date
+    from app.api.documents import _period
+    from app.api.weekwindow import fri_thu, week_label
+    fri, thu = fri_thu(date(2026, 9, 25))
+    p = _period(fri, thu, custom=False)
+    assert p["label"].startswith("W40 2026") and p["iso_week"] == 40
+    assert p["label"] == week_label(fri, thu)
+    fri, thu = fri_thu(date(2027, 1, 1))
+    p = _period(fri, thu, custom=False)
+    assert p["label"].startswith("W1 2027"), p["label"]
+    assert p["iso_week"] == 1
 
 
 # ── GET /status — per-department submission roll-up ─────────────────────────

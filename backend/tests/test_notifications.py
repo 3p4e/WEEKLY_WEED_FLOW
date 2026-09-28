@@ -148,9 +148,12 @@ async def test_unassign_notifies_the_ex_assignee(client, admin_headers):
 
 
 async def test_mention_in_comment_notifies_with_mentioned_reason(client, admin_headers):
-    """A mention notifies a no-stake bystander only when they can actually see
-    the task (same department). A USER in another department must NOT receive
-    the notification — its title+preview would leak a task that 404s for them."""
+    """A mention notifies someone only when they can actually see the task:
+    an elevated role, or a participant (owner / assignee / commenter). A USER
+    with no stake — whichever department they sit in — must NOT receive it:
+    tasks_read gives a USER only tasks they own or are assigned to, so the
+    title+preview would leak a task that 404s for them (review 2026-09-27,
+    BC-17 closed the same-department variant of this leak)."""
     dept = (await client.post("/departments", json={"code": "mn_home", "name": "Mention Home"},
                               headers=admin_headers)).json()
     other = (await client.post("/departments", json={"code": "mn_away", "name": "Mention Away"},
@@ -159,17 +162,23 @@ async def test_mention_in_comment_notifies_with_mentioned_reason(client, admin_h
     bh = {"Authorization": f"Bearer {await login_and_set_password(client, bu['username'], botp)}"}
     ou, ootp = await create_user(client, admin_headers, department_id=other["id"])
     oh = {"Authorization": f"Bearer {await login_and_set_password(client, ou['username'], ootp)}"}
+    mgr, motp = await create_user(client, admin_headers, role="QC_MGR", department_id=dept["id"])
+    mh = {"Authorization": f"Bearer {await login_and_set_password(client, mgr['username'], motp)}"}
     r = await client.post("/tasks", json={"title": "Mention target", "department_id": dept["id"]},
                           headers=admin_headers)
     tid = r.json()["id"]
-    # neither has a participation stake — only the @mention reaches them
+    # the assignee is a participant; the manager is elevated; the two USERs
+    # have no stake and cannot open the task
+    await client.post(f"/tasks/{tid}/assignees", json={"user_id": bu["id"]}, headers=admin_headers)
     assert (await client.post(f"/tasks/{tid}/comments",
-                              json={"content": f"ping @{bu['username']} and @{ou['username']}"},
+                              json={"content": f"ping @{bu['username']} @{mgr['username']} and @{ou['username']}"},
                               headers=admin_headers)).status_code == 201
     inbox = (await client.get("/notifications", headers=bh)).json()
-    row = next(n for n in inbox if n["task_id"] == tid)
+    row = next(n for n in inbox if n["task_id"] == tid and n["verb"] == "commented")
     assert row["reason"] == "mentioned"
-    # the cross-department USER gets nothing — the leak is closed
+    m_inbox = (await client.get("/notifications", headers=mh)).json()
+    assert any(n["task_id"] == tid and n["reason"] == "mentioned" for n in m_inbox)
+    # the no-stake USER gets nothing — the leak is closed
     out_inbox = (await client.get("/notifications", headers=oh)).json()
     assert not any(n["task_id"] == tid for n in out_inbox)
 
@@ -214,6 +223,140 @@ async def test_due_scan_notifies_assignee_and_manager(client, admin_headers):
     # idempotent within the day: a second run emits nothing new
     again = await run_for_org(admin, today)
     assert again == {"due_soon": 0, "overdue": 0}
+
+
+async def test_due_scan_escalates_a_sub_departments_overdue_task_to_the_parent_manager(client, admin_headers):
+    """Review 2026-09-27, BC-05: Cloning and Nursery have no manager of their
+    own — the cultivation manager runs them — and the scan matched managers
+    on the task's exact department, so an overdue Cloning task escalated to
+    nobody. Managers of the department OR any department above it are the
+    escalation targets."""
+    from app.duescan import run_for_org
+    from app.db import users_admin_pool
+    from datetime import timedelta
+
+    me = (await client.get("/auth/me", headers=admin_headers)).json()
+    org_id = await users_admin_pool().fetchval("SELECT org_id FROM profiles WHERE id=$1::uuid", me["id"])
+    admin = {"id": me["id"], "org_id": org_id, "role": me["role"]}
+    cult = (await client.post("/departments", json={"code": "due_cult", "name": "Cultivation"},
+                              headers=admin_headers)).json()
+    clone = (await client.post("/departments", json={"code": "due_clone", "name": "Cloning",
+                                                     "parent_id": cult["id"]}, headers=admin_headers)).json()
+    cu, cu_h = await _actor(client, admin_headers, role="CU_MGR")
+    await client.patch(f"/auth/users/{cu['id']}", json={"department_id": cult["id"]}, headers=admin_headers)
+    unrelated, un_h = await _actor(client, admin_headers, role="QC_MGR")
+    today = facility_today()
+    late = (await client.post("/tasks", json={"title": "Late clone run", "department_id": clone["id"],
+                                              "due_date": (today - timedelta(days=2)).isoformat()},
+                              headers=admin_headers)).json()
+    counts = await run_for_org(admin, today)
+    assert counts["overdue"] >= 1
+    inbox = (await client.get("/notifications", headers=cu_h)).json()
+    assert any(n["verb"] == "overdue" and n["task_id"] == late["id"] for n in inbox), \
+        "the parent department's manager must hear about the sub-department's overdue task"
+    assert not any(n["task_id"] == late["id"] for n in
+                   (await client.get("/notifications", headers=un_h)).json())
+
+
+async def test_mention_does_not_leak_a_task_to_a_same_department_user_who_cannot_open_it(client, admin_headers):
+    """Review 2026-09-27, BC-17: the mention filter treated "same department"
+    as visibility, but tasks_read gives a USER only tasks they own or are
+    assigned to — the department colleague got the title and an 80-character
+    preview of a task that answers 404 to them."""
+    dept = (await client.post("/departments", json={"code": "mn_leak", "name": "Mention Leak"},
+                              headers=admin_headers)).json()
+    colleague, otp = await create_user(client, admin_headers, department_id=dept["id"])
+    ch = {"Authorization": f"Bearer {await login_and_set_password(client, colleague['username'], otp)}"}
+    tid = (await client.post("/tasks", json={"title": "Confidential CAPA", "department_id": dept["id"]},
+                             headers=admin_headers)).json()["id"]
+    assert (await client.get(f"/tasks/{tid}", headers=ch)).status_code == 404
+    assert (await client.post(f"/tasks/{tid}/comments",
+                              json={"content": f"@{colleague['username']} the detail is here"},
+                              headers=admin_headers)).status_code == 201
+    inbox = (await client.get("/notifications", headers=ch)).json()
+    assert not any(n["task_id"] == tid for n in inbox), "a mention must not reach someone the task 404s for"
+    # once they are assigned (a participant), the mention lands
+    await client.post(f"/tasks/{tid}/assignees", json={"user_id": colleague["id"]}, headers=admin_headers)
+    await client.post(f"/tasks/{tid}/comments", json={"content": f"@{colleague['username']} now"},
+                      headers=admin_headers)
+    inbox = (await client.get("/notifications", headers=ch)).json()
+    assert any(n["task_id"] == tid and n["reason"] == "mentioned" for n in inbox)
+
+
+async def test_mention_does_not_leak_a_task_to_a_scoped_manager_of_another_department(client, admin_headers):
+    """Review 2026-09-27, R2-BC-05 (the BC-17 residual). The recipient filter
+    reasoned from RLS ("elevated roles read org-wide"), but the app's
+    boundary for a manager is the department scope: a QC manager @mentioned
+    on a Cultivation task received the title and an 80-character preview of a
+    task their GET answers 404 for. A scoped manager is now asked the same
+    rule the guard applies — so the manager of the task's PARENT department
+    (whose scope covers it) still gets the mention, and one of an unrelated
+    department does not."""
+    cult = (await client.post("/departments", json={"code": "mn_cult", "name": "Cultivation"},
+                              headers=admin_headers)).json()
+    clone = (await client.post("/departments", json={"code": "mn_clone", "name": "Cloning",
+                                                     "parent_id": cult["id"]},
+                               headers=admin_headers)).json()
+    qc = (await client.post("/departments", json={"code": "mn_qc", "name": "QC"},
+                            headers=admin_headers)).json()
+    qc_mgr, qh = await _actor_in(client, admin_headers, "QC_MGR", qc["id"])
+    cu_mgr, ch = await _actor_in(client, admin_headers, "CU_MGR", cult["id"])
+    tid = (await client.post("/tasks", json={"title": "Confidential cloning plan",
+                                             "department_id": clone["id"]},
+                             headers=admin_headers)).json()["id"]
+    assert (await client.get(f"/tasks/{tid}", headers=qh)).status_code == 404
+    assert (await client.get(f"/tasks/{tid}", headers=ch)).status_code == 200
+    r = await client.post(f"/tasks/{tid}/comments",
+                          json={"content": f"@{qc_mgr['username']} @{cu_mgr['username']} see the detail"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    qc_inbox = (await client.get("/notifications", headers=qh)).json()
+    assert not any(n["task_id"] == tid for n in qc_inbox), \
+        "a mention must not carry a task's title to a manager the task 404s for"
+    cu_inbox = (await client.get("/notifications", headers=ch)).json()
+    assert any(n["task_id"] == tid and n["reason"] == "mentioned" for n in cu_inbox)
+    # once the QC manager is a participant (assigned), the mention lands
+    await client.post(f"/tasks/{tid}/assignees", json={"user_id": qc_mgr["id"]}, headers=admin_headers)
+    await client.post(f"/tasks/{tid}/comments", json={"content": f"@{qc_mgr['username']} now"},
+                      headers=admin_headers)
+    qc_inbox = (await client.get("/notifications", headers=qh)).json()
+    assert any(n["task_id"] == tid and n["reason"] == "mentioned" for n in qc_inbox)
+
+
+async def _actor_in(client, admin_headers, role, dept_id):
+    u, otp = await create_user(client, admin_headers, role=role, department_id=dept_id)
+    token = await login_and_set_password(client, u["username"], otp)
+    return u, {"Authorization": f"Bearer {token}"}
+
+
+async def test_activity_feed_shows_a_user_only_events_of_tasks_they_can_open(client, admin_headers):
+    """Review 2026-09-27, BC-17: /activity and /digest showed a department's
+    USERs every event in the department — comment previews and workflow
+    remarks included — for tasks they cannot open. The feed mirrors the task
+    board now: their own actions, their department's task-less events, and
+    the events of tasks tasks_read lets them see."""
+    dept = (await client.post("/departments", json={"code": "feed_d", "name": "Feed Dept"},
+                              headers=admin_headers)).json()
+    user, otp = await create_user(client, admin_headers, department_id=dept["id"])
+    uh = {"Authorization": f"Bearer {await login_and_set_password(client, user['username'], otp)}"}
+    hidden = (await client.post("/tasks", json={"title": "Hidden dept task", "department_id": dept["id"]},
+                                headers=admin_headers)).json()["id"]
+    await client.patch(f"/tasks/{hidden}", json={"status": "ongoing"}, headers=admin_headers)
+    await client.post(f"/tasks/{hidden}/comments", json={"content": "sensitive preview text"},
+                      headers=admin_headers)
+    mine = (await client.post("/tasks", json={"title": "My assigned task", "department_id": dept["id"]},
+                              headers=admin_headers)).json()["id"]
+    await client.post(f"/tasks/{mine}/assignees", json={"user_id": user["id"]}, headers=admin_headers)
+    await client.patch(f"/tasks/{mine}", json={"status": "ongoing"}, headers=admin_headers)
+
+    feed = (await client.get("/activity", headers=uh)).json()
+    task_ids = {e["task_id"] for e in feed}
+    assert mine in task_ids
+    assert hidden not in task_ids, "events of a task the USER cannot open must not be in their feed"
+    digest = (await client.get("/notifications/digest", headers=uh)).json()
+    assert hidden not in {e["task_id"] for e in digest["recent"]}
+    # the org-wide admin still sees everything
+    assert hidden in {e["task_id"] for e in (await client.get("/activity", headers=admin_headers)).json()}
 
 
 # ── TMS T2: reason-filter regex kept in lockstep with the DB CHECK ──────────

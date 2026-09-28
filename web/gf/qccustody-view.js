@@ -44,7 +44,7 @@
 
   const chip = (t, c) => `<span class="chip-opt" style="border-color:${c};color:${c}">${GF.esc(t)}</span>`;
   const stChip = (m, s) => { const x = m[s] || { en: s || '—', mk: s || '—', c: 'var(--ink-3)' }; return chip(AL(x.en, x.mk), x.c); };
-  const dt = (s) => s ? GF.esc(String(s).slice(0, 16).replace('T', ' ')) : '—';
+  const dt = (s) => s ? GF.esc(GF.fmtDateTime(s)) : '—';
 
   GF.WWF.loadQcCustody = async () => {
     const st = GF.WWF._qccus;
@@ -185,14 +185,50 @@
     try { const r = await GF.API.qcCreateSfr(body); GF.toast(r.sfr_number + ' ' + AL('created', 'создадено')); await GF.WWF.loadQcCustody(); GF.WWF.qcCusPick(r.id); }
     catch (e) { GF.toast(e.message, 'error'); }
   };
+  // B-12: who may record a hop. With no previous custodian the recorder is
+  // the giver (the server takes from_user_id = the recorder); otherwise the
+  // recorder must be that custodian or the chosen recipient.
+  const me = () => String((GF.API.user || {}).id || '');
+  const recorderIsParty = (fromUser, toUser) =>
+    !fromUser || String(fromUser) === me() || (!!toUser && String(toUser) === me());
+  const PARTY_RULE = () => AL(
+    'A custody transfer is recorded by the person handing the sample over or the person receiving it — not by a third party on their behalf.',
+    'Трансферот на чување го запишува лицето што го предава примерокот или лицето што го прима — не трето лице во нивно име.');
+  // The recipient picker changed: the Log button follows the B-12 rule live.
+  GF.WWF.qcCusRecipient = () => {
+    const b = GF.$('qcu-xlog'), f = GF.$('qcu-xfromuser'), t = GF.$('qcu-xtouser');
+    if (!b) return;
+    const ok = recorderIsParty(f ? f.value : '', t ? t.value : '');
+    b.disabled = !ok;
+    b.title = ok ? '' : PARTY_RULE();
+  };
   GF.WWF.qcCusLogTransfer = async (sampleId) => {
     const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
-    const transfer_type = mk('qcu-xtype'), to_location = mk('qcu-xto');
-    // §6.3 — a custody entry must record at minimum the transfer type and
-    // destination; a blank submit would PATCH a fully-null entry onto the
-    // chain-of-custody record for this sample.
-    if (!transfer_type || !to_location) return GF.toast(AL('Transfer type and destination are required', 'Потребни се тип на трансфер и локација'), 'error');
-    const body = { transfer_type, to_location, transfer_reason: mk('qcu-xreason') || null };
+    const transfer_type = mk('qcu-xtype'), to_location = mk('qcu-xto'), to_user_id = mk('qcu-xtouser');
+    // §6.3 — a custody entry must record at minimum the transfer type and a
+    // destination (a place or a named recipient — the server's own minimum);
+    // a blank submit would PATCH a fully-null entry onto the chain-of-custody
+    // record for this sample.
+    if (!transfer_type || !(to_location || to_user_id)) {
+      return GF.toast(AL('Transfer type and a destination (location or recipient) are required',
+                         'Потребни се тип на трансфер и дестинација (локација или примач)'), 'error');
+    }
+    const body = { transfer_type, to_location: to_location || null, transfer_reason: mk('qcu-xreason') || null };
+    if (to_user_id) body.to_user_id = to_user_id;
+    // Continuity (custody.py): every transfer after the first is anchored on
+    // where — and with whom — the previous entry left the sample. The form
+    // pre-fills both from the last chain entry (read-only) and sends them;
+    // without them the server refused every second hop with 409 and no
+    // field-to-lab chain could be recorded past its first step (review
+    // 2026-09-27, FE-02).
+    const from_location = mk('qcu-xfrom'), from_user_id = mk('qcu-xfromuser');
+    if (from_location) body.from_location = from_location;
+    if (from_user_id) body.from_user_id = from_user_id;
+    // QC-29 / B-12 (the owner's rule, which wins over E-2): the entry is
+    // recorded by one of its two parties — the previous custodian handing
+    // it over, or the person receiving it. Refused here with the server's
+    // own sentence rather than by a 403 after the fact.
+    if (!recorderIsParty(from_user_id, to_user_id)) return GF.toast(PARTY_RULE(), 'error');
     // §6.3.1 — the condition confirmed at the handoff.
     const cond = mk('qcu-xcond'); if (cond) body.sample_condition = cond;
     const okv = mk('qcu-xok'); if (okv) body.condition_ok = okv === 'yes';
@@ -314,19 +350,48 @@
 
   const condChip = (ok) => ok === true ? chip(AL('intact', 'исправно'), 'var(--green)')
     : (ok === false ? chip(AL('compromised', 'нарушено'), 'var(--red)') : '');
+  const who = (id) => (id && GF.PEOPLE && GF.PEOPLE[id] && GF.PEOPLE[id].name) || (id ? AL('Someone', 'Некој') : '');
   const custodyPanel = (sampleId) => {
     const rows = (GF.WWF._qccus.custody[sampleId] || []);
-    const list = rows.map(x => `<tr><td class="mono">${dt(x.transferred_at)}</td><td>${GF.esc(x.transfer_type || '—')}</td><td>${GF.esc(x.to_location || '')}</td><td>${GF.esc(x.transfer_reason || '')}</td><td>${GF.esc(x.sample_condition || '')} ${condChip(x.condition_ok)}</td></tr>`).join('');
+    const list = rows.map(x => `<tr><td class="mono">${dt(x.transferred_at)}</td><td>${GF.esc(x.transfer_type || '—')}</td>
+      <td>${GF.esc(x.from_location || '')}${x.from_user_id ? `<div class="ana-note" style="margin:0">${GF.esc(who(x.from_user_id))}</div>` : ''}</td>
+      <td>${GF.esc(x.to_location || '')}${x.to_user_id ? `<div class="ana-note" style="margin:0">${GF.esc(who(x.to_user_id))}</div>` : ''}</td>
+      <td>${GF.esc(x.transfer_reason || '')}</td><td>${GF.esc(x.sample_condition || '')} ${condChip(x.condition_ok)}</td></tr>`).join('');
+    // The chain is continuous by construction: the next transfer starts where
+    // — and with whom — the last one ended. Both are read from the last entry
+    // (the API returns the chain in transfer order), shown read-only and sent
+    // with the new entry; the server refuses anything else (custody.py).
+    const last = rows.length ? rows[rows.length - 1] : null;
+    const fromLoc = (last && last.to_location) || '';
+    const fromUser = (last && last.to_user_id) || '';
+    const people = Object.keys(GF.PEOPLE || {}).filter(id => !(GF.PEOPLE[id] || {}).inactive);
+    // B-12: when someone else holds the sample, the signed-in writer can only
+    // record the hop as its RECEIVER — so the picker starts on them, and the
+    // Log button is disabled (with the rule as its title) while it does not
+    // name a party the recorder is.
+    const myId = me();
+    const defaultTo = (fromUser && String(fromUser) !== myId && people.includes(myId)) ? myId : '';
+    const partyOk = recorderIsParty(fromUser, defaultTo);
+    const originRow = last ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
+        <span class="ana-note" style="margin:0">${AL('Collected from', 'Преземено од')}:</span>
+        <input id="qcu-xfrom" value="${GF.esc(fromLoc)}" readonly placeholder="${AL('(no location on file)', '(нема локација)')}" style="background:var(--surface-2)">
+        <input type="hidden" id="qcu-xfromuser" value="${GF.esc(fromUser)}">
+        ${fromUser ? `<span class="chip-opt">${GF.esc(who(fromUser))}</span>` : ''}
+      </div>` : '';
     return `<div style="margin-top:12px" class="ana-pt">${AL('Chain of custody', 'Ланец на чување')}</div>
-      <table class="qcp-table"><thead><tr><th>${AL('When', 'Кога')}</th><th>${AL('Type', 'Тип')}</th><th>${AL('To', 'До')}</th><th>${AL('Reason', 'Причина')}</th><th>${AL('Condition', 'Состојба')}</th></tr></thead>
-      <tbody>${list || `<tr><td colspan="5" class="ana-note">${AL('No custody transfers', 'Нема трансфери')}</td></tr>`}</tbody></table>
-      ${canWrite() ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
+      <table class="qcp-table"><thead><tr><th>${AL('When', 'Кога')}</th><th>${AL('Type', 'Тип')}</th><th>${AL('From', 'Од')}</th><th>${AL('To', 'До')}</th><th>${AL('Reason', 'Причина')}</th><th>${AL('Condition', 'Состојба')}</th></tr></thead>
+      <tbody>${list || `<tr><td colspan="6" class="ana-note">${AL('No custody transfers', 'Нема трансфери')}</td></tr>`}</tbody></table>
+      ${canWrite() ? originRow + `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
         <select id="qcu-xtype"><option value="">${AL('type…', 'тип…')}</option>${XFER.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
-        <input id="qcu-xto" placeholder="${AL('to location', 'до локација')}"><input id="qcu-xreason" placeholder="${AL('reason', 'причина')}" style="flex:1">
+        <input id="qcu-xto" placeholder="${AL('to location', 'до локација')}">
+        <select id="qcu-xtouser" onchange="GF.WWF.qcCusRecipient()"><option value="">${AL('received by…', 'примено од…')}</option>${people.map(id =>
+          `<option value="${GF.esc(id)}"${id === defaultTo ? ' selected' : ''}>${GF.esc(GF.PEOPLE[id].name || id)}</option>`).join('')}</select>
+        <input id="qcu-xreason" placeholder="${AL('reason', 'причина')}" style="flex:1">
         <input id="qcu-xcond" placeholder="${AL('condition at handoff', 'состојба при предавање')}">
         <select id="qcu-xok"><option value="">${AL('intact?', 'исправно?')}</option><option value="yes">${AL('intact', 'исправно')}</option><option value="no">${AL('compromised', 'нарушено')}</option></select>
-        <button class="btn btn-sm" onclick="GF.WWF.qcCusLogTransfer('${sampleId}')">+ ${AL('Log transfer', 'Запиши трансфер')}</button>
-      </div>` : ''}`;
+        <button id="qcu-xlog" class="btn btn-sm" onclick="GF.WWF.qcCusLogTransfer('${sampleId}')"${partyOk ? '' : ` disabled title="${GF.esc(PARTY_RULE())}"`}>+ ${AL('Log transfer', 'Запиши трансфер')}</button>
+      </div>
+      ${fromUser && String(fromUser) !== myId ? `<div class="ana-note qcu-party-rule" style="margin-top:4px">${GF.esc(PARTY_RULE())}</div>` : ''}` : ''}`;
   };
 
   const sfrDetail = (r) => {

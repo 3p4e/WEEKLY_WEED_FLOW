@@ -20,12 +20,16 @@ const DEPT_STYLE = {
   quality_control:{icon:'flask',color:'#9B7BE8'}, quality_assurance:{icon:'shield',color:'#E0743A'},
   logistics:{icon:'box',color:'#22B8D8'}, tooling:{icon:'wrench',color:'#8496B2'},
   security:{icon:'shield',color:'#7C90AE'},
+  // Not in the design mock (which predates them): irrigation as its own
+  // department, and Cloning / Nursery as sub-departments of Cultivation.
+  irrigation:{icon:'drop',color:'#0EA5A5'}, cloning:{icon:'leaf',color:'#2BE8A0'},
+  nursery:{icon:'leaf',color:'#3FA34D'},
 };
 // Short, language-neutral department abbreviations (QC, QA, WH…), shown on the
 // compact task cards / chips; the full bilingual name shows in lists + dropdowns.
 const DEPT_ABBR = {
   qc:'QC', quality_control:'QC', quality_assurance:'QA', production:'PR', cultivation:'CU',
-  tooling:'MU', logistics:'WH', security:'SE',
+  tooling:'MU', logistics:'WH', security:'SE', irrigation:'IR', cloning:'CL', nursery:'NU',
 };
 // Cross-department handoff pipeline, keyed by the backend's department `code`
 // (resolved to real ids once /departments loads — see loadAndRender).
@@ -39,16 +43,16 @@ GF.WWF.meId = 'me';
 // GrowFlow role keys <-> backend role enum. GF key = lowercased backend code
 // (USER keeps the historical 'operator' key — GF.PERMS/curRole default to it).
 const ROLE_OUT = { admin:'ADMIN', owner:'OWNER', ceo:'CEO', coo:'COO', qa_mgr:'QA_MGR', qc_mgr:'QC_MGR',
-  pr_mgr:'PR_MGR', wh_mgr:'WH_MGR', se_mgr:'SE_MGR', cu_mgr:'CU_MGR', mu_mgr:'MU_MGR', qp:'QP', operator:'USER' };
+  pr_mgr:'PR_MGR', wh_mgr:'WH_MGR', se_mgr:'SE_MGR', cu_mgr:'CU_MGR', ir_mgr:'IR_MGR', mu_mgr:'MU_MGR', qp:'QP', operator:'USER' };
 const ROLE_IN  = { ADMIN:'admin', OWNER:'owner', CEO:'ceo', COO:'coo', QA_MGR:'qa_mgr', QC_MGR:'qc_mgr',
-  PR_MGR:'pr_mgr', WH_MGR:'wh_mgr', SE_MGR:'se_mgr', CU_MGR:'cu_mgr', MU_MGR:'mu_mgr', QP:'qp', USER:'operator' };
+  PR_MGR:'pr_mgr', WH_MGR:'wh_mgr', SE_MGR:'se_mgr', CU_MGR:'cu_mgr', IR_MGR:'ir_mgr', MU_MGR:'mu_mgr', QP:'qp', USER:'operator' };
 // Backend roles that are "elevated" (must mirror app/roles.py ELEVATED_ROLES /
 // the DB app.is_elevated()). Everything but USER.
-const ELEVATED_ROLES = ['ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
+const ELEVATED_ROLES = ['ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','IR_MGR','MU_MGR','QP'];
 // Roles with no department affiliation — default the dept picker to "None" for these.
 const NO_DEPT_ROLES = new Set(['owner', 'ceo', 'coo', 'qp']);
-// The 9 department-manager roles (create only USER staff in their own dept).
-const MANAGER_ROLES = ['QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
+// The department-manager roles (create only USER staff in their own dept).
+const MANAGER_ROLES = ['QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','IR_MGR','MU_MGR','QP'];
 GF.WWF.colorFor = (id) => {
   const c = (GF.AVATAR_COLORS && GF.AVATAR_COLORS.length) ? GF.AVATAR_COLORS
     : ['#2FD9D9','#15A86B','#E0A73E','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#2BE8A0'];
@@ -134,7 +138,10 @@ GF.WWF.toggleArchived = async () => {
 GF.WWF.buildCalendar = (weeks) => {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const ws = (weeks || []).slice().sort((a,b)=> new Date(a.starts_on) - new Date(b.starts_on));
-  const now = new Date(); let todayId = 0;
+  // The facility's day picks the current week: a reader in another zone,
+  // or the 22:00–24:00 UTC window, must not land on a different week than
+  // the server's (review 2026-09-27, FE-07). Noon avoids any DST edge.
+  const now = new Date(GF.facilityToday() + 'T12:00:00'); let todayId = 0;
   // Map into a local first — only replace the calendar once we know we have
   // real weeks. Assigning the (empty) result before the length check would
   // wipe core.js's generated fallback and blank week navigation when /weeks
@@ -288,11 +295,29 @@ GF.WWF.resetCaches = () => {
   });
   // Assistant chat thread (assistant.js re-greets when msgs is empty).
   if (GF.assistant && Array.isArray(GF.assistant.msgs)) GF.assistant.msgs.length = 0;
+  // The strain list behind the QC batch-code fields is organisation data.
+  if (GF.batchCodeCultivars && GF.batchCodeCultivars.reset) GF.batchCodeCultivars.reset();
 };
 
 GF.WWF.loadAndRender = async () => {
   // Never render one account's cached module data under another's session.
   GF.WWF.resetCaches();
+  // The facility clock (facility_tz / facility_today) rides on the login
+  // response since 14e14f2, but a session restored from sessionStorage was
+  // stored by an older build and lacks it — and without it every date
+  // picker, plant id and "today" fell back to the browser's day (review
+  // 2026-09-27, FE-07). Refresh the profile from /auth/me once, before
+  // anything that prints a date renders. A failure here is not fatal: the
+  // fallbacks in GF.facilityToday remain what the app always did.
+  if (GF.API.user && !GF.API.user.facility_tz && GF.API.me) {
+    try {
+      const fresh = await GF.API.me();
+      if (fresh && fresh.id) {
+        GF.API.user = Object.assign({}, GF.API.user, fresh);
+        try { sessionStorage.setItem('wwf_user', JSON.stringify(GF.API.user)); } catch (e) {}
+      }
+    } catch (e) { if (e && (e.status === 401 || e.message === 'unauthorized')) return; }
+  }
   const u = GF.API.user || {};
   GF.WWF.meId = u.id || 'me';
   GF.state.user = GF.WWF.meId;
@@ -326,7 +351,12 @@ GF.WWF.loadAndRender = async () => {
     GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
       // `code` rides along so dept-templates.js can resolve the department's
       // field template / presets / home layout from the backend code.
+      // parent_id rides along too: Cloning and Nursery are sub-departments of
+      // Cultivation, and GF.WWF.deptFamily / GF.deptTemplate walk it.
+      // head_user_id: the department head (tasks.py; DECISIONS A-3) — what
+      // handoffRights reads for the target side (review 2026-09-27, R2-FE-14).
       return { id:d.id, code:d.code, name:d.name, mk:d.name_mk || d.name,
+               parent_id: d.parent_id || null, head_user_id: d.head_user_id || null,
                abbr: DEPT_ABBR[d.code] || (d.code || '').toUpperCase().slice(0, 3),
                icon:st.icon, color:st.color }; });
     // Resolve the code-keyed handoff pipeline to the real backend ids.
@@ -345,8 +375,18 @@ GF.WWF.loadAndRender = async () => {
   // GF.setView stores the choice once the user actually navigates.
   if (!localStorage.getItem('gf_view')) {
     const role = (GF.API.user || {}).role;
-    if (role === 'OWNER' || role === 'CEO' || role === 'COO') GF.state.view = 'exec';
-    else if (GF.hasDeptHome && GF.hasDeptHome()) GF.state.view = 'depthome';
+    if (role === 'OWNER' || role === 'CEO' || role === 'COO') {
+      // The exec overview is an ANALYTICS-module view. Setting only the view
+      // left the module at 'tasks', and render.all()'s module bounce sent
+      // the executive to the task default instead (review 2026-09-27,
+      // FE-12) — the landing was dead. Carry the module with it, the same
+      // way GF.setView does for a cross-module jump.
+      GF.state.view = 'exec';
+      if (GF.moduleForKey && GF.moduleAccessibleFor && GF.moduleAccessibleFor('analytics', role)) {
+        GF.state.module = 'analytics';
+        try { localStorage.setItem('gf_module', 'analytics'); } catch (e) {}
+      }
+    } else if (GF.hasDeptHome && GF.hasDeptHome()) GF.state.view = 'depthome';
   }
   GF.WWF.buildCalendar(weeks);
   GF.WWF.applyTasks(tasks);
@@ -440,10 +480,27 @@ GF.WWF.install = () => {
 
   GF.deleteTask = (id) => GF.toast(GF.state.lang==='mk'?'Бришењето е оневозможено (ревизија)':'Delete disabled (audit retention)','info');
 
+  // A note is shown on the card the instant it is typed, then written to
+  // the server. The write used to be fire-and-forget (`.catch(() => {})`),
+  // so on a 403, 409, 422 or a network error the note stayed on screen as
+  // saved and vanished on reload with no message (review 2026-09-27,
+  // FE-19). Now a failed write takes the optimistic note back off the card
+  // and says so.
   const origAddNote = GF.addNote;
-  GF.addNote = (taskId) => { const el = GF.$('note-'+taskId); const v = el && el.value.trim();
+  GF.addNote = async (taskId) => { const el = GF.$('note-'+taskId); const v = el && el.value.trim();
     origAddNote(taskId);
-    if (v) GF.API.addProgress(taskId, { day_label: GF.todayDay, note: v }).catch(()=>{}); };
+    if (!v) return;
+    try {
+      await GF.API.addProgress(taskId, { day_label: GF.todayDay, note: v });
+    } catch (e) {
+      const t = GF.task(taskId);
+      if (t && Array.isArray(t.notes)) {
+        const i = t.notes.map(n => n.n).lastIndexOf(v);
+        if (i >= 0) t.notes.splice(i, 1);
+      }
+      GF.render.panels();
+      GF.toast(AL('Note not saved: ', 'Белешката не е зачувана: ') + e.message, 'error');
+    } };
 
   // GF.once spans the ENTIRE chain below — translate, then createTask, then
   // the per-helper assign loop. The old inline guard only covered the
@@ -905,10 +962,25 @@ GF.WWF.canProvision = () => {
 // (not QP — org-wide batch certification) are scoped to their own department.
 // This drives UI affordances only (sidebar, locked dept picker) — the API
 // enforces the actual visibility on GET /tasks and /reports/weekly.
-const DEPT_SCOPED_ROLES = new Set(['QA_MGR', 'QC_MGR', 'PR_MGR', 'WH_MGR', 'SE_MGR', 'CU_MGR', 'MU_MGR']);
+const DEPT_SCOPED_ROLES = new Set(['QA_MGR', 'QC_MGR', 'PR_MGR', 'WH_MGR', 'SE_MGR', 'CU_MGR', 'IR_MGR', 'MU_MGR']);
 GF.WWF.deptScope = () => {
   const u = GF.API.user || {};
   return (DEPT_SCOPED_ROLES.has(u.role) && u.department_id) ? u.department_id : null;
+};
+// A department AND its sub-departments — the client-side reading of the
+// tasks DB's app.dept_family(): Cloning and Nursery are inside the cultivation
+// manager's scope. Walks GF.DEPTS (which carries parent_id once /departments
+// has loaded); before that, or for an unknown id, it is just [rootId]. UI
+// affordances only — the API enforces the real boundary.
+GF.WWF.deptFamily = (rootId) => {
+  if (!rootId) return [];
+  const out = [String(rootId)];
+  for (let i = 0; i < out.length && i < 64; i++) {
+    (GF.DEPTS || []).forEach(d => {
+      if (d.parent_id && String(d.parent_id) === out[i] && !out.includes(String(d.id))) out.push(String(d.id));
+    });
+  }
+  return out;
 };
 
 // Strict ADMIN check — mirrors the AI-bindings endpoints' require_role(ADMIN)
@@ -932,6 +1004,13 @@ GF.WWF.openDeptForm = () => {
       <input id="dept-name" maxlength="120"></div>
     <div class="field"><label>${AL('Name (Macedonian)', 'Име (МК)')}</label>
       <input id="dept-name-mk" maxlength="120"></div>
+    <div class="field"><label>${AL('Parent department (optional)', 'Надреден оддел (опционално)')}</label>
+      ${GF.selectField('dept-parent', { value: '', title: AL('Parent department', 'Надреден оддел'),
+        options: [{ v: '', label: AL('— top level —', '— највисоко ниво —') }]
+          .concat((GF.DEPTS || []).filter(d => !d.parent_id).map(d => ({ v: d.id, label: GF.state.lang === 'mk' ? d.mk : d.name }))) })}
+      <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
+        'A sub-department (Cloning, Nursery under Cultivation) is run by its parent’s manager.',
+        'Под-оддел (Клонирање, Расадник под Одгледување) го води менаџерот на надредениот оддел.')}</div></div>
     <div class="row" style="gap:10px"><div class="spacer"></div>
       <button class="btn btn-primary" onclick="GF.WWF.saveDept()">${GF.t('save')}</button></div>`;
   GF.openModal('dept-form-modal');
@@ -943,6 +1022,11 @@ GF.WWF.saveDept = async () => {
   const code = ((GF.$('dept-code') || {}).value || '').trim().toLowerCase();
   const name = ((GF.$('dept-name') || {}).value || '').trim();
   const nameMk = ((GF.$('dept-name-mk') || {}).value || '').trim();
+  // DepartmentIn.parent_id: the Cloning/Nursery model could not be created
+  // from the app because the form had no parent field (review 2026-09-27,
+  // FE-15). Only top-level departments are offered — one level, as the
+  // backend's dept_family walk is used today.
+  const parentId = ((GF.$('dept-parent') || {}).value || '') || null;
   if (!/^[a-z0-9_]{1,64}$/.test(code)) {   // mirrors DepartmentIn.code server-side
     GF.toast(AL('Code must be lowercase letters, digits, underscore only (1-64 characters)',
                 'Кодот смее да содржи само мали букви, цифри и долна црта (1-64 знаци)'), 'error');
@@ -950,12 +1034,50 @@ GF.WWF.saveDept = async () => {
   }
   if (!name) { GF.toast(AL('Enter a department name', 'Внесете име на одделот'), 'error'); return; }
   try {
-    await GF.API.createDepartment({ code, name, name_mk: nameMk || null });
+    await GF.API.createDepartment({ code, name, name_mk: nameMk || null, parent_id: parentId });
     GF.closeModal('dept-form-modal');
     GF.toast(GF.t('save') + ' ✓', 'success');
     await GF.WWF.loadAndRender();
   } catch (e) { GF.toast(AL('Failed: ', 'Неуспешно: ') + e.message, 'error'); }
 };
+
+/* ── Department head (PATCH /departments/{id}, ADMIN-only) ──
+   A-3: the head is the manager a handoff to the department is routed to
+   (collab.py), and ADMIN may set any elevated user. The route had no screen
+   (review 2026-09-27, INV-06 / R2-FE-14); the Team view's department strip
+   opens this. */
+GF.WWF.openDeptHeadForm = (deptId) => {
+  if (!GF.WWF.isAdmin()) return;
+  const dept = (GF.DEPTS || []).find(d => String(d.id) === String(deptId));
+  if (!dept) return;
+  const elevated = GF.ELEVATED_MODULE_ROLES || [];
+  const people = Object.entries(GF.PEOPLE || {})
+    .filter(([, p]) => p && p.active !== false && elevated.includes(p.backendRole))
+    .map(([id, p]) => ({ v: id, label: `${p.name} · ${GF.roleLabel ? GF.roleLabel(p.role) : p.role}` }));
+  GF.WWF._ensureModal('dept-head-modal', '420px');
+  GF.$('dept-head-modal-title').textContent = AL('Department head', 'Раководител на оддел') + ' — ' + GF.depName(dept.id);
+  GF.$('dept-head-modal-body').innerHTML = `
+    <div class="field"><label>${AL('Head', 'Раководител')}</label>
+      ${GF.selectField('dept-head-user', { value: dept.head_user_id || '', title: AL('Head', 'Раководител'),
+        options: [{ v: '', label: AL('— none —', '— нема —') }].concat(people) })}
+      <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
+        'A manager or executive. A handoff proposed to this department is addressed to its head.',
+        'Менаџер или извршен. Предложено префрлање до овој оддел се упатува до раководителот.')}</div></div>
+    <div class="row" style="gap:10px"><div class="spacer"></div>
+      <button class="btn btn-primary" id="dept-head-save" onclick="GF.WWF.saveDeptHead('${GF.esc(dept.id)}')">${GF.t('save')}</button></div>`;
+  GF.openModal('dept-head-modal');
+};
+
+GF.WWF.saveDeptHead = (deptId) => GF.once('dept-head-save', async () => {
+  if (!GF.WWF.isAdmin()) return;
+  const headId = ((GF.$('dept-head-user') || {}).value || '') || null;
+  try {
+    await GF.API.departmentPatch(deptId, { head_user_id: headId });
+    GF.closeModal('dept-head-modal');
+    GF.toast(GF.t('save') + ' ✓', 'success');
+    await GF.WWF.loadAndRender();
+  } catch (e) { GF.toast(AL('Failed: ', 'Неуспешно: ') + e.message, 'error'); }
+});
 
 // openUser(id) → edit an existing person (name/role/dept/title + reset password);
 // openUser() with no id → create a new account. The Team-card gear icon passes id.
@@ -1173,7 +1295,16 @@ GF.WWF._registerFullPageView = ({ key, icon, label, guard, insertBefore, badge }
       item.setAttribute('data-nav', key);
       item.onclick = () => GF.setView(key);
       item.innerHTML = GF.icon(icon) + `<span>${label()}</span>` + (badge ? '<span class="nav-badge-dot" style="display:none"></span>' : '');
-      const before = insertBefore ? nav.querySelector(`[data-nav="${insertBefore}"]`) : null;
+      // A missing anchor used to append, which put the view under whatever
+      // group label happened to be last — the rail's last group is System, so
+      // a floor view could present itself as a system setting. Fall back to
+      // "just before the last group label" instead, which keeps it out of a
+      // group it does not belong to.
+      let before = insertBefore ? nav.querySelector(`[data-nav="${insertBefore}"]`) : null;
+      if (!before) {
+        const groups = nav.querySelectorAll('.nav-group');
+        before = groups.length ? groups[groups.length - 1] : null;
+      }
       if (before) nav.insertBefore(item, before); else nav.appendChild(item);
     }
     item.className = 'nav-item' + (GF.state.view === key ? ' active' : '');

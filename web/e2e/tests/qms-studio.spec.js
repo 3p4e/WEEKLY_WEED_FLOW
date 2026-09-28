@@ -1,9 +1,12 @@
 // @ts-check
 // QMS Studio federation (unification Phase 1): the rail gains a QMS Studio
-// zone with the SOP Registry and Knowledge views for elevated roles. The
-// local e2e stack deliberately has NO qms-api container, so the proxy's
-// graceful "QMS service unavailable" state IS the assertion here — the real
-// upstream integration is verified on the wwf_mass test stack.
+// zone for elevated roles, holding Document Studio (DocEngine-backed) and the
+// QC LIMS views. The legacy SOP Registry and Knowledge Search views — stubs
+// that only ever printed "retired" after qms-api was withdrawn platform-wide —
+// were removed from the shell on 2026-09-27 (review FE-21), so the zone is
+// asserted through the views that still live in it. The local e2e stack
+// deliberately has NO docengine container, so the proxy's graceful
+// "DocEngine unavailable" state IS the assertion here.
 const { test, expect } = require('@playwright/test');
 const { seedOrg, login, gotoModule } = require('../seed');
 
@@ -14,32 +17,15 @@ test.beforeAll(() => {
   creds = seedOrg();
 });
 
-test('QMS Studio zone: rail group, both views, graceful unavailable state', async ({ page }) => {
+test('QMS Studio zone: rail group, Document Studio, graceful unavailable state', async ({ page }) => {
   await login(page, creds.username, creds.password);
 
-  await test.step('the rail shows the QMS Studio group with both views', async () => {
+  await test.step('the rail shows the QMS Studio group, without the retired views', async () => {
     await gotoModule(page, 'qc');   // QMS Studio + QC views live in the qc module
     await expect(page.locator('.nav-group', { hasText: 'QMS Studio' })).toBeVisible();
-    await expect(page.locator('[data-nav="qmsregistry"]')).toBeVisible();
-    await expect(page.locator('[data-nav="qmsknow"]')).toBeVisible();
-  });
-
-  await test.step('SOP Registry renders with zone banner and the retired state', async () => {
-    await page.locator('[data-nav="qmsregistry"]').click();
-    await expect(page.locator('.qms-zone')).toBeVisible({ timeout: 10_000 });
-    // qms-api is retired platform-wide: its proxy 503 renders as an honest
-    // "retired" panel pointing at Document Studio — deliberately NO retry.
-    await expect(page.locator('#view-root, main, body').first())
-      .toContainText('SOP Registry retired', { timeout: 15_000 });
-  });
-
-  await test.step('Knowledge search renders and shows its retired state', async () => {
-    await page.locator('[data-nav="qmsknow"]').click();
-    await expect(page.locator('#qmsk-q')).toBeVisible({ timeout: 10_000 });
-    await page.locator('#qmsk-q').fill('cleaning validation');
-    await page.locator('#qmsk-q').press('Enter');
-    await expect(page.locator('#view-root, main, body').first())
-      .toContainText('Knowledge search retired', { timeout: 15_000 });
+    await expect(page.locator('[data-nav="qmsstudio"]')).toBeVisible();
+    await expect(page.locator('[data-nav="qmsregistry"]')).toHaveCount(0);
+    await expect(page.locator('[data-nav="qmsknow"]')).toHaveCount(0);
   });
 
   await test.step('Create (DocEngine wizard) renders and degrades gracefully', async () => {

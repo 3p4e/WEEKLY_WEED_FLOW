@@ -11,10 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
-from app.db import rls_users, tasks_admin_pool, users_admin_pool
-from app.deps import get_current_user, require_password_set, require_role, uuid_or_404
-from app.roles import ADMIN, CREATABLE_ROLES, ELEVATED_ROLES, MANAGER_ROLES
+from app.db import rls, rls_users, tasks_admin_pool, users_admin_pool
+from app.deps import dept_family, get_current_user, require_password_set, require_role, uuid_or_404
+from app.roles import ADMIN, CREATABLE_ROLES, DEPT_SCOPED_ROLES, ELEVATED_ROLES, MANAGER_ROLES
 from app.security import BCRYPT_MAX_BYTES, create_access_token, hash_password, verify_password
+from app.worktime import facility_today
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -123,7 +124,10 @@ def _rate_limit_clear(*keys: str) -> None:
 class LoginReq(BaseModel):
     email: str = Field(max_length=254)            # accepts username or email
     password: str = Field(max_length=256)
-    remember_device: bool = False
+    # No `remember_device`: the client never sent it (web/gf/api.js login
+    # posts email+password only), so the long-lived token it minted was an
+    # unreachable code path with a config knob of its own (review 2026-09-27,
+    # BC-19). Every session token lives access_token_expire_minutes.
 
 
 class ChangePwReq(BaseModel):
@@ -224,16 +228,44 @@ async def login(body: LoginReq, request: Request):
             "event": "login_failed", "identifier": identifier, "ip": ip,
             "reason": "inactive_or_unknown" if not active else "bad_password"}})
         raise invalid
-    _rate_limit_clear(f"ip:{ip}", id_key)
-    days = settings.remember_device_expire_days if body.remember_device else None
+    # A success clears the ACCOUNT's budget only — the person proved they own
+    # it, so their earlier typos are forgiven. It must NOT clear the IP bucket:
+    # that bucket is shared by everyone behind one address, and clearing it on
+    # any success meant one legitimate login from the office (or from the
+    # attacker's own throwaway account) reset the brute-force counter for the
+    # whole address (review 2026-09-27, BC-01). Failures age out of the IP
+    # bucket on their own after _LOGIN_WINDOW_S.
+    _rate_limit_clear(id_key)
     pwv = row["password_set_at"].isoformat() if row["password_set_at"] else None
-    token = create_access_token(str(row["id"]), row["role"], str(row["org_id"]), password_set_at=pwv, days=days)
-    return {"access_token": token, "token_type": "bearer", "user": _public(row)}
+    token = create_access_token(str(row["id"]), row["role"], str(row["org_id"]), password_set_at=pwv)
+    # The facility clock travels with the login, not only with /auth/me: a
+    # normal sign-in never called /auth/me, so the date picker fell back to the
+    # browser's day (review 2026-09-27, FE-07). Same two fields as me().
+    return {"access_token": token, "token_type": "bearer",
+            "user": {**_public(row), "facility_tz": settings.snapshot_tz,
+                     "facility_today": facility_today().isoformat()}}
 
 
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
-    return _public(user)
+    """The signed-in user, plus the clock the UI must reckon dates by.
+
+    Every "what day is it" question in this system belongs to the FACILITY's
+    zone, not the reader's: worktime.facility_today() and SITE_TODAY_SQL both
+    say so, and tests/test_facility_clock.py enforces it server-side. The
+    browser had no way to ask — it used its own local day — so a date typed
+    from a phone in another zone, or during the nightly window where Skopje
+    and UTC disagree, defaulted to the wrong calendar day.
+
+    Sent as the zone (so a long-lived tab stays correct as it crosses
+    midnight) AND today's date (so a client whose Intl lacks the zone still
+    has an authoritative answer). Additive: every existing consumer of this
+    endpoint reads the same user fields it always did."""
+    return {
+        **_public(user),
+        "facility_tz": settings.snapshot_tz,
+        "facility_today": facility_today().isoformat(),
+    }
 
 
 @router.post("/change-password")
@@ -282,7 +314,22 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
     return {"ok": True, "access_token": token, "token_type": "bearer"}
 
 
-def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
+async def _actor_family(actor: dict) -> list[str] | None:
+    """The departments a manager may staff: their own AND its sub-departments
+    (Cloning and Nursery under Cultivation — app.dept_family, tasks 0064).
+    None for everyone else: ADMIN manages any account, and no other role
+    reaches _can_manage's manager branch. Read from the tasks DB, where
+    departments live; the actor's own department is always in the answer."""
+    if actor["role"] in MANAGER_ROLES and actor.get("department_id"):
+        # deps.dept_family is the one Python reading of app.dept_family (and
+        # its unknown-root → [root] fallback) — review 2026-09-27b, INV-09.
+        async with tasks_admin_pool().acquire() as c:
+            return await dept_family(c, str(actor["department_id"]))
+    return None
+
+
+def _can_manage(actor: dict, role: str, department_id: str | None,
+                family: list[str] | None = None) -> bool:
     # Admin (incl. qcm.blani, an ADMIN titled "QC Manager") manages any account
     # in the org, including other ADMIN accounts — assigning the ADMIN role
     # itself is blocked separately via CREATABLE_ROLES at each call site
@@ -294,8 +341,13 @@ def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
     # department. Managers can't create/deactivate other managers, executives,
     # or admins.
     if actor["role"] in MANAGER_ROLES:
-        return (role == "USER" and department_id is not None
-                and str(department_id) == str(actor["department_id"]))
+        if role != "USER" or department_id is None:
+            return False
+        # Their own department — or one beneath it (Cloning / Nursery under
+        # Cultivation): the cultivation manager staffs the clone room too.
+        if family is not None:
+            return str(department_id) in family
+        return str(department_id) == str(actor["department_id"])
     return False
 
 
@@ -303,6 +355,64 @@ def _require_uuid(value) -> None:
     """A malformed (non-uuid) {user_id} path param must be a clean 404, not a
     500 from asyncpg trying to cast it to uuid inside the lookup query."""
     uuid_or_404(value, "User not found")
+
+
+async def _sync_department_head(actor: dict, user_id, role: str | None, department_id,
+                                previous_department_id=None) -> None:
+    """Keep departments.head_user_id in step with the staff roster.
+
+    A department's head is who a cross-department handoff pings and who may
+    resolve it (collab.py). The column existed since the baseline, and no
+    write path ever set it — so no handoff ever reached its receiver (review
+    2026-09-27, BC-04). ADMIN can set it explicitly (PATCH /departments/{id});
+    this keeps the common case self-maintaining: a department-scoped manager
+    provisioned into (or moved into) a department that has no head becomes
+    its head, and a head who is moved out, demoted or deleted stops being
+    one — the head is never left pointing at someone who no longer runs the
+    place. An existing head is never displaced automatically: a second
+    manager in the same department does not take over.
+
+    Cross-database (profiles live in the users DB, departments in the tasks
+    DB), so this runs on the tasks admin pool under the actor's GUCs — the
+    audit_departments trigger attributes the change to the administrator or
+    manager whose roster action caused it."""
+    uid = str(user_id)
+    is_head_role = role in DEPT_SCOPED_ROLES
+    async with rls(actor, admin=True) as c:
+        # Anywhere this person is still recorded as head but no longer
+        # belongs: a different department now, or no longer a manager.
+        await c.execute(
+            "UPDATE departments SET head_user_id=NULL, updated_at=now()"
+            " WHERE org_id=$1 AND head_user_id=$2::uuid"
+            "   AND (NOT $3::boolean OR id IS DISTINCT FROM $4::uuid)",
+            actor["org_id"], uid, is_head_role, str(department_id) if department_id else None)
+        if is_head_role and department_id:
+            await c.execute(
+                "UPDATE departments SET head_user_id=$2::uuid, updated_at=now()"
+                " WHERE org_id=$1 AND id=$3::uuid AND head_user_id IS NULL",
+                actor["org_id"], uid, str(department_id))
+
+
+async def _sync_department_head_safe(actor: dict, user_id, role: str | None, department_id,
+                                     what: str) -> bool:
+    """_sync_department_head, logged and swallowed. The roster write it
+    follows has already committed in the users database; the head lives in
+    the tasks database and its own transaction. A failure there (pool
+    exhausted, statement timeout) used to surface as a 500 AFTER the profile
+    existed — the one-time password the administrator had to read off the
+    screen was never returned, and on delete/update the 500 suggested nothing
+    had happened while the roster change stood (review 2026-09-27, R2-BC-07).
+    The head is derivable from the roster and settable by ADMIN (PATCH
+    /departments/{id}), so a missed sync is a logged repair, never a lost
+    credential. Returns whether the sync ran."""
+    try:
+        await _sync_department_head(actor, user_id, role, department_id)
+        return True
+    except Exception:  # noqa: BLE001 — the roster write stands; the head is repairable
+        log.warning("department head sync failed after %s of user %s — the roster change "
+                    "stands; set departments.head_user_id by hand (PATCH /departments/{id})",
+                    what, user_id, exc_info=True)
+        return False
 
 
 async def _validate_department(org_id, department_id) -> None:
@@ -329,7 +439,8 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
     # 422, rather than letting a bad value reach the DB CHECK as a 409.
     if body.role not in CREATABLE_ROLES:
         raise HTTPException(422, f"Role '{body.role}' cannot be assigned")
-    if not _can_manage(actor, body.role, body.department_id):
+    fam = await _actor_family(actor)
+    if not _can_manage(actor, body.role, body.department_id, fam):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to create this account")
     await _validate_department(actor["org_id"], body.department_id)
     otp = generate_otp()
@@ -350,6 +461,9 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
         # looked to the operator (and to the logs) like "pick another
         # username". Anything not a genuine conflict now surfaces as a 500 and
         # is logged by the request middleware, which is how it gets found.
+    # Before the response is built, and never allowed to lose it: the OTP
+    # below is the only copy the administrator will ever see.
+    await _sync_department_head_safe(actor, row["id"], body.role, body.department_id, "create")
     # OTP is shown on the creator's screen (email delivery is best-effort, added later).
     return {"user": _public(row), "otp": otp}
 
@@ -386,9 +500,10 @@ async def list_deleted_users(actor: dict = Depends(require_role(ADMIN, *MANAGER_
         rows = await conn.fetch(
             "SELECT id,username,full_name,role,department_id,updated_at FROM profiles"
             " WHERE is_deleted=true AND org_id=$1 ORDER BY updated_at DESC", actor["org_id"])
+    fam = await _actor_family(actor)
     out = []
     for r in rows:
-        if not _can_manage(actor, r["role"], r["department_id"]):
+        if not _can_manage(actor, r["role"], r["department_id"], fam):
             continue
         out.append({
             "id": str(r["id"]), "username": _DELETED_SUFFIX_RE.sub("", r["username"]),
@@ -454,7 +569,8 @@ async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *M
             user_id, actor["org_id"])
         if target is None:
             raise HTTPException(404, "User not found")
-        if not _can_manage(actor, target["role"], target["department_id"]):
+        fam = await _actor_family(actor)
+        if not _can_manage(actor, target["role"], target["department_id"], fam):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to delete this account")
         # Mangle the username so it's released for reuse — profiles_username_key
         # is a plain UNIQUE constraint with no is_deleted scoping, so a bare soft
@@ -468,6 +584,8 @@ async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *M
             " username=username || '__deleted_' || replace(id::text,'-',''), updated_at=now()"
             " WHERE id=$1 AND org_id=$2",
             user_id, actor["org_id"])
+    # A deleted account heads nothing (role=None: no department qualifies).
+    await _sync_department_head_safe(actor, user_id, None, None, "delete")
     return {"ok": True}
 
 
@@ -500,7 +618,8 @@ async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN,
             " FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=false", user_id, actor["org_id"])
         if target is None:
             raise HTTPException(404, "User not found")
-        if not _can_manage(actor, target["role"], target["department_id"]):
+        fam = await _actor_family(actor)
+        if not _can_manage(actor, target["role"], target["department_id"], fam):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to reset this account")
         row = await conn.fetchrow(
             "UPDATE profiles SET password_hash=$1, must_change_password=true,"
@@ -545,8 +664,9 @@ async def update_user(user_id: str, body: UpdateUserReq,
         # so a manager can't move a USER out of their department, or promote one.
         new_role = fields.get("role", target["role"])
         new_dept = fields.get("department_id", target["department_id"])
-        if not _can_manage(actor, target["role"], target["department_id"]) or \
-           not _can_manage(actor, new_role, new_dept):
+        fam = await _actor_family(actor)
+        if not _can_manage(actor, target["role"], target["department_id"], fam) or \
+           not _can_manage(actor, new_role, new_dept, fam):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to edit this account")
         if "department_id" in fields:
             await _validate_department(actor["org_id"], fields["department_id"])
@@ -564,4 +684,6 @@ async def update_user(user_id: str, body: UpdateUserReq,
         row = await conn.fetchrow(
             f"UPDATE profiles SET {', '.join(sets)}, updated_at=now()"
             f" WHERE id=${len(args)-1} AND org_id=${len(args)} RETURNING *", *args)
+    if "role" in fields or "department_id" in fields:
+        await _sync_department_head_safe(actor, user_id, row["role"], row["department_id"], "update")
     return _public(row)

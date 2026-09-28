@@ -36,8 +36,10 @@ navigation; draft → submit workflow.
 ### Document export
 JSON (full snapshot) · CSV (status‑summary + per‑task rows, UTF‑8 BOM) ·
 PDF (A4 table + GMP sign‑off block: Prepared/Reviewed/Approved + dates)
-— *not implemented; out of scope per [`docs/SCOPE.md`](SCOPE.md), WWF is a
-non‑GMP planning tool* · Markdown digest (pushed to AI agents).
+— *the weekly-document PDF is not implemented; QC documents (CoQ .docx, the
+A4 specification page, DocEngine PDFs) and e‑signatures ARE implemented — see
+[`docs/SCOPE.md`](SCOPE.md) "Status 2026-09-27"* · Markdown digest (pushed to
+AI agents).
 
 ### Automated weekly snapshot
 In‑process asyncio job (Thu 18:00 UTC) captures the closing week → writes JSON +
@@ -61,8 +63,9 @@ schema/workflow changes with human approval; proposal lifecycle
 pending → approved → rejected → applied.
 
 ### User & access management
-JWT sessions (configurable TTL, 12 h default); six roles — operator, HOD, QA
-officer, qualified person, executive, admin; department affiliation +
+JWT sessions (configurable TTL, 15 min default in `config.py`); 14 roles (`backend/app/roles.py`:
+ADMIN, OWNER/CEO/COO, the eight department managers QA_MGR/QC_MGR/PR_MGR/
+WH_MGR/SE_MGR/CU_MGR/IR_MGR/MU_MGR, QP, USER); department affiliation +
 cross‑department flag; admin provisioning with one‑time temporary password;
 self‑service password reset (email or shown‑once code); forced first‑login
 change; login‑attempt limiting with timed lockout.
@@ -70,11 +73,13 @@ change; login‑attempt limiting with timed lockout.
 ### Compliance & audit
 Soft delete everywhere (`is_deleted`, 10‑year retention, no hard erase);
 hash‑chained audit trail on every write; Row‑Level Security at the DB layer;
-UTC timestamps; electronic‑signature metadata — *not implemented; out of
-scope per [`docs/SCOPE.md`](SCOPE.md), WWF is a non‑GMP planning tool*.
+UTC timestamps; electronic signatures — *implemented* (`backend/app/api/qc/signatures.py`,
+append‑only since tasks 0061, the role of record must sign since 2026‑09‑27);
+whether these modules are operated as controlled electronic records is the
+open decision in [`docs/SCOPE.md`](SCOPE.md).
 
 ### Internationalization & theming
-Bilingual UI (English + second language), runtime switch; six visual themes,
+Bilingual UI (English + second language), runtime switch; 35 visual skins,
 persisted per device; fully token‑driven design system (CSS custom properties).
 
 ## Technology stack
@@ -83,20 +88,17 @@ persisted per device; fully token‑driven design system (CSS custom properties)
 |---|---|
 | API runtime | Python 3.12, FastAPI (async), Uvicorn |
 | Database | PostgreSQL 17 + pgvector |
-| ORM / driver | SQLAlchemy 2.0 async + psycopg3 |
+| Driver | asyncpg (raw SQL); two alembic chains (`alembic_users`, `alembic_tasks`) with `schema.*.sql` baselines diffed in CI |
 | Auth | JWT (HS256), bcrypt |
-| DB security | Postgres RLS, two roles (admin bypass / app no‑bypass) |
-| Frontend | React 18, TypeScript (strict), Vite |
-| PDF | jsPDF + jsPDF‑autotable (client‑side) |
-| Icons | Lucide React |
-| Design system | Custom SUMA (CSS custom properties, 6 themes) |
-| AI agents | Letta (stateful, long‑memory) |
-| Vector DB | Qdrant |
-| Embeddings | VoyageAI |
-| RAG | Letta ↔ Qdrant semantic retrieval |
+| DB security | Postgres RLS on every org table, two roles (admin bypass / app no‑bypass), hash‑chained audit log |
+| Frontend | Vanilla JS (`web/gf/*.js`, no build step), service worker, jsdom unit tests + Playwright e2e |
+| Documents | python‑docx / WeasyPrint server‑side (CoQ .docx, A4 specification page); DocEngine PDFs |
+| Design system | Custom (CSS custom properties, skins) |
+| AI agents | Letta (stateful, long‑memory) via DocEngine and the backend's function catalogue |
+| Retrieval | RAGflow datasets (see `docengine/fleet.yaml`) |
 | Scheduler | asyncio background task (in‑process) |
 | Orchestration | Docker Compose |
 | Reverse proxy / TLS | Traefik + Let's Encrypt |
-| CI/CD | GitHub Actions → SSH deploy to VPS |
-| Migrations | Hand‑authored idempotent SQL (IF NOT EXISTS / ON CONFLICT) |
-| Export | JSON, CSV (UTF‑8 BOM), PDF (A4), Markdown |
+| CI/CD | GitHub Actions on a self‑hosted runner; manual‑dispatch deploy through the host's kvm4‑runner `/shell` API |
+| Migrations | Two alembic chains (`alembic_users`, `alembic_tasks`); `schema.*.sql` baselines regenerated from `upgrade head` and diffed in CI |
+| Export | JSON, CSV (UTF‑8 BOM), Markdown; PDFs are produced by the Document Studio and the QC document routes, not by the browser |

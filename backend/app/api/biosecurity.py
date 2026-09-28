@@ -15,8 +15,12 @@ Access model:
   record  — cultivation crew (CU_MGR) AND QA (QA_MGR) + executives + ADMIN. Both,
             because these records straddle the two: the crew refill mats and pull
             filters, QA reads plates and runs the bioassay, and either may verify
-            gowning. Resolving a `pending` event's result (PATCH .../result) is
-            gated the same as recording one — same recorders, same fail gate.
+            gowning. Production (PR_MGR) records too, for the post-harvest rooms
+            it runs (`dry` — decon.assert_room_authority; a record with no room
+            is not kind-restricted) — it was missing, so a gowning check at the
+            dry room needed the cultivation manager (review 2026-09-27, BC-12).
+            Resolving a `pending` event's result (PATCH .../result) is gated the
+            same as recording one — same recorders, same fail gate.
 
 THE ONE GATE, MIRRORED FROM THE DATABASE. A result of `fail` or `below_spec`
 must carry an `action_taken`. It is pre-checked here for a clean 422 with a
@@ -33,36 +37,35 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.config import settings
+from app.api.decon import assert_room_authority
 from app.db import rls
 from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
+from app.worktime import site_today
 
 router = APIRouter(prefix="/decon", tags=["decon"])
 
-_RECORDERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR", "QA_MGR")
+_RECORDERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR", "PR_MGR", "QA_MGR")
 
 # Stay in step with biosecurity_events_kind_check / _result_check in 0053.
 _KINDS = ("ahu_filter", "disinfection_mat", "contact_plate", "sentinel_bioassay", "gowning")
 _RESULTS = ("pass", "fail", "below_spec", "pending")
 _FAIL_RESULTS = ("fail", "below_spec")
+# What `open_only` lists: a failing check nobody has closed AND a pending one
+# awaiting its result (a plated contact plate, a running bioassay). Pending
+# was left out, so a check saved as pending vanished from the only view that
+# fetches open items and could never be resolved from it (review 2026-09-27,
+# BC-10 — the UI side is web/gf/decon-view.js).
+_OPEN_RESULTS = (*_FAIL_RESULTS, "pending")
 
 
-def _site_tz() -> str:
-    return settings.snapshot_tz or "UTC"
-
-
-async def _site_today(c) -> date:
-    """Today AT THE SITE, resolved by Postgres — never `date.today()`."""
-    return await c.fetchval("SELECT (now() AT TIME ZONE $1)::date", _site_tz())
-
-
-async def _room_or_422(c, room_id: str):
+async def _room_or_422(c, room_id: str, user: dict):
     uuid_or_422(room_id, "Unknown or inactive room")
-    room = await c.fetchrow("SELECT id, name FROM rooms WHERE id=$1 AND is_active", room_id)
+    room = await c.fetchrow("SELECT id, name, kind FROM rooms WHERE id=$1 AND is_active", room_id)
     if room is None:
         raise HTTPException(422, "Unknown or inactive room")
+    assert_room_authority(user, room["kind"])
     return room
 
 
@@ -120,9 +123,9 @@ async def list_biosecurity(user: dict = Depends(require_role(*ELEVATED_ROLES)),
             " LEFT JOIN rooms r ON r.id=e.room_id"
             " WHERE ($1::text IS NULL OR e.kind=$1)"
             "   AND ($2::uuid IS NULL OR e.room_id=$2)"
-            "   AND ($3 = false OR e.result IN ('fail','below_spec'))"
+            "   AND ($3 = false OR e.result = ANY($5::text[]))"
             " ORDER BY e.occurred_on DESC, e.created_at DESC LIMIT $4",
-            kind, room_id, open_only, limit)
+            kind, room_id, open_only, limit, list(_OPEN_RESULTS))
     return {"events": [_bio_out(r) for r in rows]}
 
 
@@ -142,8 +145,8 @@ async def create_biosecurity(body: BioIn, user: dict = Depends(require_role(*_RE
                  " record exists to close")
     async with rls(user) as c:
         if body.room_id is not None:
-            await _room_or_422(c, body.room_id)
-        occurred_on = body.occurred_on or await _site_today(c)
+            await _room_or_422(c, body.room_id, user)
+        occurred_on = body.occurred_on or await site_today(c)
         row = await c.fetchrow(
             "INSERT INTO biosecurity_events(org_id, kind, room_id, location,"
             " occurred_on, subject, action, measure_value, measure_unit, result,"
@@ -192,6 +195,15 @@ async def record_biosecurity_result(event_id: str, body: BioResultIn,
                  " positive biosecurity check with no response is the gap this"
                  " record exists to close")
     async with rls(user) as c:
+        # The event's room decides a production manager's authority to
+        # resolve it, the same way it decided their authority to record it.
+        cur = await c.fetchrow(
+            "SELECT e.id, r.kind AS room_kind FROM biosecurity_events e"
+            " LEFT JOIN rooms r ON r.id = e.room_id WHERE e.id=$1", event_id)
+        if cur is None:
+            raise HTTPException(404, "Event not found")
+        if cur["room_kind"] is not None:
+            assert_room_authority(user, cur["room_kind"])
         row = await c.fetchrow(
             "UPDATE biosecurity_events SET result=$1, action_taken=$2,"
             " updated_by=$3, updated_at=now() WHERE id=$4"

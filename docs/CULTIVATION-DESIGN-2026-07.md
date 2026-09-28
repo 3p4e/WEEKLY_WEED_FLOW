@@ -222,9 +222,16 @@ came directly from the owner:
   is a single cultivar and therefore a single batch; occasionally a room holds
   several cultivars, and then **each cultivar in that room is its own batch.**
 - **~2000 plants per flowering room.**
-- **Batch code** like `GP072501` — site prefix + period + sequence.
-- **Plant ID** `<clone-date>_<cultivar>_<seq>`, `seq` incrementing from 1 within
-  the batch.
+- **Batch code** like `GP072501` — cultivar abbreviation + `MMYY` of the
+  cloning month + sequence (the owner's 2026-09-05 wording; the head is
+  enforced on save and the sequence is max + 1, capped at 99 — see
+  `docs/PROPAGATION-2026-09.md`).
+- **Plant ID** `<clone-date>_<batch code>_<seq>`, `seq` incrementing from 1
+  within the batch, for a plant with no known mother. The middle segment was
+  the cultivar until 2026-09-27 (review CS-02): two batches of one cultivar
+  cloned on the same day computed the same ids and the second fill collided
+  on `plants_org_id_plant_code_key`. A plant cut from a known mother carries
+  the owner's clone id `<mother>-<cutting>.<clone>` instead (migration 0066).
 
 Migration `0045_cultivation_identity_lifecycle` implements the shape:
 
@@ -248,6 +255,11 @@ phase is the **batch's**: a whole-room move is one `plant_batches` update plus o
 so the **API must chunk** it into bounded transactions (25–50 plants) — the
 migration defines the shape, the API owns the chunking, and a chunked create is
 not atomic, so a partially-filled batch must be a defined, resumable state.
+(Amended 2026-09-27, review CS2-04: the fill reads its allocation plan and
+writes its FIRST chunk under `pg_advisory_xact_lock('fill:<batch>')`, the key
+propagation's freeze check takes before it counts plants, so a clone run cannot
+join the batch between the plan read and the first insert; later chunks keep
+their own transactions.)
 
 Verified before commit: upgrade + downgrade clean on a real PG16, the
 alembic-head dump matches the regenerated `schema.tasks.sql` under CI
@@ -335,6 +347,17 @@ Four gates, enforced in `app/api/waste.py` rather than left to discipline:
   the equal-and-null case.
 - **Disposal follows witnessing.** The carrier reference closes a chain that has
   to exist first.
+
+A fifth rule sits on the cultivation side (2026-09-27, reviews CS-07 and
+CS2-03): closing a batch as `harvested` settles the plants a manifest declared
+destroyed as `destroyed` (off the end of the seq order, the reason naming the
+manifest) — but only from lines of a **sealed** (witnessed, disposed) manifest,
+and the close is refused (409) while a **draft** line still names the batch. A
+draft is a declaration that can still change or be removed; settling plants from
+it would leave them "destroyed on WM-9" for a manifest that ends up listing
+none. Seal the manifest, or take the line off it, then close the batch. (What
+the waste side still lacks: `add_line` accepting a batch that is already closed
+— a line added after the close settles nothing; see the fix-round-2 hand-back.)
 
 **The reconciliation invariant** — plants declared destroyed per batch, summed
 across every manifest including drafts, may not exceed the batch's plant count —

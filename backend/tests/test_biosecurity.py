@@ -204,7 +204,43 @@ async def test_defaults_to_today_and_filters_by_kind_room_and_open(client, admin
                                 headers=cu_h)).json()["events"]
     assert len(by_room) == 2
 
+    # A plated contact plate awaiting its read is OPEN too: it used to drop out
+    # of the only view that fetches open items the moment it was saved, and
+    # nothing could resolve it from there (review 2026-09-27, BC-10).
+    plated = await _event(client, cu_h, "contact_plate", room_id=room["id"],
+                          subject="Bench plate", result="pending")
+    assert plated.status_code == 201, plated.text
     open_only = (await client.get("/decon/biosecurity?open_only=true",
                                   headers=cu_h)).json()["events"]
-    assert all(e["result"] in ("fail", "below_spec") for e in open_only)
+    assert all(e["result"] in ("fail", "below_spec", "pending") for e in open_only)
     assert any(e["subject"] == "Mat entrance" for e in open_only)
+    assert any(e["subject"] == "Bench plate" for e in open_only), "a pending check is an open item"
+    assert not any(e["subject"] == "AHU-9" for e in open_only), "a pass is not"
+
+
+async def test_production_manager_records_for_dry_rooms_only(client, admin_headers):
+    """Review 2026-09-27, BC-12: everything from the harvest cut onward is
+    production's (DEPARTMENT-MODEL-2026-09), yet a gowning check at the dry
+    room needed the cultivation manager. PR_MGR records now — for the rooms
+    production runs (`dry`), not the grow rooms, and a room-less record is
+    not kind-restricted."""
+    _, pr_h = await _actor(client, admin_headers, "PR_MGR")
+    dry = await _room(client, admin_headers, "bio_dry", "Drying 1", kind="dry")
+    flower = await _room(client, admin_headers, "bio_flw", "Flowering 1", kind="flower")
+    ok = await _event(client, pr_h, "gowning", room_id=dry["id"], subject="Entering dry", result="pass")
+    assert ok.status_code == 201, ok.text
+    denied = await _event(client, pr_h, "gowning", room_id=flower["id"], subject="x", result="pass")
+    assert denied.status_code == 403, denied.text
+    roomless = await _event(client, pr_h, "gowning", subject="Zone crossing", result="pass")
+    assert roomless.status_code == 201, roomless.text
+    # resolving follows the same room authority
+    pend = await _event(client, admin_headers, "contact_plate", room_id=flower["id"],
+                        subject="Grow plate", result="pending")
+    r = await client.patch(f"/decon/biosecurity/{pend.json()['id']}/result",
+                           json={"result": "pass"}, headers=pr_h)
+    assert r.status_code == 403
+    pend_dry = await _event(client, pr_h, "contact_plate", room_id=dry["id"],
+                            subject="Dry plate", result="pending")
+    r = await client.patch(f"/decon/biosecurity/{pend_dry.json()['id']}/result",
+                           json={"result": "pass"}, headers=pr_h)
+    assert r.status_code == 200, r.text

@@ -15,6 +15,12 @@ RUN rm -f  /usr/share/nginx/html/Dockerfile /usr/share/nginx/html/nginx.conf \
  && find /usr/share/nginx/html -maxdepth 1 -name '*.md' -delete
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Trusted-proxy resolution (review 2026-09-27, R2-BC-03): the hook resolves
+# the Traefik container's address at start and writes the set_real_ip_from
+# lines nginx.conf includes from /etc/nginx/wwf-realip.d/. The stock image's
+# entrypoint runs every executable *.sh in /docker-entrypoint.d before nginx.
+COPY docker-entrypoint.d/05-wwf-realip.sh /docker-entrypoint.d/05-wwf-realip.sh
+RUN chmod 0755 /docker-entrypoint.d/05-wwf-realip.sh && mkdir -p /etc/nginx/wwf-realip.d
 
 EXPOSE 80
 # NOTE: intentionally no HEALTHCHECK — Traefik (host network mode here) won't

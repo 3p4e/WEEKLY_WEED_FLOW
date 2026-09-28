@@ -434,7 +434,8 @@ jobs:
           RUNNER_TOKEN: ${{ secrets.KVM4_RUNNER_TOKEN }}
           WORK: /opt/wwf-rehearsal/run-${{ github.run_id }}_${{ github.run_attempt }}
         # WORK MUST LIVE UNDER /opt, NOT /tmp. The kvm4-runner's /shell and
-        # /file/write execute inside the gh-runner-wwf CONTAINER, whose / is a
+        # /file/write execute inside the kvm4-runner CONTAINER (not gh-runner-wwf;
+        # see ops/README.md and ops/agent/rsh.py), whose / is a
         # containerd overlay — but `docker run -v <path>:...` is serviced by the
         # HOST's daemon and resolves <path> against the HOST. Under /tmp those are
         # two different filesystems: the tarball unpacked into the container while

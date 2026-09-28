@@ -251,9 +251,9 @@ GF.WWF._reportMarkup = () => {
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(-1)" title="${AL('Previous week', 'Претходна недела')}">◀</button>
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(0)" title="${AL('Current week', 'Тековна недела')}">${AL('Today', 'Денес')}</button>
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(1)" title="${AL('Next week', 'Следна недела')}">▶</button>
-        <input type="date" value="${GF.WWF._refWeekStart()}" title="${AL('Jump to any week', 'Скокни на било која недела')}"
-          onchange="GF.WWF.jumpReportWeek(this.value)"
-          style="font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)">
+        <span class="rv-datefield" title="${AL('Jump to any week', 'Скокни на било која недела')}"
+          >${GF.dateField('rv-jump', { value: GF.WWF._refWeekStart(), clearable: false,
+             onPick: (v) => { if (v) GF.WWF.jumpReportWeek(v); } })}</span>
       </div>
       <button class="btn btn-sm" onclick="GF.export.open('${isR ? 'report' : 'plan'}')"
         title="${AL('Export raw task data as CSV / JSON', 'Извези сурови податоци како CSV / JSON')}">
@@ -282,15 +282,14 @@ GF.WWF._reportMarkup = () => {
   // ── Overdue (due_date passed, not completed) ──
   let overdueList = '';
   if (isR && d.overdue && d.overdue.length) {
-    // Local-midnight anchored on both sides (not `new Date()` vs a UTC-parsed
-    // due_date): a positive-offset facility would otherwise see its "now" sit
-    // ahead of the UTC-midnight due date by the timezone offset, adding an
-    // extra day to every count (same idiom as GF.WWF.shiftReportWeek above).
-    const today = new Date(GF.todayISO() + 'T00:00:00');
+    // Whole days from the due date to the facility's today — GF.daysSince,
+    // the one "days since a calendar day" rule (review 2026-09-27, FE-17);
+    // a due date today or in the future still reads as 1 day late here,
+    // because the server listed it as overdue.
     overdueList = `<div style="margin:18px 0" id="report-overdue">
       <div style="font-weight:700;font-size:14px;color:var(--red);margin-bottom:8px">${GF.icon('flag', 'icon', 'var(--red)')} ${AL('Overdue', 'Задоцнети')} (${d.overdue.length})</div>
       ${d.overdue.map(t => {
-        const daysLate = Math.max(1, Math.round((today - new Date(t.due_date + 'T00:00:00')) / 86400000));
+        const daysLate = Math.max(1, GF.daysSince(t.due_date) || 0);
         return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--red-soft);border-left:4px solid var(--red);border-radius:9px;margin-bottom:5px">
           <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink)">${GF.esc(t.title)}</span>
           <span style="font-size:11.5px;color:var(--ink-3);font-family:var(--mono);white-space:nowrap">${GF.esc(t.due_date)}</span>
