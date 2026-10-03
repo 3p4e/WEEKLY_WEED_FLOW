@@ -14,6 +14,17 @@ from fastapi import HTTPException
 from app.config import settings
 
 DE_UNAVAILABLE = "DocEngine unavailable"
+DE_TIMED_OUT = "DocEngine is still answering"
+
+# The budget for one Studio chat turn. The chain above this proxy is
+# frontend nginx (180 s) -> api.js (190 s), so the backend has to answer
+# BEFORE nginx cuts the connection or the browser sees a generic failure
+# instead of the 504 below. 170 s leaves that margin. DocEngine's own budget
+# for one agent turn is 900 s (LETTA_READ_TIMEOUT); a question over a whole
+# annex on a reasoning model can exceed the chain, and when it does the
+# honest answer is "still working", not "unavailable" (review 2026-09-27,
+# DI-12). app/api/qms.py's studio_chat passes this as its timeout.
+DE_CHAT_TIMEOUT_S = 170.0
 
 
 def de_client(timeout: float = 20.0) -> httpx.AsyncClient:
@@ -46,17 +57,32 @@ def _assert_forwardable(path: str) -> None:
 
 
 async def de_forward(method: str, path: str, json_body: dict | None = None,
-                     timeout: float = 20.0, client_factory=None) -> httpx.Response:
+                     timeout: float = 20.0, client_factory=None,
+                     org_id: str | None = None, params: dict | None = None) -> httpx.Response:
     """Forward to DocEngine. 503 when unconfigured or the upstream is down/5xx;
-    a 4xx (e.g. a pp_verify FAIL 422) is surfaced verbatim with its own detail
-    so the author sees the verify report — never masked, never shipped."""
+    504 when the upstream is reachable but did not answer inside `timeout`
+    (it is still working — the two are different answers and the operator
+    acts differently on each); a 4xx (e.g. a pp_verify FAIL 422) is surfaced
+    verbatim with its own detail so the author sees the verify report —
+    never masked, never shipped.
+
+    `org_id` is sent as X-Org-Id. DocEngine scopes its registry by it
+    (review 2026-09-27, DI-13): every caller that acts for a signed-in user
+    passes `user["org_id"]`, so one organisation never lists, downloads or
+    revises another's controlled documents. `params` are query parameters
+    (registry paging)."""
     _assert_forwardable(path)
     if not settings.docengine_api_key:
         raise HTTPException(status_code=503, detail=DE_UNAVAILABLE)
     factory = client_factory or de_client
+    headers = {"X-Org-Id": str(org_id)} if org_id else None
     try:
         async with factory(timeout) as c:
-            r = await c.request(method, path, json=json_body)
+            r = await c.request(method, path, json=json_body, headers=headers, params=params)
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail=f"{DE_TIMED_OUT} (no reply within {timeout:.0f}s); try again shortly")
     except httpx.HTTPError:
         raise HTTPException(status_code=503, detail=DE_UNAVAILABLE)
     if r.status_code >= 500:

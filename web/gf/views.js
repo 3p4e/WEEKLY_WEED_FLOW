@@ -204,10 +204,17 @@ GF.views = {
         case 'created':        return AL(`New: ${t}`, `Ново: ${t}`);
         case 'ack':            return p.accepted ? AL(`Accepted: ${t}`, `Прифатено: ${t}`) : AL(`Declined: ${t}`, `Одбиено: ${t}`);
         case 'report_locked':  return AL(`Weekly ${p.kind||''} locked`, `Заклучен неделен запис`) + (p.week_start ? ` (${p.week_start})` : '');
-        case 'batch_added':    return `${p.plant_count||''}× ${p.strain||''} → ${p.room||''}`;
-        case 'batch_moved':    return `${p.strain||''}: ${p.old_room||''} → ${p.room||''}`;
-        case 'batch_closed':   return AL(`Batch closed: ${p.strain||''}`, `Затворена серија: ${p.strain||''}`);
-        default:               return t || a.verb;
+        // Batch events: `strain`/`room` per the cultivation.py contract, with
+        // the older `cultivar` / no-room shape as fallback (R2-FE-04).
+        case 'batch_added':    return `${p.code ? p.code + ' · ' : ''}${p.plant_count ?? '?'}× ${p.strain || p.cultivar || ''}${p.room || p.room_name ? ' → ' + (p.room || p.room_name) : ''}`;
+        case 'clone_run_started': return `${p.cultivar||''} · ${p.planned_count||''} cuttings`;
+        case 'batch_moved':    return `${p.code ? p.code + ' · ' : ''}${p.strain || p.cultivar || ''}: ${p.old_room || p.old_phase || '?'} → ${p.room || p.phase || '?'}`;
+        case 'handoff':        return AL(`Handoff to ${p.to_dept||''}: ${t}`, `Префрлање до ${p.to_dept||''}: ${t}`);
+        case 'handoff_resolved': return AL(`Handoff ${p.status||''}: ${t}`, `Префрлање ${({accepted:'прифатено',rejected:'одбиено',cancelled:'откажано'})[p.status] || p.status || ''}: ${t}`);
+        case 'oos_opened':     return `${p.oos_number||''} · ${p.batch_id||''}`;
+        case 'decon_swab_positive': return AL(`Positive swab ${p.swab_code||''} — ${p.room||''}`, `Позитивен брис ${p.swab_code||''} — ${p.room||''}`);
+        // No backend code emits batch_closed; an unknown verb reads as words.
+        default:               return t || String(a.verb || '').replace(/_/g, ' ');
       }
     };
     // Severity from real fields: overdue + the quality-automation stuck reasons
@@ -610,8 +617,23 @@ GF.views = {
       ? `<button class="btn btn-sm" onclick="GF.WWF.openDeletedUsers()">${GF.icon('box','icon')}${AL('Removed accounts','Отстранети сметки')}</button>`
         + `<button class="btn btn-orange btn-sm" onclick="GF.openUser()">${GF.icon('plus','icon','currentColor')}${GF.t('add_user')}</button>`
       : `<span class="role-lock">${GF.icon('shield','icon','var(--ink-3)')}${GF.t('view_only')}</span>`;
+    // Departments and their heads (ADMIN): the head is who a handoff to the
+    // department is addressed to (A-3), and PATCH /departments had no screen
+    // (review 2026-09-27, INV-06 / R2-FE-14).
+    const isAdmin = !!(GF.WWF && GF.WWF.isAdmin && GF.WWF.isAdmin());
+    const deptStrip = isAdmin && (GF.DEPTS || []).length
+      ? `<div class="team-depts" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px">${GF.DEPTS.map(d => {
+          const head = d.head_user_id && GF.PEOPLE[d.head_user_id];
+          return `<div class="team-dept" data-dept="${GF.esc(d.id)}" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)">
+            <span class="dept-dot" style="background:${d.color}"></span>
+            <span style="font-size:12.5px;font-weight:600">${GF.esc(GF.depName(d.id))}</span>
+            <span style="font-size:11.5px;color:var(--ink-3)">${head ? GF.esc(head.name) : AL('no head', 'без раководител')}</span>
+            <button class="icon-btn btn-sm" title="${GF.esc(AL('Set head', 'Постави раководител'))}" onclick="GF.WWF.openDeptHeadForm('${GF.esc(d.id)}')">${GF.icon('user')}</button>
+          </div>`; }).join('')}</div>`
+      : '';
     return GF.viewHead('team','team_sub', addBtn)
       + `<div class="team-count">${ids.length} ${GF.t('members')} · ${GF.t('your_role')}: <b>${GF.roleLabel(GF.curRole())}</b></div>`
+      + deptStrip
       + `<div class="team-grid">${cards}</div>`;
   },
 };

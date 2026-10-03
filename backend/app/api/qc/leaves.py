@@ -1,12 +1,11 @@
 from app.db import rls
-from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.roles import ELEVATED_ROLES
 from datetime import date
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .common import _WRITERS, _uuid_or_404, router
+from .common import _WRITERS, _uuid_or_404, mint_series_number, router
 
 
 _WATER_GRADES = ("TW", "BW", "TR", "RO")
@@ -35,11 +34,8 @@ _TRN_TRANSITIONS = {"draft": {"in_transit"}, "in_transit": {"received"}, "receiv
 # guard reads the CURRENT status, so setting `report`/`shelf_life` in the same
 # PATCH that closes a study still works.
 #
-# Water tests are DELIBERATELY not frozen. qc_water_tests carries no status or
-# lifecycle column at all, so freezing one would mean first inventing a
-# lifecycle for it — a new feature, not a bug fix, and out of scope for this
-# round. The asymmetry is recorded here so the next reader sees a decision
-# rather than an oversight.
+# Water tests carry no lifecycle column, so they are not frozen as a whole —
+# but their VERDICT is (review 2026-09-27 QC-24, see WaterIn.passed).
 _LEAF_ANNOTATION_FIELDS = {"notes"}
 
 
@@ -63,7 +59,11 @@ class WaterIn(BaseModel):
     grade: str
     result_date: date | None = None
     parameters: dict = Field(default_factory=dict)
-    passed: bool = True
+    # Review 2026-09-27 QC-24: the verdict is REQUIRED — a caller that omits
+    # it used to record a PASS by default. The water-grade limits are not in
+    # the data model (parameters is a free dict), so the verdict cannot be
+    # derived and is stated by the analyst, once: see update_water.
+    passed: bool
     ooe: str | None = Field(default=None, max_length=1000)
     notes: str | None = Field(default=None, max_length=4000)
 
@@ -71,7 +71,6 @@ class WaterIn(BaseModel):
 class WaterPatch(BaseModel):
     result_date: date | None = None
     parameters: dict | None = None
-    passed: bool | None = None
     ooe: str | None = Field(default=None, max_length=1000)
     notes: str | None = Field(default=None, max_length=4000)
 
@@ -176,19 +175,24 @@ async def create_water(body: WaterIn, user: dict = Depends(require_role(*_WRITER
     if body.grade not in _WATER_GRADES:
         raise HTTPException(422, f"grade must be one of: {', '.join(_WATER_GRADES)}")
     async with rls(user) as c:
+        # per-(org, year) register series, never the old cross-tenant sequence (QC-28)
+        wt_no = await mint_series_number(c, user["org_id"], "qc_water_tests", "water_test_id", "PP-WT")
         row = await c.fetchrow(
             "INSERT INTO qc_water_tests(org_id, water_test_id, location, grade, result_date,"
             " parameters, passed, ooe, notes, created_by, updated_by)"
-            f" VALUES ($1, 'PP-WT-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
-            "         lpad(nextval('qc_wt_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4::date,$5,$6,$7,$8,$9,$9) RETURNING *",
+            " VALUES ($1, $10, $2,$3,$4::date,$5,$6,$7,$8,$9,$9) RETURNING *",
             user["org_id"], body.location, body.grade, body.result_date, body.parameters,
-            body.passed, body.ooe, body.notes, user["id"])
+            body.passed, body.ooe, body.notes, user["id"], wt_no)
     return _water_out(dict(row))
 
 
 @router.patch("/water-tests/{wid}")
 async def update_water(wid: str, body: WaterPatch, user: dict = Depends(require_role(*_WRITERS))):
+    """QC-24: the verdict (`passed`) is not in the patch model — it is stated
+    once, at creation, and never flipped in place. A wrong verdict is
+    corrected by a new water-test record citing this one in its notes, so the
+    record of what was asserted, and when, stands. Measurements, the date, the
+    OOE note and notes remain editable."""
     _uuid_or_404(wid, "Water test")
     patch = body.model_dump(exclude_unset=True)
     fields, args = _patch_update(patch, {"ooe", "notes"}, {"result_date"})
@@ -220,16 +224,15 @@ async def create_stability(body: StabilityIn, user: dict = Depends(require_role(
     if body.study_type not in _STAB_TYPES:
         raise HTTPException(422, f"study_type must be one of: {', '.join(_STAB_TYPES)}")
     async with rls(user) as c:
+        study_no = await mint_series_number(c, user["org_id"], "qc_stability_studies", "study_id", "PP-STB")
         row = await c.fetchrow(
             "INSERT INTO qc_stability_studies(org_id, study_id, study_type, material_code,"
             " material_name_en, material_name_mk, batches, started, protocol, schedule, notes,"
             " created_by, updated_by)"
-            f" VALUES ($1, 'PP-STB-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
-            "         lpad(nextval('qc_stb_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,$5,$6,$7::date,$8,$9,$10,$11,$11) RETURNING *",
+            " VALUES ($1, $12, $2,$3,$4,$5,$6,$7::date,$8,$9,$10,$11,$11) RETURNING *",
             user["org_id"], body.study_type, body.material_code, body.material_name_en,
             body.material_name_mk, body.batches, body.started, body.protocol, body.schedule,
-            body.notes, user["id"])
+            body.notes, user["id"], study_no)
     return _stab_out(dict(row))
 
 
@@ -272,14 +275,13 @@ async def list_transports(status: str | None = None, user: dict = Depends(requir
 @router.post("/transports", status_code=201)
 async def create_transport(body: TransportIn, user: dict = Depends(require_role(*_WRITERS))):
     async with rls(user) as c:
+        trn_no = await mint_series_number(c, user["org_id"], "qc_sample_transports", "transport_id", "PP-TRN")
         row = await c.fetchrow(
             "INSERT INTO qc_sample_transports(org_id, transport_id, sample_id, batch_id,"
             " external_lab, tests, notes, created_by, updated_by)"
-            f" VALUES ($1, 'PP-TRN-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
-            "         lpad(nextval('qc_trn_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,$5,$6,$7,$7) RETURNING *",
+            " VALUES ($1, $8, $2,$3,$4,$5,$6,$7,$7) RETURNING *",
             user["org_id"], body.sample_id, body.batch_id, body.external_lab, body.tests,
-            body.notes, user["id"])
+            body.notes, user["id"], trn_no)
     return _trn_out(dict(row))
 
 

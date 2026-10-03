@@ -35,8 +35,10 @@ async def dbpool():
     await db.init()
     assert db.ready(), "db.init() did not open a pool despite a DSN being set"
     # documents references jobs, so truncate together. No RESTART IDENTITY:
-    # both tables key on uuids, so there is no sequence to restart.
-    await db.pool().execute("TRUNCATE docengine.documents, docengine.jobs CASCADE")
+    # both tables key on uuids, so there is no sequence to restart. workers
+    # (heartbeats, DI2-02) is per-process state that must not leak between
+    # tests either.
+    await db.pool().execute("TRUNCATE docengine.documents, docengine.jobs, docengine.workers CASCADE")
     try:
         yield db.pool()
     finally:

@@ -5,6 +5,8 @@ the iCoA through the design-system shell. Both: № never "No.", MK-GMP footer,
 every DB value escaped, nothing fabricated (DRAFT watermark, unselected
 phenotype, roles-of-record vs executed signatures).
 """
+import uuid
+
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -53,8 +55,11 @@ async def test_spec_document_renders_the_archive_layout(client, admin_headers):
     assert "Draft — not approved" in doc
     # the app has no verified phenotype — no gold-tag selection is fabricated
     assert "INDICA-DOMINANT" not in doc
-    # signatories are the locked spec roles-of-record
-    assert "Blagoj Nikolov" in doc and "Jovana Romevska Cvetkovski" in doc
+    # a DRAFT names no signatory (review 2026-09-27 QC-16: the block prints the
+    # RECORDED approver, never names hard-coded in the template), and the QA
+    # slot says the system captures no QA review
+    assert "Blagoj Nikolov" not in doc and "Jovana Romevska Cvetkovski" not in doc
+    assert "QA review not captured" in doc
 
 
 async def test_spec_document_approved_drops_watermark_and_dates(client, admin_headers):
@@ -66,6 +71,89 @@ async def test_spec_document_approved_drops_watermark_and_dates(client, admin_he
                             headers=admin_headers)).text
     assert "Draft — not approved" not in doc
     assert "Grade I" in doc and "28.00% ± 2.00%" in doc and "26.00 – 30.00%" in doc
+    # the QC signatory is the person the app recorded as approving (QC-16)
+    assert "Test User" in doc and "Blagoj Nikolov" not in doc
+    assert "QA review not captured" in doc
+    # … and is labelled as the approver only (QR-10): approve refuses the
+    # author, so "Prepared & Approved by" asserted an act that did not happen
+    assert "Approved by" in doc and "Одобрил" in doc
+    assert "Prepared &amp; Approved by" not in doc and "Изготвил и одобрил" not in doc
+
+
+async def _named_actor(client, admin_headers, role, full_name):
+    user, otp = await create_user(client, admin_headers, role=role, full_name=full_name)
+    token = await login_and_set_password(client, user["username"], otp)
+    return user, {"Authorization": f"Bearer {token}"}
+
+
+async def test_product_document_prints_the_stored_window_and_only_recorded_people(client, admin_headers):
+    """The A4 page of a product of the official catalogue (plan commit 2).
+    Nominal ± window as the product stores it, the QCSP 001 header, the DRAFT
+    watermark rule as on the ladder page — and NO named signatory the system
+    never captured: the author the row records, the approver once approved,
+    and a blank block otherwise."""
+    _, author_h = await _named_actor(client, admin_headers, "QC_MGR", "Ana Author")
+    _, approver_h = await _named_actor(client, admin_headers, "QC_MGR", "Boris Approver")
+    cv = (await client.post("/cultivation/cultivars", json={"code": "GP", "name": "Grape Pie"},
+                            headers=admin_headers)).json()
+    r = await client.post("/qc/products", json={"cultivar_id": cv["id"], "grade": 26,
+                                                "product_code": "GP_THC26:CBD1",
+                                                "window_min": 23.4, "window_max": 28.59},
+                          headers=author_h)
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    r = await client.get(f"/qc/products/{pid}/document", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/html")
+    doc = r.text
+    assert "Grape Pie" in doc and "GP_THC26:CBD1" in doc
+    assert "Potency THC 26" in doc and "Јачина THC 26" in doc
+    assert "26.00% ± 2.60%" in doc and "23.40 – 28.59%" in doc
+    assert "QCSP 001_GP-THC26_v.03" in doc and "QCSP 001 v.03" in doc and "1 | 1" in doc
+    assert "№" in doc and "No." not in doc and "EU GMP" not in doc
+    assert "Draft — not approved" in doc
+    assert "INDICA-DOMINANT" not in doc
+    # Only recorded people: the author, with her role; the approver block blank.
+    assert "Ana Author" in doc and "Prepared by" in doc and "QC Manager" in doc
+    assert "Blagoj Nikolov" not in doc and "Jovana Romevska Cvetkovski" not in doc
+    assert "Boris Approver" not in doc
+    assert '<div class="ap-name"></div>' in doc, "an approver the system never recorded is left blank"
+
+    r = await client.post(f"/qc/products/{pid}/approve", headers=approver_h)
+    assert r.status_code == 200, r.text
+    eff = r.json()["effective_date"]
+    doc = (await client.get(f"/qc/products/{pid}/document", headers=admin_headers)).text
+    assert "Draft — not approved" not in doc and 'class="draft-wm"' not in doc
+    assert "Boris Approver" in doc and "Approved by" in doc
+    assert f"{eff[8:10]}.{eff[5:7]}.{eff[0:4]}" in doc, "the approval date the system recorded"
+    assert "Ana Author" in doc
+
+    assert (await client.post(f"/qc/products/{pid}/supersede", headers=approver_h)).status_code == 200
+    doc = (await client.get(f"/qc/products/{pid}/document", headers=admin_headers)).text
+    assert "Superseded — not in force" in doc
+
+
+async def test_product_document_gates_and_fitted_window(client, admin_headers):
+    """Base USER cannot read it; an unknown id is 404; a fitted (narrower)
+    window prints exactly as stored, under its own document version."""
+    cv = (await client.post("/cultivation/cultivars", json={"code": "CJ", "name": "Cap Junky"},
+                            headers=admin_headers)).json()
+    r = await client.post("/qc/products", json={"cultivar_id": cv["id"], "grade": 28,
+                                                "product_code": "CJ_THC28:CBD1",
+                                                "window_min": 26.4, "window_max": 29.59,
+                                                "doc_version": "fitted 2026-09-15"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    doc = (await client.get(f"/qc/products/{pid}/document", headers=admin_headers)).text
+    assert "28.00% ± 1.60%" in doc and "26.40 – 29.59%" in doc
+    assert "QCSP 001_CJ-THC28_fitted 2026-09-15" in doc and "QCSP 001 fitted 2026-09-15" in doc
+    _, user_h = await _actor(client, admin_headers, "USER")
+    assert (await client.get(f"/qc/products/{pid}/document", headers=user_h)).status_code == 403
+    assert (await client.get(f"/qc/products/{uuid.uuid4()}/document",
+                             headers=admin_headers)).status_code == 404
+    assert (await client.get("/qc/products/not-an-id/document",
+                             headers=admin_headers)).status_code == 404
 
 
 async def test_spec_document_escapes_hostile_cultivar_name(client, admin_headers):

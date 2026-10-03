@@ -75,6 +75,18 @@ async def test_extract_falls_back_to_voice_capture(client, admin_headers, org, m
     assert r.json()["candidates"][0]["title"] == "Ship the EU GMP dossier"
 
 
+async def test_intake_bodies_are_bounded(client, admin_headers, org):
+    """Review 2026-09-27, BC-20: BilingualReq (any USER) and ExtractReq were
+    unbounded up to the 32 MB middleware cap and forwarded to Letta in full."""
+    r = await client.post("/intake/bilingual", json={"title": "x" * 301}, headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.post("/intake/bilingual", json={"title": "ok", "description": "d" * 10_001},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.post("/intake/extract", json={"text": "t" * 200_001}, headers=admin_headers)
+    assert r.status_code == 422
+
+
 async def test_extract_short_text_rejected(client, admin_headers, org):
     r = await client.post("/intake/extract", json={"text": "hi"}, headers=admin_headers)
     assert r.status_code == 422

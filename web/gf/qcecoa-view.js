@@ -124,7 +124,10 @@
     const items = raw.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
       const parts = line.split('|').map(p => p.trim());
       const it = { raw_label: parts[0] };
-      if (parts[1]) { it.raw_value = parts[1]; const n = parseFloat(parts[1]); if (!isNaN(n)) it.numeric_value = n; }
+      // QR-01 / QC-03: the TEXT as printed is what travels; the server reads
+      // the number under the laboratory's own decimal separator ("0,6" on a
+      // ',' laboratory is 0.6, not the 0 that parseFloat made of it).
+      if (parts[1]) it.raw_value = parts[1];
       if (parts[2]) it.unit = parts[2];
       if (parts[3]) it.lab_verdict = parts[3];   // lab's stated verdict — reference only
       return it;
@@ -170,13 +173,10 @@
     const val = gv('qec-ex-val-' + eid);
     const unit = gv('qec-ex-unit-' + eid);
     const pid = gv('qec-ex-param-' + eid);
-    const body = {};
-    if (val === '') body.numeric_value = null;   // deliberately cleared → stays unmeasured
-    else {
-      const n = parseFloat(val);
-      if (isNaN(n)) return GF.toast(AL('Value must be numeric', 'Вредноста мора да е бројчена'), 'error');
-      body.numeric_value = n;
-    }
+    // QR-01: the corrected value goes as the transcribed TEXT (raw_value); the
+    // server derives the numeric under the laboratory's decimal separator and
+    // refuses what it cannot read. '' clears it — the line stays unmeasured.
+    const body = { raw_value: val };
     body.unit = unit || null;
     if (pid) body.parameter_id = pid;            // re-map → server re-grades
     try {
@@ -499,7 +499,7 @@
       if (!canWrite() || st.editEx !== e.id) return row;
       return row + `
       <tr><td colspan="4"><div class="qms-dl" style="align-items:center;flex-wrap:wrap">
-        <input id="qec-ex-val-${e.id}" value="${GF.esc(e.numeric_value != null ? e.numeric_value : '')}" placeholder="${AL('Value', 'Вредност')}" style="width:100px">
+        <input id="qec-ex-val-${e.id}" value="${GF.esc(e.raw_value != null ? e.raw_value : (e.numeric_value != null ? e.numeric_value : ''))}" placeholder="${AL('Value as printed', 'Вредност како е отпечатена')}" style="width:110px">
         <input id="qec-ex-unit-${e.id}" value="${GF.esc(e.unit || '')}" placeholder="${AL('Unit', 'Единица')}" style="width:80px">
         <select id="qec-ex-param-${e.id}">
           <option value="">${AL('Keep parameter', 'Задржи параметар')}</option>
@@ -563,7 +563,7 @@
           const ok = r.verdict === 'VERIFIED';
           return `<div class="qms-row" style="gap:8px">
             ${chip(AL(ok ? 'Verified' : 'Discrepancy', ok ? 'Потврдено' : 'Отстапување'), ok ? 'var(--green)' : 'var(--red)')}
-            <span class="ana-note mono">${GF.esc((r.verified_at || '').replace('T', ' ').slice(0, 16))}</span>
+            <span class="ana-note mono">${GF.esc(GF.fmtDateTime(r.verified_at))}</span>
             <span class="ana-note">${GF.esc(String(r.mismatches)) + '/' + GF.esc(String(r.checked))} ${AL('mismatches', 'отстапувања')}</span>
           </div>`;
         }).join('')}</div>`
@@ -597,7 +597,8 @@
         const rows = files.map(f => `<div class="qms-row" style="gap:8px;align-items:center">
           <span class="qms-title">${GF.esc(f.filename)} <span class="ana-note">${GF.esc(String(Math.round((f.size_bytes || 0) / 1024)))} KB</span></span>
           <span class="ana-note mono" title="SHA-256">${GF.esc((f.sha256 || '').slice(0, 12))}…</span>
-          <button class="btn btn-sm" onclick="GF.WWF.qcEcoaDlOriginal('${f.id}','${GF.esc((f.filename || 'original').replace(/'/g, ''))}')">${AL('Download', 'Преземи')}</button>
+          <button class="btn btn-sm" data-id="${GF.esc(f.id)}" data-name="${GF.esc(f.filename || 'original')}"
+            onclick="GF.WWF.qcEcoaDlOriginal(this.dataset.id, this.dataset.name)">${AL('Download', 'Преземи')}</button>
         </div>`).join('');
         return `<div class="ana-panel" style="margin-top:10px;padding:10px">
           <div class="ana-pt" style="margin-bottom:6px">${AL('Original documents (SHA-256 custody)', 'Оригинални документи (SHA-256 старателство)')}</div>
@@ -675,11 +676,13 @@
       <div class="panel ana-panel" style="margin-bottom:12px">
         <div class="ana-pt" style="margin-bottom:8px">${AL('Register an incoming CoA', 'Регистрирај дојдовен CoA')}</div>
         <div class="qcs-form">
-          <input id="qec-batch" placeholder="${AL('Batch id', 'Серија')}">
+          ${GF.batchCodeField('qec-batch', {
+            cultivars: GF.batchCodeCultivars(() => { if (GF.state.view === 'qcecoa') GF.render.all(); }),
+            placeholder: AL('Batch id', 'Серија'), selPlaceholder: AL('strain…', 'сорта…'), selTitle: AL('Strain', 'Сорта') })}
           <input id="qec-src" placeholder="${AL('Source lab', 'Изворна лаб.')}">
           <select id="qec-spec"><option value="">${AL('Specification…', 'Спецификација…')}</option>${(st.specs || []).map(s => `<option value="${s.id}">${GF.esc(s.spec_id + ' · ' + (s.material_code || ''))}</option>`).join('')}</select>
           <input id="qec-mat" placeholder="${AL('Material (optional)', 'Материјал (опц.)')}">
-          <input id="qec-rd" type="date" title="${AL('Report date', 'Датум на извештај')}">
+          ${GF.dateField('qec-rd', { placeholder: AL('Report date', 'Датум на извештај') })}
           <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaCreate()">${GF.t('create_task') || 'Create'}</button>
         </div>
       </div>` : '';

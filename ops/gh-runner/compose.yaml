@@ -1,0 +1,18 @@
+# The single self-hosted runner. Host networking and the docker socket are what
+# ci.yml's service containers (Postgres on 5432, nginx on 8091) are written for.
+#
+# The registration (.runner/.credentials) lives in the container's writable
+# layer: `docker compose up --force-recreate` or a rebuild throws it away and
+# the runner must be registered again. `restart` / `stop` / `start` keep it.
+services:
+  runner:
+    build: .
+    image: wwf-gh-runner:2.337.0
+    container_name: gh-runner-wwf
+    restart: unless-stopped
+    network_mode: host
+    # GID of /var/run/docker.sock on this host (stat -c %g). Without it the
+    # `runner` user cannot start CI's service containers.
+    group_add: ["988"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

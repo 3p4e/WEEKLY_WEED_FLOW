@@ -27,7 +27,7 @@ GF.WWF.canAudit = () => AUDIT_ROLES.includes((GF.API.user || {}).role);
 // elevated role still reads the trail and the integrity strip, just no button.
 const AUDIT_VERIFY_ROLES = ['ADMIN', 'QA_MGR', 'QP'];
 GF.WWF.canVerifyAudit = () => AUDIT_VERIFY_ROLES.includes((GF.API.user || {}).role);
-GF.WWF._audit = { entries: [], before: null, tables: null, verify: null, verifyBusy: false, hasMore: false, gen: 0, loaded: false, query: '' };
+GF.WWF._audit = { entries: [], cursor: null, tables: null, verify: null, verifyBusy: false, hasMore: false, gen: 0, loaded: false, query: '' };
 GF.WWF._auditFilter = { table_name: '', action: '', source: '' };
 // The two databases keep independent hash chains; every row carries which
 // one it came from (identity events vs work events).
@@ -76,7 +76,7 @@ GF.views.audit = function () {
 
 GF.WWF.loadAudit = async ({ reset = false } = {}) => {
   const st = GF.WWF._audit;
-  if (reset) { st.entries = []; st.before = null; }
+  if (reset) { st.entries = []; st.cursor = null; }
   // Bump a generation token so a slower in-flight load can't append its rows
   // on top of a newer reset/filter load (which would duplicate entries).
   const gen = ++st.gen;
@@ -84,36 +84,28 @@ GF.WWF.loadAudit = async ({ reset = false } = {}) => {
   if (GF.WWF._auditFilter.table_name) q.table_name = GF.WWF._auditFilter.table_name;
   if (GF.WWF._auditFilter.action) q.action = GF.WWF._auditFilter.action;
   if (GF.WWF._auditFilter.source) q.source = GF.WWF._auditFilter.source;
-  // Keyset pagination on created_at (NOT id — the two chains have colliding
-  // bigint ids): pass the last row's timestamp as `before`.
-  if (st.before) q.before = st.before;
+  // Keyset pagination with the SERVER's cursor: an opaque per-chain
+  // (created_at, id) position handed back in X-Next-Cursor (audit.py). The
+  // view used to send the last row's bare `created_at` as `before`, which is
+  // lossy exactly when it matters — every row of one transaction shares a
+  // created_at (now() is constant for the transaction; plant generation
+  // writes 50 such rows), and a page boundary inside that group skipped the
+  // rest of it for good (BC-08 / R2-BC-02, DECISIONS A-7).
+  if (st.cursor) q.cursor = st.cursor;
   try {
-    const page = await GF.API.audit(q);
+    const page = await GF.API.auditPage(q);
     if (gen !== st.gen) return;   // a newer load superseded this one
-    // Defensive tie-breaker (belt-and-suspenders, NOT a full fix — see the
-    // RESIDUAL RISK note below): `id` collides across the two hash chains,
-    // but every row also carries `source` ("users" | "tasks"), so `source+id`
-    // is a reliable per-row key WITHIN a fetched page. Dedupe on it before
-    // appending, so a row can never be rendered/counted twice if the same row
-    // is ever handed back across two fetches (e.g. a retry after a hiccup).
+    const rows = page.rows || [];
+    // Tie-breaker for a row handed back twice (a retry after a hiccup):
+    // `id` collides across the two hash chains, but every row also carries
+    // `source` ("users" | "tasks"), so `source+id` is a reliable per-row key.
     const seen = new Set(st.entries.map(e => e.source + ':' + e.id));
-    const fresh = page.filter(e => !seen.has(e.source + ':' + e.id));
+    const fresh = rows.filter(e => !seen.has(e.source + ':' + e.id));
     st.entries = st.entries.concat(fresh);
-    // RESIDUAL RISK — needs backend confirmation, not guessed at here: this
-    // cursor is created_at ALONE, so if several rows from the SAME chain ever
-    // share an identical created_at (e.g. a bulk write inside one DB
-    // transaction under Postgres `now()`, which is constant for the whole
-    // transaction, vs `clock_timestamp()`) and that tied group is larger than
-    // fits on one page, the backend's own per-source
-    // `ORDER BY created_at DESC LIMIT` query (GET /audit in
-    // backend/app/api/audit.py) can already drop the overflow before this
-    // cursor logic ever runs. Nothing in the response lets the FRONTEND
-    // recover a row the backend never sent — closing this fully needs a
-    // compound `(created_at, id)` keyset on the server, plus confirming which
-    // timestamp function the audit trigger uses. The source+id dedup above
-    // only guards against double-counting a row we DID receive.
-    st.before = page.length ? page[page.length - 1].created_at : st.before;
-    st.hasMore = page.length === q.limit;
+    // The server sends a cursor whenever the page is non-empty; a full page
+    // with a cursor may have more behind it, a short one is the end.
+    if (page.next) st.cursor = page.next;
+    st.hasMore = rows.length === q.limit && !!page.next;
     if (st.tables === null) { try { st.tables = await GF.API.auditTables(); } catch (e) { st.tables = []; } }
     // Chain verification is no longer fetched passively on load — it is now an
     // explicit, on-demand action (GF.WWF.verifyAuditChain, the "Verify chain"
@@ -258,7 +250,7 @@ GF.WWF._auditListHtml = () => {
     const a = ACT[e.action] || { c: '#5A6B82', en: e.action, mk: e.action };
     const src = AUDIT_SOURCES[e.source];
     const srcBadge = src ? `<span class="audit-src" style="background:${src.c}14;color:${src.c};font-weight:800;font-size:10px;letter-spacing:.4px;text-transform:uppercase;padding:3px 7px;border-radius:5px;white-space:nowrap">${GF.esc(AL(src.en, src.mk))}</span>` : '';
-    const when = e.created_at ? new Date(e.created_at).toLocaleString() : '';
+    const when = GF.fmtDateTime(e.created_at, { seconds: true });
     const diff = GF.WWF._auditDiff(e);
     const diffHtml = diff.length ? diff.map(([k, ov, nv]) => `
       <div style="display:grid;grid-template-columns:170px 1fr;gap:8px;padding:4px 0;border-top:1px dashed var(--line);font-size:12.5px">

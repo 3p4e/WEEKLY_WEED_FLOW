@@ -391,3 +391,47 @@ test('GF.attrChips shows a select field\'s LABEL, not its stored value', () => {
   assert.equal(mkChips.includes(h.GF.esc(opt.mk || opt.en)), true);
   h.close();
 });
+
+/* ── FE-11 / R2-FE-18: a batch reference is the batch code, not free text ──
+   The production / qc / logistics templates' `batch_ref` renders as the
+   strain chooser + constant-head code field (codefield.js), pre-filled with
+   the cultivars once they arrive, and collects as one code string. Without
+   codefield.js it degrades to a plain text input.
+   ──────────────────────────────────────────────────────────────────────── */
+
+test('batch_ref renders as a strain-headed code field and collects the whole code', () => {
+  // chooser.js: the production template also carries a select (process_step).
+  const h = loadGF({ files: ['data.js', 'core.js', 'chooser.js', 'codefield.js', 'dept-templates.js'] });
+  const w = h.window, doc = w.document;
+  h.GF.DEPTS = [{ id: 'd-pr', code: 'production', name: 'Production', mk: 'Производство', abbr: 'PR' }];
+  let onLoad = null;
+  h.GF.batchCodeCultivars = (fn) => { onLoad = fn; return [{ code: 'GP', name: 'Gorilla Punch', is_active: true }]; };
+  const host = doc.createElement('div');
+  host.innerHTML = h.GF.renderDeptFields('d-pr', {});
+  doc.body.appendChild(host);
+  const el = doc.getElementById('attr-f-batch_ref');
+  assert.notEqual(el, null);
+  assert.equal(el.getAttribute('placeholder'), 'GP072501', 'the placeholder is the facility batch code, not B-2026-041');
+  const sel = doc.getElementById('attr-f-batch_ref-cv');
+  assert.notEqual(sel, null, 'a strain chooser sits in front of the code');
+  assert.match(sel.innerHTML, /GP · Gorilla Punch/);
+  el.value = 'GP072501';
+  const out = h.GF.collectDeptAttrs('d-pr', {});
+  assert.equal(out.batch_ref, 'GP072501');
+
+  // A form rendered before the cultivars arrived gets its options patched in place.
+  assert.equal(typeof onLoad, 'function');
+  onLoad([{ code: 'GP', name: 'Gorilla Punch' }, { code: 'WW', name: 'White Widow' }]);
+  assert.match(sel.innerHTML, /WW · White Widow/);
+  assert.equal(sel.value, 'GP', 'the head of the value already typed stays selected');
+  h.close();
+});
+
+test('without codefield.js the batch field is an ordinary text input', () => {
+  const h = withRealDepts({ files: ['data.js', 'core.js', 'chooser.js', 'dept-templates.js'] });
+  h.GF.DEPTS.push({ id: 'd-pr', code: 'production', name: 'Production', mk: 'Производство', abbr: 'PR' });
+  const html = h.GF.renderDeptFields('d-pr', { batch_ref: 'GP072501' });
+  assert.match(html, /id="attr-f-batch_ref"[^>]*type="text"/);
+  assert.doesNotMatch(html, /attr-f-batch_ref-cv/);
+  h.close();
+});

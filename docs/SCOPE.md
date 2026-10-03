@@ -1,6 +1,40 @@
-# Scope: WWF is a non-GMP planning tool
+# Scope
 
-This is a deliberate, explicit decision, not an oversight: **Weekly Weed Flow
+## Status 2026-09-27 — the July scope no longer describes the application
+
+The text below this section was written in July 2026, when WWF was a task
+tracker. Since then, at the owner's (Head of QC) request, the application has
+gained records that are GxP-relevant in substance:
+
+- QC / LIMS: specifications, samples and chain of custody, certificates of
+  analysis (internal, external, eCoA import), Certificates of Quality compiled
+  and rendered from them, OOS investigations with QP disposition, electronic
+  signatures (append-only since migration 0061), the official ImB product
+  catalogue and potency conformance.
+- Cultivation: batch identity, plant identity, the mother-plant bank, phase
+  events, pesticide re-entry and pre-harvest-interval gates, harvest lots and
+  the genealogy behind a CoQ.
+- DocEngine: drafting and registering controlled documents (SOPs) and CoQ
+  documents.
+
+Those are not "pointers to the QMS"; the CoQ printed from this system asserts
+conformance. The 2026-07 statement "not part of the QMS, not a validated
+system" is therefore **no longer a description of what the software does**.
+What it still is, is a statement of validation status: no validation lifecycle
+has been run for these modules, and the §7 gap analysis in
+`ARCHITECTURE-REVIEW-2026-07.md` remains the checklist. The decision that is
+still the owner's to make — recorded as an open question in
+`DECISIONS-2026-09.md` §2 — is whether these modules are operated as controlled
+electronic records (which requires closing that gap) or as a draft/working
+system whose outputs are transcribed into the paper/QMS record. Until that
+decision, every QC output should be treated as the latter. `README.md` and
+`SPEC.md` were corrected on the same date.
+
+---
+
+## The July 2026 position (historical)
+
+This was a deliberate, explicit decision, not an oversight: **Weekly Weed Flow
 (WWF) is an internal operational planning and task-tracking tool. It is not a
 validated GxP / 21 CFR Part 11 computerized system, and it is not part of the
 Quality Management System (QMS).** For now, it will not be.

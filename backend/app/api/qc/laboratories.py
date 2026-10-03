@@ -1,11 +1,10 @@
 from app.db import rls
-from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.roles import ELEVATED_ROLES
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .common import _WRITERS, _uuid_or_404, router
+from .common import _WRITERS, _uuid_or_404, mint_series_number, router
 
 
 _LAB_STATUSES = ("ACTIVE", "INACTIVE")
@@ -121,16 +120,16 @@ async def create_lab(body: LabIn, user: dict = Depends(require_role(*_WRITERS)))
     if body.decimal_separator not in _DECIMAL_SEPS:
         raise HTTPException(422, "decimal_separator must be '.' or ','")
     async with rls(user) as c:
+        # per-(org, year) register series, never the old cross-tenant sequence (QC-28)
+        lab_code = await mint_series_number(c, user["org_id"], "qc_laboratories", "lab_code", "PP-LAB")
         row = await c.fetchrow(
             "INSERT INTO qc_laboratories(org_id, lab_code, name, accreditation_body,"
             " accreditation_number, iso17025_scope, quality_agreement_ref, locale,"
             " decimal_separator, country, contact, notes, created_by, updated_by)"
-            f" VALUES ($1, 'PP-LAB-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
-            "         lpad(nextval('qc_lab_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *",
+            " VALUES ($1, $13, $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *",
             user["org_id"], body.name, body.accreditation_body, body.accreditation_number,
             [s for s in body.iso17025_scope if s], body.quality_agreement_ref, body.locale,
-            body.decimal_separator, body.country, body.contact, body.notes, user["id"])
+            body.decimal_separator, body.country, body.contact, body.notes, user["id"], lab_code)
     return _lab_out(dict(row))
 
 

@@ -528,18 +528,47 @@ async def test_dependency_transitive_cycle_still_rejected_under_lock(client, adm
     assert (await client.get(f"/tasks/{c}", headers=admin_headers)).json()["blocked_by"] == []
 
 
-async def test_task_tree_returns_hierarchy(client, admin_headers):
-    parent = (await client.post("/tasks", json={"title": "SOP", "node_kind": "task"},
-                                headers=admin_headers)).json()["id"]
-    child = (await client.post("/tasks", json={"title": "annex", "node_kind": "annex",
-                                               "parent_id": parent}, headers=admin_headers)).json()["id"]
-    tree = (await client.get("/tasks/tree", headers=admin_headers)).json()
-    ids = {n["id"]: n for n in tree}
-    assert parent in ids and child in ids
-    assert ids[child]["parent_id"] == parent
-    assert ids[child]["node_kind"] == "annex"
-    # 'tree' must not be captured as a task id (route ordering)
-    assert all(n["id"] != "tree" for n in tree)
+async def test_malformed_ids_in_task_bodies_are_422_not_500(client, admin_headers):
+    """Review 2026-09-27, BC-14: the org-scoped existence checks for
+    department_id / parent_id / week_id / batch_id ran OUTSIDE the
+    _FK_ERRORS try, so a non-uuid value raised asyncpg.DataError → 500 for
+    every caller. Shape is validated up front now, on create and on patch."""
+    for field in ("department_id", "parent_id", "week_id", "batch_id"):
+        r = await client.post("/tasks", json={"title": "x", field: "abc"}, headers=admin_headers)
+        assert r.status_code == 422, f"create {field}: {r.status_code} {r.text}"
+    t = (await client.post("/tasks", json={"title": "patch target"}, headers=admin_headers)).json()
+    for field in ("department_id", "week_id", "batch_id"):
+        r = await client.patch(f"/tasks/{t['id']}", json={field: "abc"}, headers=admin_headers)
+        assert r.status_code == 422, f"patch {field}: {r.status_code} {r.text}"
+
+
+async def test_status_change_survives_a_failing_notification_lookup(client, admin_headers, org, monkeypatch):
+    """Review 2026-09-27, BC-13. The participant lookup after the UPDATE ran
+    on the request's transaction with no savepoint; if it failed, Postgres
+    marked the transaction aborted and asyncpg then "committed" it without
+    raising — the server answered ROLLBACK, the PATCH was lost, and the client
+    had already been told 200 with the new state. The lookup runs in its own
+    savepoint now: the notification is dropped and logged, the write stands."""
+    import app.api.tasks as tasks_module
+
+    async def exploding_participants(c, task_id):
+        # a real failing statement on the SAME connection — the case that
+        # poisons the transaction, not a Python-side error
+        await c.execute("SELECT 1/0")
+
+    monkeypatch.setattr(tasks_module, "participants", exploding_participants)
+    t = (await client.post("/tasks", json={"title": "Keep my status", "status": "pending"},
+                           headers=admin_headers)).json()
+    r = await client.patch(f"/tasks/{t['id']}", json={"status": "ongoing"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ongoing"
+    persisted = await tasks_admin_pool().fetchval("SELECT status FROM tasks WHERE id=$1", t["id"])
+    assert persisted == "ongoing", "the UPDATE was rolled back behind a 200"
+    # the same guard covers the workflow sign-off event
+    r = await client.post(f"/tasks/{t['id']}/workflow", json={"action": "SUBMIT"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert await tasks_admin_pool().fetchval(
+        "SELECT workflow_state FROM tasks WHERE id=$1", t["id"]) == "submitted"
 
 
 async def test_parent_department_week_cross_org_rejected_on_create_and_patch(client, admin_headers, org):

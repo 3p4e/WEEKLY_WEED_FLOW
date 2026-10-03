@@ -43,6 +43,18 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege for the token every job receives. Nothing here writes to
+# the repository, comments, or touches Actions; a job that ever needs more
+# declares it on that job alone. This matters more than usual because the
+# runner is the PRODUCTION host (see the header): the workflow file of a
+# pull_request run is the PR's own, so whatever the token can do, a branch
+# can do (review 2026-09-27, DI-02). The token cannot be narrowed below what
+# this block grants, but it can be widened by a PR — which is one more
+# reason deploy.yml refuses to deploy a commit whose workflow files differ
+# from the default branch's.
+permissions:
+  contents: read
+
 # The app runs against TWO databases (identity vs work data — separate
 # Postgres containers in production). CI mirrors that: one postgres service
 # hosting two databases, bootstrapped from the two generated schema files.
@@ -141,7 +153,8 @@ jobs:
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 12
+          --health-start-period 60s
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -205,7 +218,8 @@ jobs:
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 12
+          --health-start-period 60s
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -213,16 +227,23 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -r docengine/requirements.txt pytest pytest-asyncio
-      - name: Create the docengine database
+      - name: Create the docengine database and its least-privilege role
         env:
           PGPASSWORD: postgres
-        # The app creates its own schema at init() (CREATE SCHEMA/TABLE IF NOT
-        # EXISTS), so only the database itself is needed here.
-        run: psql -h localhost -U postgres -c "CREATE DATABASE docengine_test;"
+        # The suite runs as the SAME role production is meant to run as
+        # (docengine/sql/docengine_role.sql: owns schema `docengine`, no
+        # BYPASSRLS, nothing on public) rather than as the superuser, so a
+        # startup DDL or a query the role cannot perform fails here and not on
+        # the host after the DSN is rotated (review 2026-09-27, DI-09).
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -c "CREATE DATABASE docengine_test;"
+          psql -h localhost -U postgres -d docengine_test -v ON_ERROR_STOP=1 \
+            -v pw=testpw_docengine -v dbname=docengine_test -f docengine/sql/docengine_role.sql
       - name: Run tests
         working-directory: docengine
         env:
-          DOCENGINE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/docengine_test
+          DOCENGINE_DATABASE_URL: postgresql://docengine:testpw_docengine@localhost:5432/docengine_test
         run: python -m pytest -v
 
   migrations:
@@ -240,7 +261,8 @@ jobs:
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 12
+          --health-start-period 60s
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -361,7 +383,8 @@ jobs:
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 12
+          --health-start-period 60s
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -427,26 +450,37 @@ jobs:
     name: Build container images
     runs-on: self-hosted
     timeout-minutes: 25
+    # Every image this job builds carries the wwf.ci label, and the cleanup
+    # below removes ONLY images with that label. The runner's docker socket is
+    # the production daemon's, so a host-wide `docker image prune -f` here
+    # deleted, from every pull request, any image another stack on the box
+    # had left dangling by a re-tag (Letta `latest`, RAGflow) — images that
+    # CLAUDE.md treats as the rollback path (review 2026-09-27, DI-20). Scope
+    # every daemon-wide operation to what this run created, never the daemon.
+    env:
+      CI_LABEL: wwf.ci=true
     steps:
       - uses: actions/checkout@v4
       - name: Build backend image
-        run: docker build -t wwf-backend:ci ./backend
+        run: docker build --label "$CI_LABEL" -t wwf-backend:ci ./backend
       - name: Build web image
-        run: docker build -t wwf-web:ci ./web
-      # docengine and connector are both DEPLOYED services (docker-compose.yml)
-      # that previously had no build validation at all — a broken Dockerfile in
-      # either could merge green.
+        run: docker build --label "$CI_LABEL" -t wwf-web:ci ./web
+      # docengine and connector are both DEPLOYED services (docker-compose.yml
+      # defines both) that previously had no build validation at all — a
+      # broken Dockerfile in either could merge green.
       - name: Build docengine image
-        run: docker build -t wwf-docengine:ci ./docengine
+        run: docker build --label "$CI_LABEL" -t wwf-docengine:ci ./docengine
       - name: Build connector image
-        run: docker build -t wwf-connector:ci ./connector
+        run: docker build --label "$CI_LABEL" -t wwf-connector:ci ./connector
       # The runner has no per-job VM isolation, so CI images accumulate on its
-      # disk run after run unless they're cleaned up here.
-      - name: Prune CI build artifacts
+      # disk run after run unless they're cleaned up here — but only the
+      # images THIS job built (the four tags, then anything dangling that
+      # carries the label). Never a bare prune on this daemon.
+      - name: Remove the images this run built
         if: always()
         run: |
           docker rmi -f wwf-backend:ci wwf-web:ci wwf-docengine:ci wwf-connector:ci 2>/dev/null || true
-          docker image prune -f || true
+          docker image prune -f --filter "label=$CI_LABEL" || true
 
   compose:
     name: Validate compose stack

@@ -14,7 +14,7 @@ import json
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.ai import _letta_message
 from app.db import rls
@@ -36,7 +36,10 @@ _MAX_TEXT = 20000  # a very long email; keep the Letta prompt bounded
 
 
 class ExtractReq(BaseModel):
-    text: str
+    # The prompt is truncated to _MAX_TEXT below, but the BODY was unbounded up
+    # to the 32 MB middleware cap and buffered whole (review 2026-09-27,
+    # BC-20). Generous — a pasted document can run long — yet bounded.
+    text: str = Field(max_length=200_000)
 
 
 def _clamp(v, allowed, syn, default):
@@ -146,8 +149,11 @@ def _prompt(text: str, depts: list[dict]) -> str:
 # short spinner and falls back to the raw text if the AI is unavailable.
 
 class BilingualReq(BaseModel):
-    title: str
-    description: str | None = None
+    # Same bounds as the task these fields are about to become (tasks.TaskIn):
+    # any USER may call this, and an unbounded body went to Letta in full
+    # (review 2026-09-27, BC-20).
+    title: str = Field(max_length=300)
+    description: str | None = Field(default=None, max_length=10_000)
 
 
 def _bilingual_prompt(title: str, description: str | None) -> str:

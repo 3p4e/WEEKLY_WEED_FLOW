@@ -36,13 +36,16 @@ test('facility board: room renders, a Cultivation-created batch shows read-only,
   await test.step('seed a grow room and a cultivar through the ADMIN API', async () => {
     room = await page.evaluate(() => window['GF'].API.facilityAddRoom(
       { code: 'grow_e2e', name: 'Grow Room 1', name_mk: 'Сала 1', kind: 'flower' }));
+    // The cultivar code is the head of every batch number of that strain
+    // (owner's convention <cultivar><MMYY><nn>, enforced server-side since
+    // the 2026-09-27 review), so it is a short acronym here, not a slug.
     cultivar = await page.evaluate(() => window['GF'].API.cultivarCreate(
-      { code: 'gg_e2e', name: 'Gorilla Glue', name_mk: 'Горила Глу' }));
+      { code: 'GGE', name: 'Gorilla Glue', name_mk: 'Горила Глу' }));
   });
 
   await test.step('seed a batch through the Cultivation board — the sole write path', async () => {
     await page.evaluate(([roomId, cultivarId]) => window['GF'].API.cultivationBatchCreate({
-      room_id: roomId, cultivar_id: cultivarId, code: 'gg-e2e-1',
+      room_id: roomId, cultivar_id: cultivarId, code: 'GGE092701',
       plant_count: 96, phase: 'flower',
     }), [room.id, cultivar.id]);
   });

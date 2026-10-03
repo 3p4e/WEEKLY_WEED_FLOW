@@ -13,17 +13,29 @@ reorder a row without breaking the linkage of every row after it — per
 database.
 
   • GET /audit          → org-scoped merged list, newest first. Pagination is
-                          a created_at keyset (`before`), NOT id — the two
-                          chains have colliding bigint ids. Every row carries
-                          `source: "users" | "tasks"`.
+                          a per-source (created_at, id) keyset carried in an
+                          opaque `cursor` (returned in the X-Next-Cursor
+                          response header) — NOT a bare timestamp: one
+                          transaction's rows all share created_at (now() is
+                          constant for a transaction; plant generation writes
+                          50 such rows), and a page boundary inside that
+                          group with `created_at < before` skipped the rest
+                          of the group for good (CODE-REVIEW-DEEP-2026-07 M7,
+                          review 2026-09-27 BC-08). The two chains have
+                          colliding bigint ids, so the keyset is kept per
+                          source. `before` (a timestamp) still works for old
+                          clients and is lossy for exactly that reason. Every
+                          row carries `source: "users" | "tasks"`.
   • GET /audit/tables   → distinct table names + counts across both chains.
   • GET /audit/verify   → walk BOTH global chains (admin pools; ADMIN plus the
                           QA_MGR / QP auditor roles — read-only verification)
                           and report each one's first linkage break, if any.
 """
+import base64
+import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from app.config import settings
 from app.db import rls, rls_users, tasks_admin_pool, users_admin_pool
@@ -72,15 +84,44 @@ def _ser(r, source: str) -> dict:
 _SELECT = ("SELECT id,org_id,user_id,user_email,action,table_name,record_id,"
            "old_values,new_values,prev_hash,entry_hash,created_at FROM audit_log")
 
+_SOURCES = ("tasks", "users")
+CURSOR_HEADER = "X-Next-Cursor"
+
+
+def _decode_cursor(raw: str | None) -> dict[str, tuple[datetime, int]]:
+    """{source: (created_at, id)} of the last row the client has seen per
+    chain. Opaque to the client; a malformed one is a 422, never a 500."""
+    if not raw:
+        return {}
+    try:
+        data = json.loads(base64.urlsafe_b64decode(raw.encode("ascii") + b"=" * (-len(raw) % 4)))
+        out = {}
+        for src in _SOURCES:
+            if src in data:
+                ts, rid = data[src]
+                out[src] = (datetime.fromisoformat(ts), int(rid))
+        return out
+    except (ValueError, TypeError, KeyError, AttributeError):
+        raise HTTPException(422, "cursor is not a value this endpoint issued")
+
+
+def _encode_cursor(pos: dict[str, tuple[datetime, int]]) -> str:
+    data = {src: [ts.isoformat(), rid] for src, (ts, rid) in pos.items()}
+    return base64.urlsafe_b64encode(json.dumps(data).encode("ascii")).decode("ascii").rstrip("=")
+
 
 @router.get("")
 async def list_audit(
+    response: Response,
     table_name: str | None = None,
     record_id: str | None = None,
     action: str | None = None,
     source: str | None = Query(None, pattern="^(users|tasks)$"),
     limit: int = Query(100, ge=1, le=500),
-    before: str | None = Query(None, description="keyset paginate: rows created strictly before this ISO timestamp"),
+    before: str | None = Query(None, description="LEGACY keyset: rows created strictly before this ISO"
+                                                 " timestamp. Lossy at a page boundary inside one"
+                                                 " transaction's rows — prefer `cursor`."),
+    cursor: str | None = Query(None, description="the X-Next-Cursor header of the previous page"),
     user: dict = Depends(require_role(*_ELEVATED)),
 ):
     clauses, args = ["true"], []
@@ -96,6 +137,7 @@ async def list_audit(
         except ValueError:
             raise HTTPException(422, "before must be an ISO timestamp")
         clauses.append(f"created_at<${len(args)}")
+    position = _decode_cursor(cursor)
 
     # M1: a department-scoped manager must not read OTHER departments' task
     # content through the audit trail. Audit rows carry the full task JSON but
@@ -110,24 +152,50 @@ async def list_audit(
     dscope = dept_scope(user)
     if dscope:
         args.append(dscope)
-        clauses.append(f"COALESCE(new_values->>'department_id', old_values->>'department_id')=${len(args)}")
-
-    where = " AND ".join(clauses)
-    args.append(limit)
-    q = f"{_SELECT} WHERE {where} ORDER BY created_at DESC LIMIT ${len(args)}"
+        clauses.append(f"COALESCE(new_values->>'department_id', old_values->>'department_id')"
+                       f" = ANY(app.dept_family(${len(args)}::uuid)::text[])")
     eff_source = "tasks" if dscope else source
 
+    def _query(src: str) -> tuple[str, list]:
+        """The per-source statement: the shared filters plus that chain's own
+        composite keyset. (created_at, id) is a total order within a chain —
+        ORDER BY the same pair, so the rows of one transaction (equal
+        created_at) page in a fixed order and the cursor resumes inside them."""
+        src_clauses, src_args = list(clauses), list(args)
+        if src in position:
+            ts, rid = position[src]
+            src_args += [ts, rid]
+            src_clauses.append(f"(created_at, id) < (${len(src_args)-1}::timestamptz, ${len(src_args)}::bigint)")
+        src_args.append(limit)
+        return (f"{_SELECT} WHERE {' AND '.join(src_clauses)}"
+                f" ORDER BY created_at DESC, id DESC LIMIT ${len(src_args)}"), src_args
+
     # Each side is over-fetched to `limit`, merged, then cut — so the page is
-    # correct no matter how the two chains interleave in time.
+    # correct no matter how the two chains interleave in time. The merge key
+    # is (created_at, source, id): a total order, so equal timestamps across
+    # the two chains still page deterministically.
     merged: list[dict] = []
     if eff_source in (None, "tasks"):
+        q, a = _query("tasks")
         async with rls(user) as c:
-            merged += [_ser(r, "tasks") for r in await c.fetch(q, *args)]
+            merged += [_ser(r, "tasks") for r in await c.fetch(q, *a)]
     if eff_source in (None, "users"):
+        q, a = _query("users")
         async with rls_users(user) as c:
-            merged += [_ser(r, "users") for r in await c.fetch(q, *args)]
-    merged.sort(key=lambda r: r["created_at"] or "", reverse=True)
-    return merged[:limit]
+            merged += [_ser(r, "users") for r in await c.fetch(q, *a)]
+    merged.sort(key=lambda r: (r["created_at"] or "", r["source"], r["id"]), reverse=True)
+    page = merged[:limit]
+
+    # The next cursor: the last emitted row per chain; a chain with nothing on
+    # this page keeps its previous position (every row of it not yet emitted
+    # is still older than that position, because the merge emits newest first).
+    nxt = dict(position)
+    for r in page:
+        nxt[r["source"]] = (datetime.fromisoformat(r["created_at"]), r["id"])
+    if page:
+        response.headers[CURSOR_HEADER] = _encode_cursor(nxt)
+        response.headers["Access-Control-Expose-Headers"] = CURSOR_HEADER
+    return page
 
 
 @router.get("/tables")

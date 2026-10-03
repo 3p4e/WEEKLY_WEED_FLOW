@@ -88,6 +88,28 @@ async def emit(c, user: dict, *, verb: str, object_type: str, object_id,
     return ev_id
 
 
+async def savepointed(c, what: str, object_id, fn, *args) -> None:
+    """Run a notification SET-UP block (participant lookups, title reads, the
+    emit itself) inside its own savepoint on the caller's transaction.
+
+    The block runs AFTER the work write, on the same connection. If a query
+    in it fails — a cancelled statement, a timeout, a bad uuid — Postgres
+    marks the whole transaction aborted, and asyncpg then "commits" it at
+    context exit WITHOUT raising: the server answers ROLLBACK, the PATCH,
+    comment or sign-off is lost, and the client has already been told 200
+    with the new state (review 2026-09-27, BC-13). safe_emit savepoints the
+    emit for exactly this reason; the lookups around it at every call site
+    were bare `try/except: pass`. A savepoint around the whole block means a
+    failure costs the notification only — logged, never the record, never
+    silently (the H4 idiom)."""
+    try:
+        async with c.transaction():
+            await fn(*args)
+    except Exception:
+        _log.warning("%s notification setup failed for %s — the write stands, "
+                     "the notification was dropped", what, object_id, exc_info=True)
+
+
 async def safe_emit(c, user: dict, **kwargs):
     """emit() that never propagates to the caller — a notification failure must
     not break the work write it rides on — but LOGS the failure with context

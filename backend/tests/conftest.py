@@ -90,6 +90,13 @@ async def purge_org(org_id) -> None:
     children before parents. audit_log rows stay in both (the hash chain
     must never be edited)."""
     t = tasks_admin_pool()
+    # mother_plants.parent_id is a self-referencing RESTRICT FK, and that is
+    # fine for the per-org DELETE below: Postgres checks RESTRICT against the
+    # state at the end of the statement, so a parent and its child go in one
+    # DELETE. There used to be an unscoped `UPDATE mother_plants SET
+    # parent_id=NULL` here that rewrote every org's lineage in the shared test
+    # database (review CS-19); demo_org.py's identical wipe order never needed
+    # it either.
     for table in ("ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs",
                   "notifications", "events", "task_comments",
                   "task_workflow_events", "task_assignees", "task_links", "work_sessions",
@@ -146,8 +153,18 @@ async def purge_org(org_id) -> None:
                   # batches AND rooms (RESTRICT), so they precede both — same
                   # reason as the waste lines above.
                   "harvests", "ipm_applications", "irrigation_events", "biosecurity_events",
-                  "plant_phase_events", "plants", "plant_batches", "cultivars",
-                  "rooms",
+                  # 0065/0066: clone_run_mothers -> mother_plants / clone_runs;
+                  # trichome_checks -> plant_batches + rooms; plants -> mother_plants
+                  # (so plants precede mothers now); mother_plants -> qc_products +
+                  # selection_campaigns + itself; plant_batches -> qc_products.
+                  "trichome_checks",
+                  "clone_run_mothers", "clone_runs",
+                  "plant_phase_events", "plants", "mother_plants", "selection_campaigns",
+                  "plant_batches", "qc_products", "cultivars",
+                  # 0068: rooms.facility_room_id is SET NULL, so `rooms` may go
+                  # either side of facility_rooms — but facility_rooms cites
+                  # departments (SET NULL) and must still precede them.
+                  "rooms", "facility_rooms",
                   "calendar_weeks", "departments"):
         await t.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
     await users_admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_id)
@@ -203,6 +220,22 @@ async def create_user(client, admin_headers, *, role="USER", full_name="Test Use
     assert r.status_code == 201, r.text
     body = r.json()
     return body["user"], body["otp"]
+
+
+def iter_routes(app):
+    """Every real endpoint route on the app, flattened.
+
+    FastAPI >= 0.139 registers an included APIRouter on `app.routes` as ONE
+    `_IncludedRouter` entry with an empty path and keeps the endpoints on its
+    `original_router`; a walk over `app.routes` that reads `.path` therefore
+    sees no application route at all, and any structural test written that
+    way passes vacuously. Recurse into the included routers instead."""
+    for route in app.routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            yield from iter_routes(inner)
+        else:
+            yield route
 
 
 async def login_and_set_password(client, username, otp, new_password="NewPassword123456"):

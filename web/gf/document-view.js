@@ -17,9 +17,16 @@ GF.WWF._docDeptParam = () => {
 
 GF.WWF.setDocDept = (v) => { GF.WWF._doc.deptId = v || ''; GF.WWF.loadDocument(); };
 
+// GET /reports/documents is gated on ELEVATED_ROLES; a base USER opening the
+// report used to see "Couldn't load the document: Insufficient role" plus a
+// Retry button for a request that can never succeed (review 2026-09-27,
+// FE-14). The panel is simply not theirs.
+GF.WWF._docElevated = () => ELEVATED_ROLES.includes((GF.API.user || {}).role);
+
 GF.WWF.loadDocument = async () => {
   const st = GF.WWF._report, ds = GF.WWF._doc;
   const seq = ++ds._seq;   // only the newest load may write state (no last-response-wins races)
+  if (!GF.WWF._docElevated()) { ds.loading = false; ds.error = null; ds.data = null; GF.WWF._renderDocPanel(); return; }
   ds.loading = true; ds.error = null; GF.WWF._renderDocPanel();
   try {
     const q = { kind: st.mode };
@@ -361,7 +368,7 @@ GF.WWF._ribbonSvg = (segments, weekStart, days) => {
       if (seg.date !== iso) return;
       const x = LEFT + seg.start_h * hw, w = Math.max(2, (seg.end_h - seg.start_h) * hw);
       s += `<rect x="${x.toFixed(1)}" y="${y + 6}" width="${w.toFixed(1)}" height="${ROW - 12}" rx="3" fill="${GF.esc(seg.color)}" fill-opacity="0.92">`
-        + `<title>${GF.esc(seg.title)} · ${GF.esc(seg.sop)} · ${seg.start.slice(11, 16)}–${seg.end.slice(11, 16)}</title></rect>`;
+        + `<title>${GF.esc(seg.title)} · ${GF.esc(seg.sop)} · ${GF.esc(GF.fmtTime(seg.start))}–${GF.esc(GF.fmtTime(seg.end))}</title></rect>`;
     });
   }
   s += '</svg>';
@@ -401,7 +408,8 @@ GF.WWF._renderDocPanel = () => {
   // Reuse integrate.js's shared ELEVATED_ROLES (same classic-script scope) so a
   // new non-elevated role can't slip past a hand-rolled `!== 'USER'` check and
   // show Compile/Lock buttons that then 403 on the backend's require_role gate.
-  const elevated = ELEVATED_ROLES.includes((GF.API.user || {}).role);
+  const elevated = GF.WWF._docElevated();
+  if (!elevated) { el.innerHTML = ''; return; }   // not a panel a base USER has (see loadDocument)
   const kindLbl = st.mode === 'plan' ? AL('Plan document', 'Документ План') : AL('Report document', 'Документ Извештај');
 
   // Custom-range control (elevated only): draft a report/plan for ANY interval
@@ -412,9 +420,11 @@ GF.WWF._renderDocPanel = () => {
   const rangeControls = elevated ? `
     <div style="padding:10px 14px;border-bottom:1px solid var(--line,#E2E8F0);display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px">
       <span style="color:var(--ink-3);font-weight:600">${AL('Custom range', 'Прилагоден опсег')}</span>
-      <input type="date" value="${GF.esc(ds.rangeStart || '')}" onchange="GF.WWF._doc.rangeStart=this.value" style="${inStyle}">
+      ${GF.dateField('doc-range-start', { value: ds.rangeStart || '',
+        placeholder: AL('From', 'Од'), onPick: (v) => { GF.WWF._doc.rangeStart = v; } })}
       <span style="color:var(--ink-3)">→</span>
-      <input type="date" value="${GF.esc(ds.rangeEnd || '')}" onchange="GF.WWF._doc.rangeEnd=this.value" style="${inStyle}">
+      ${GF.dateField('doc-range-end', { value: ds.rangeEnd || '',
+        placeholder: AL('To', 'До'), onPick: (v) => { GF.WWF._doc.rangeEnd = v; } })}
       <button class="btn btn-sm btn-primary" onclick="GF.WWF.previewDocument()">${AL('Generate preview', 'Генерирај преглед')}</button>
       <span style="color:var(--ink-3);font-size:11px">${AL('unsaved draft for any interval', 'незачуван нацрт за секој интервал')}</span>
     </div>` : '';
@@ -444,7 +454,7 @@ GF.WWF._renderDocPanel = () => {
     const chip = isPreview
       ? `<span style="background:rgba(47,217,217,.12);color:#2FD9D9;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(47,217,217,.25)">${AL('PREVIEW — not saved', 'ПРЕГЛЕД — незачуван')}${c.period && c.period.label ? ' · ' + GF.esc(c.period.label) : ''}</span>`
       : locked
-      ? `<span style="background:rgba(43,232,160,.12);color:#2BE8A0;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(43,232,160,.25)">${AL('LOCKED — submitted record', 'ЗАКЛУЧЕН — поднесен запис')}${d.locked_at ? ' · ' + d.locked_at.slice(0, 16).replace('T', ' ') : ''}</span>`
+      ? `<span style="background:rgba(43,232,160,.12);color:#2BE8A0;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(43,232,160,.25)">${AL('LOCKED — submitted record', 'ЗАКЛУЧЕН — поднесен запис')}${d.locked_at ? ' · ' + GF.esc(GF.fmtDateTime(d.locked_at)) : ''}</span>`
       : `<span style="background:rgba(224,167,62,.12);color:#E0A73E;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(224,167,62,.25)">${AL('DRAFT', 'НАЦРТ')}</span>`;
     // A section is editable only on a stored draft (preview has no row to
     // PATCH; locked is immutable). Read rule: body_en falls back to legacy

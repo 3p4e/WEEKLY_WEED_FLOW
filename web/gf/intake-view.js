@@ -205,9 +205,12 @@ GF.WWF.adoptSelected = async () => {
   }
 };
 
-/* nav item just below Import; visible to every signed-in user (the backend
-   owner-scopes adoption — you can only create work in your own account). */
+/* nav item just below Import. POST /intake/extract is gated on
+   ELEVATED_ROLES server-side (intake.py), so a base USER who opened this
+   screen got a 403 on "Extract" — the same gate applies here (review
+   2026-09-27, FE-14). Adoption itself stays owner-scoped on the server. */
 GF.WWF._registerFullPageView({
   key: 'intake', icon: 'sparkle', label: () => AL('AI Intake', 'АИ Внес'),
   insertBefore: 'audit',
+  guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
 });

@@ -18,12 +18,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.tasks import _scope_clause
 from app.api.weekwindow import TASK_COLS as _COLS
-from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
+from app.api.weekwindow import (activity_window_sql, fri_thu as _fri_thu, task_row as _task_row,
+                                week_label)
 from app.db import rls
 from app.deps import dept_scope, require_password_set, uuid_or_422
 from app.roles import ELEVATED_ROLES
 from app.roster import roster
-from app.worktime import facility_today, TZ, classify, session_hours
+from app.worktime import facility_today, TZ, session_buckets, session_hours
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -165,9 +166,12 @@ async def weekly_report(
                 b = hours_by_person.setdefault(
                     uid, {"user_id": uid, "regular": 0.0, "overtime": 0.0,
                           "night": 0.0, "weekend": 0.0, "total": 0.0})
-                h = session_hours(s)
-                b[classify(s["started_at"])] += h
-                b["total"] += h
+                # Split across the bucket boundaries the session crosses —
+                # a 07:30–16:00 shift is half an hour of overtime and eight
+                # of regular time, not 8.5 h of overtime (BC-24).
+                for cls, part in session_buckets(s).items():
+                    b[cls] += part
+                b["total"] += session_hours(s)
 
             # A task due later THIS SAME week isn't overdue yet — clamp the
             # cutoff to real "today" when the report covers a week still in
@@ -263,24 +267,14 @@ async def weekly_report(
         if t["status"] == "completed":
             dept_map[dn]["completed"] += 1
 
-    # Label the window from the Monday it contains, not its leading Friday.
-    # Of the window's 5 business days (Fri + Mon-Thu), the 4 weekdays Mon-Thu
-    # fall in the ISO (Mon->Sun) week that Monday belongs to; only the single
-    # leading Friday belongs to the earlier ISO week. fri.isocalendar()
-    # labeled the whole window with that earlier week — wrong for most of it.
-    # iso_year is taken from the SAME reference (not fri.year) so the label
-    # stays internally self-consistent across a Dec/Jan-crossing window, the
-    # same (year, week) pairing convention weekwindow.ensure_week uses.
-    label_ref = fri + timedelta(days=3)  # the window's Monday
-    iso_year, iso_week, _ = label_ref.isocalendar()
+    # The window's label is weekwindow.week_label — named after the Monday it
+    # contains, not its leading Friday — shared with the compiled document
+    # and the weekly snapshot so the three can never disagree (BC-16).
     return {
         "period": {
             "start": fri.isoformat(),
             "end": thu.isoformat(),
-            "label": (
-                f"W{iso_week} {iso_year} "
-                f"({fri.strftime('%a %b %d')} → {thu.strftime('%a %b %d')})"
-            ),
+            "label": week_label(fri, thu),
         },
         "mode": mode,
         "summary": {

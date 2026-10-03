@@ -1,15 +1,26 @@
-# ⚠️ FROZEN MIRROR — engine fork development moved to 3p4e/letta-stack (2026-08-09)
+# About the "frozen mirror" note that used to live here
 
-By owner decision, **all Letta technology development happens in
-[3p4e/letta-stack](https://github.com/3p4e/letta-stack)**. This `docengine/` tree
-(engine line B: the §6D kv-primitives fork `dfdd5271 / 86feab6a / 7aa1d076` +
-`pp_format_layout_addons.py`, plus the declarative `gf_*` fleet app) was copied there as
-`apps/wwf-docengine/` and is developed there.
+Until 2026-09-27 this file said that `docengine/` was a frozen mirror of
+`3p4e/letta-stack`'s `apps/wwf-docengine/`, received no engine edits, and that
+WWF only *consumed* a DocEngine developed elsewhere (owner decision of
+2026-08-09).
 
-**This copy receives no engine edits.** The two engine lines (A: ACME_SOP master =
-live volume; B: this fork) are being merged into v2.0.0 in letta-stack — top open work
-item in its `START_HERE.md`. Until the merge lands, neither line may be edited in its old
-home repo (letta-stack `review/LETTA_TECH_REVIEW_2026-08-09.md` §2).
+That is not what happened, and the note misled the 2026-09-27 review. Every
+production DocEngine image since then — `growflow-docengine:v22` (2026-08-29)
+through `v26` (2026-09-07), see `docs/DEPLOY-2026-09-*-docengine-v*.md` — was
+built from **this** tree, and the service code here (`app/`, `agents/`,
+`tests/`) has been developed and reviewed here continuously. This directory is
+the source of the deployed service, not a mirror of it.
 
-WWF app development against the deployed docengine continues here as a *consumer*;
-engine/fleet changes flow letta-stack → deployment.
+What is still true:
+
+- `engine/` is the vendored formatting core. Its provenance and the merge it
+  represents are recorded in `engine/PROVENANCE.md` and
+  `docs/DOCENGINE-CANON-2026-07.md`; edit it only with that record updated.
+- The second copy of the engine that used to sit at `pp-document-suite/` was
+  never in the image and never imported; all six of its scripts had drifted from
+  `engine/scripts/`, which is the confusion `docs/DEPLOY-2026-08-31-docengine-v23.md`
+  (R3) ran into. It was removed on 2026-09-27. `engine/` is the only copy.
+- Whether `3p4e/letta-stack` still carries a copy of this app, and whether
+  anything there should flow back here, is a question for the owner; nothing
+  in this repository depends on it.

@@ -8,13 +8,15 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import re
 
-from . import builder, db
+from . import builder, db, needs
 from .config import settings
 from .letta import LettaClient, LettaError
-from .questionnaires import QUESTIONNAIRES, apply_defaults
+from .questionnaires import QUESTIONNAIRES, apply_defaults, question_keys
 
 log = logging.getLogger("docengine.pipeline")
 
@@ -121,6 +123,17 @@ class BilingualGap(Exception):
     def __init__(self, gaps: list[str]):
         super().__init__("sections are not bilingual: " + ", ".join(gaps))
         self.gaps = gaps
+
+
+class RevisionFailed(Exception):
+    """A direct-edit request (run_revision) could not be turned into a new
+    document — the target section doesn't exist, or the editing agent's reply
+    didn't parse (see _direct_edit_sections). Distinct from QaAuditFailed:
+    there is no auditor verdict here, just a request that didn't land."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 class GridOverflow(Exception):
@@ -277,9 +290,33 @@ def _bilingual_gaps(sections: list[dict]) -> list[str]:
 # announces it as "**Verdict: PASS**" after a line of preamble. Matching only a
 # reply that STARTS with PASS therefore rejected genuinely passing audits: seen
 # live, an audit that cleared all six checks was recorded as
-# "§6A audit did not pass" and the document was never built. Allowing a bare
-# leading PASS as well keeps the simple form (and the existing fakes) working.
-_QA_VERDICT = re.compile(r"\bverdict\b\W{0,12}?(PASS|FIX)\b", re.I)
+# "§6A audit did not pass" and the document was never built.
+#
+# The verdict is a LINE, and nothing else may be on it: optional markdown
+# emphasis or a list bullet around it, the word "verdict", a separator, the
+# token, optional trailing emphasis or punctuation. The earlier pattern
+# (`\bverdict\b\W{0,12}?(PASS|FIX)`) matched anywhere in a sentence, so
+# "I cannot give a verdict: PASS would be wrong here. FIX section 6." and
+# "Verdict — PASS with the following blocking issue: FIX 3.0" both PASSED the
+# gate (review 2026-09-27, DI-15). Line-anchored, they do not. Horizontal
+# whitespace only inside the line ([ \t], never \s): under re.M a \s* between
+# the word and the token spanned line breaks, so "Verdict:\n\n\nPASS" was read
+# as one verdict line (DI2-07).
+_QA_VERDICT_LINE = re.compile(
+    r"^[ \t]*[-*>#\ \t]*[*_]*[ \t]*verdict[ \t]*[*_]*[ \t]*[:—–-]?[ \t]*[*_]*[ \t]*(PASS|FIX)[ \t]*[*_]*[.!]?[ \t]*$",
+    re.I | re.M,
+)
+# The one concession to a reply with no verdict line: the reply IS the bare
+# token — optional emphasis and a full stop, nothing else. "PASS with the
+# following blocking issue: …", "PASS, except …", "PASS but section 3 must
+# be FIXED" all passed the gate as single-line replies that started with
+# PASS and carried no FIX token (DI2-07); the fakes and a terse model say
+# "Verdict: PASS" or "PASS" and nothing after it.
+_QA_BARE_PASS = re.compile(r"^[*_]*PASS[*_]*[.!]?$", re.I)
+# A stray machine token outside the verdict line. Case-sensitive on purpose:
+# the persona's token is uppercase, and lower-case prose ("the author should
+# fix the spacing") is not a verdict.
+_QA_FIX_TOKEN = re.compile(r"\bFIX\b")
 
 
 def _norm_head(s: str) -> str:
@@ -340,20 +377,121 @@ def _reg_findings_context(reg_findings: list[str]) -> str:
     )
 
 
+def _sha256(text: str) -> str:
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
+def _provenance_entry(section: str, agent_name: str, model: str, turn: dict) -> dict:
+    """What fed one piece of authored text (review 2026-09-27, DI-14).
+
+    A verbatim author's reply is spliced straight into a controlled document,
+    so the record has to say which agent and model wrote it, a hash of the
+    exact text, and which retrievals it made on the way — the tool calls of
+    that turn and the document names RAGflow returned for each. Retrieved
+    passages themselves are not copied here (they are the corpus, and the
+    tool wraps them in data delimiters); the document keywords are enough to
+    find them again. Nothing from the tool sandbox environment can appear:
+    send_message_full only reduces message entries."""
+    calls = []
+    for c in turn.get("tool_calls") or []:
+        calls.append({"name": c.get("name"), "arguments": c.get("arguments")})
+    retrieved: list[dict] = []
+    for r in turn.get("tool_returns") or []:
+        if r.get("name") != "ragflow_search":
+            continue
+        entry: dict = {"status": r.get("status")}
+        try:
+            payload = json.loads(r.get("return") or "")
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            entry["ok"] = payload.get("ok")
+            entry["searched"] = payload.get("searched")
+            entry["documents"] = sorted({
+                h.get("document") for h in (payload.get("hits") or [])
+                if isinstance(h, dict) and h.get("document")})
+            if payload.get("unknown_datasets"):
+                entry["unknown_datasets"] = payload["unknown_datasets"]
+            if payload.get("err"):
+                entry["err"] = str(payload["err"])[:300]
+        retrieved.append(entry)
+    return {
+        "section": section,
+        "agent": agent_name,
+        "model": model,
+        "text_sha256": _sha256(turn.get("text") or ""),
+        "tool_calls": calls,
+        "retrieved": retrieved,
+    }
+
+
+_VERSION_TAIL = re.compile(r"^(.*?)(\d+)$")
+
+
+def _version_key(version: str) -> tuple:
+    """Orders versions the way a document controller reads them: numeric
+    runs compare as numbers ("1.10" after "1.9", "02" after "1"), text runs
+    as text. Used to find the LATEST registered version of a code."""
+    parts = re.findall(r"\d+|[^\d]+", (version or "").strip())
+    return tuple((0, int(x)) if x.isdigit() else (1, x) for x in parts)
+
+
+def _bump_version(version: str) -> str:
+    """The next version of a revised document. The registry keyed a revision
+    on the SAME code+version as its source, which in a GMP registry is two
+    documents with one identity (review 2026-09-27, DI-07). The last run of
+    digits is incremented and its zero-padding kept ("1.0" -> "1.1", "01" ->
+    "02", "1.9" -> "1.10"); a version with no trailing number gets ".1"."""
+    v = (version or "").strip() or "1.0"
+    m = _VERSION_TAIL.match(v)
+    if not m:
+        return v + ".1"
+    head, num = m.group(1), m.group(2)
+    return f"{head}{str(int(num) + 1).zfill(len(num))}"
+
+
+def _d5_floor_gap(source_markdown: str, revised_markdown: str) -> str | None:
+    """Canon D5: a revision is regenerated with the prior version as context
+    and carries >= 100 % of its content (§5A: words and non-space characters).
+    Returns a message naming the shortfall, or None when the floor holds.
+    Same counting as builder's own §5A check, on the two markdown sources."""
+    src_w, src_c = builder._source_word_char_counts(source_markdown)
+    new_w, new_c = builder._source_word_char_counts(revised_markdown)
+    if new_w >= src_w and new_c >= src_c:
+        return None
+    return (f"canon D5 content floor (§5A): revised document has {new_w} words / "
+            f"{new_c} chars, the version it revises has {src_w} / {src_c} — a "
+            f"revision may not carry less content than the document it supersedes")
+
+
 def _qa_audit_passed(verdict: str) -> bool:
     """True only on an unambiguous PASS.
 
-    Fail-closed on purpose, in three ways: an empty reply fails, a reply with no
-    recognisable verdict fails, and a reply carrying BOTH tokens fails. This gate
+    Fail-closed on purpose, in four ways: an empty reply fails; a reply with no
+    verdict LINE fails (a verdict buried in a sentence is not a verdict); a
+    reply with more than one verdict line fails; and a PASS verdict with a FIX
+    token anywhere else in the reply fails. The one concession is a reply that
+    is nothing but the bare token "PASS" — the simplest honest answer, and
+    what the offline fakes send. Anything after the token on that line
+    ("PASS — no issues found" as much as "PASS with the following blocking
+    issue: …") is not a bare token and is refused: the words after PASS are
+    exactly where a model hedges (DI2-07). A multi-line reply that merely
+    STARTS with PASS ("PASS\\nBlocking issues: …") is refused too. This gate
     is what stands between a draft and a formatted controlled document, so
     "probably fine" has to count as not passing."""
     t = (verdict or "").strip()
     if not t:
         return False
-    found = {m.group(1).upper() for m in _QA_VERDICT.finditer(t)}
-    if found:
-        return found == {"PASS"}
-    return t.upper().startswith("PASS")
+    lines = [m.group(1).upper() for m in _QA_VERDICT_LINE.finditer(t)]
+    if len(lines) != 1:
+        if not lines and _QA_BARE_PASS.match(t):
+            return True
+        return False
+    if lines[0] != "PASS":
+        return False
+    # A PASS verdict beside a FIX token is a contradiction, not a pass.
+    rest = _QA_VERDICT_LINE.sub("", t)
+    return not _QA_FIX_TOKEN.search(rest)
 
 
 def _strip_fences(text: str) -> str:
@@ -431,7 +569,15 @@ def _brief(questionnaire_key: str, answers: dict, meta: dict | None = None) -> s
             f"- code: {meta.get('code', '')}",
             f"- version: {meta.get('version', '1.0')}",
         ]
-    for k, v in answers.items():
+    # Only the questionnaire's OWN questions are rendered, in its order. The
+    # validator already refuses unknown keys at the API; iterating the
+    # declaration rather than the caller's dict is the second lock on the
+    # same door — a key that is not a question can never become a line in a
+    # prompt, whatever path put it in `answers`.
+    for k in question_keys(questionnaire_key):
+        if k not in answers or answers[k] in (None, "", []):
+            continue
+        v = answers[k]
         lines.append(f"- {k}: {', '.join(v) if isinstance(v, list) else v}")
     lines.append(
         "NOTE: a number in parentheses after a field name is the EU GMP clause "
@@ -538,7 +684,12 @@ async def _repair_sections(
     fails the job honestly, which is the correct outcome."""
     from .fleet import spawn_ephemeral  # late import: fleet needs live Letta
 
-    tmp_id = await spawn_ephemeral(client, author, f"fix_{job_id[:8]}", ctx=ctx)
+    # autoclear=False: this clone gets a second turn (the nudge below) if the
+    # first comes back with no section markers. The author's own fleet.yaml
+    # flag is autoclear=true for its normal one-shot per-section use; left on
+    # here it wipes the first turn's context (the whole document, the issues)
+    # before the nudge is composed, so the nudge runs with nothing to act on.
+    tmp_id = await spawn_ephemeral(client, author, f"fix_{job_id[:8]}", ctx=ctx, autoclear=False)
     try:
         reply = await client.send_message(
             tmp_id,
@@ -559,10 +710,10 @@ async def _repair_sections(
             "AFTER the final '<<<PP-END ...>>>' line — never inside a section.\n"
             "- Change only what the issues require; leave everything else byte "
             "for byte as it is.\n"
-            "- NEVER invent data to satisfy an issue. Facility specifics, "
-            "measured values, dates, names and signatures stay BLANK write-ins. "
-            "If an issue cannot be fixed without inventing something, leave that "
-            "one unfixed and say so after the final marker.\n"
+            "- NEVER invent data to satisfy an issue. If an issue cannot be "
+            "fixed without inventing something, leave that one unfixed and say "
+            "so after the final marker.\n"
+            "- " + needs.INSTRUCTION + "\n"
             "- Do NOT emit a <!--HEADERDATA--> block; you do not own the header.\n"
             "- Output the document body first, with no preamble.\n\n"
             f"ISSUES:\n{audit.strip()}\n\n"
@@ -598,6 +749,148 @@ async def _repair_sections(
         log.warning("repair reply unusable (%s); first line: %r",
                     reason, (reply or "").strip().split("\n")[0][:160])
     return repaired
+
+
+async def _direct_edit_sections(
+    client: LettaClient, author: str, sections: list[dict], instruction: str, job_id: str,
+    ctx=None, section_num: str | None = None,
+) -> tuple[list[dict] | None, str]:
+    """Apply a person's direct-edit request (chat instruction or a preset) to
+    one section or the whole document, on an ephemeral clone of the section's
+    own author — the same machinery _repair_sections uses for the §6A loop:
+    autoclear off (this clone may get a second, nudge turn), the same
+    never-invent instruction, the same marker protocol so a reply can only
+    ever replace the sections it names.
+
+    The reply is not the last word: run_revision then runs the structural
+    gates, the canon D5 content floor and the full §6A audit loop on it
+    before anything is built. What this function itself guards: an
+    unparseable reply changes nothing; an invented fact is refused by the
+    same rule that refuses one for an auditor's issue; and when the caller
+    scoped the request to one section, a reply that also touches another is
+    rejected rather than silently widened past what was asked."""
+    from .fleet import spawn_ephemeral
+
+    scope_line = (
+        f"ONLY section {section_num} may change in your reply — every other "
+        "section must be left out entirely, not merely unchanged.\n"
+        if section_num else ""
+    )
+    tmp_id = await spawn_ephemeral(client, author, f"rev_{job_id[:8]}", ctx=ctx, autoclear=False)
+    try:
+        reply = await client.send_message(
+            tmp_id,
+            "A person reviewing this document asked for the change below. "
+            "Reply with the corrected sections and NOTHING else — no plan, no "
+            "commentary, no explanation of what you are about to do. Your reply "
+            "is parsed by a machine, not read by a person.\n\n"
+            f"{scope_line}"
+            "Rules:\n"
+            "- Return ONLY the sections you actually changed. Leave every other "
+            "section out entirely — it is kept exactly as it is. Do not echo the "
+            "whole document.\n"
+            "- Give each returned section in full, wrapped in its original "
+            "'<<<PP-SECTION ...>>>' and '<<<PP-END <number>>>>' marker lines, "
+            "reproduced unchanged. They delimit the document for reassembly and "
+            "are not part of it.\n"
+            "- ONLY text between a matching pair becomes the document. Put any "
+            "remark, summary of what you changed, or request you could not "
+            "satisfy AFTER the final '<<<PP-END ...>>>' line — never inside a "
+            "section.\n"
+            "- Change only what the request below requires; leave everything "
+            "else byte for byte as it is.\n"
+            "- NEVER invent data to satisfy the request. If the request cannot "
+            "be met without inventing something, leave that part unmet and say "
+            "so after the final marker.\n"
+            "- " + needs.INSTRUCTION + "\n"
+            "- Do NOT emit a <!--HEADERDATA--> block; you do not own the header.\n"
+            "- Output the document body first, with no preamble.\n\n"
+            f"REQUEST:\n{instruction.strip()}\n\n"
+            f"DOCUMENT BODY:\n{_section_body(sections)}",
+        )
+        if MARK_OPEN not in (reply or ""):
+            log.info("direct-edit reply had no section markers — nudging once")
+            reply = await client.send_message(
+                tmp_id,
+                "Output the corrected sections NOW: only the "
+                f"{MARK_OPEN}...>>> / <<<PP-END n>>> blocks for the sections you "
+                "changed, nothing before or after them. No commentary, no plan, "
+                "no explanation.",
+            )
+    finally:
+        try:
+            await client.delete_agent(tmp_id)
+        except Exception as e:  # noqa: BLE001
+            log.warning("failed to delete ephemeral editor %s: %s", tmp_id, e)
+    body = _strip_fences(reply)
+    if section_num:
+        # A reply naming a section outside the caller's scope is not "close
+        # enough" — reject it rather than let the edit widen past what was
+        # asked for.
+        named = {m.group(1) for m in _SECTION_OPEN.finditer(body or "")}
+        outside = sorted(named - {section_num})
+        if outside:
+            return None, f"reply touched section(s) outside the requested scope: {outside}"
+    revised, reason = _split_repaired(body, sections)
+    if revised is not None:
+        log.info("direct edit accepted: %s", reason)
+    else:
+        log.warning("direct edit reply unusable (%s); first line: %r",
+                    reason, (reply or "").strip().split("\n")[0][:160])
+    return revised, reason
+
+
+_SECTION_HEADING = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t]*$")
+_NUM_PREFIX = re.compile(r"^(\d+(?:\.\d+)*)\s+(.*)$")
+
+
+def split_markdown_sections(markdown: str) -> list[dict]:
+    """The document body as the [{num, mk, en, content}] shape the section
+    gates judge, split on its top-level `# ` headings — the same shape
+    assemble_markdown produces, read back for a document the caller
+    authored (the direct /build path). Text before the first heading is a
+    section of its own ("0"), so nothing escapes the gates."""
+    body = builder._strip_headerdata(markdown)
+    sections: list[dict] = []
+    cur: dict | None = None
+    buf: list[str] = []
+
+    def close():
+        if cur is not None:
+            cur["content"] = "\n".join(buf).strip()
+            sections.append(cur)
+
+    for line in body.splitlines():
+        m = _SECTION_HEADING.match(line)
+        if m and line.lstrip().startswith("# "):
+            close()
+            title = m.group(1).strip()
+            nm = _NUM_PREFIX.match(title)
+            num, rest = (nm.group(1), nm.group(2)) if nm else (str(len(sections) + 1), title)
+            mk, _, en = rest.partition("|")
+            cur = {"num": num, "mk": mk.strip(), "en": en.strip()}
+            buf = []
+            continue
+        if cur is None:
+            cur = {"num": "0", "mk": "", "en": ""}
+            buf = []
+        buf.append(line)
+    close()
+    return [s for s in sections if s["content"]]
+
+
+def section_gate_failures(sections: list[dict], doctype: str) -> list[str]:
+    """Every per-section gate the questionnaire path enforces before it
+    builds, as messages — the bilingual gate and the grid-overflow gate.
+    Empty means the sections pass. The direct /build path runs this so a
+    hand-authored document clears the same bar as a generated one
+    (review 2026-09-27, DI-06)."""
+    out: list[str] = []
+    gaps = _bilingual_gaps(sections)
+    if gaps:
+        out.append("sections are not bilingual: " + ", ".join(gaps))
+    out.extend(_grid_overflow(sections, doctype))
+    return out
 
 
 def _reject_headerdata_breakers(field: str, value) -> None:
@@ -670,6 +963,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
     reg_findings: list[str] = []
     audits: list[str] = []
     sections: list[dict] = []
+    provenance: list[dict] = []
     markdown = ""
     try:
         job = await db.job_get(job_id)
@@ -683,51 +977,59 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         await db.job_update(job_id, status="running", stage="generate")
 
         # late import: fleet needs live Letta
-        from .fleet import agent_datasets, ensure_fleet_ctx, spawn_ephemeral
+        from .fleet import agent_datasets, agent_lock, ensure_fleet_ctx, spawn_ephemeral
 
         ctx = await ensure_fleet_ctx(client)
         agents = ctx.agents
         reg_corpora = agent_datasets(REG_CHECKER)
 
         # ---- section generation ----
+        # Every send to a PERSISTENT agent is under that agent's lock (DI-08):
+        # two jobs never share one author's turn, and the reconciler cannot
+        # reset the buffer under it. Clones (reg-check, repair) need none.
         if doctype == "SOP":
             for num, mk, en in SOP_SECTIONS:
-                author = agents[RACI_SPECIALIST] if num == "3.0" else agents[SOP_AUTHOR]
-                text = await client.send_message(
-                    author,
-                    f"Draft ONLY section {num} {mk}|{en} of the SOP "
-                    f"'{meta['title_mk']} | {meta['title_en']}' (code {meta['code']}). "
-                    f"Content brief:\n{brief}\n\n"
-                    "Return ONLY the bilingual Markdown body — no heading line, no code "
-                    "fences, and NO commentary, preamble, or explanation of what you are "
-                    "doing. Your entire reply is inserted verbatim into the document. "
-                    "Unknown facility specifics stay as blank fields.",
-                )
+                author_name = RACI_SPECIALIST if num == "3.0" else SOP_AUTHOR
+                async with agent_lock(author_name):
+                    turn = await client.send_message_full(
+                        agents[author_name],
+                        f"Draft ONLY section {num} {mk}|{en} of the SOP "
+                        f"'{meta['title_mk']} | {meta['title_en']}' (code {meta['code']}). "
+                        f"Content brief:\n{brief}\n\n"
+                        "Return ONLY the bilingual Markdown body — no heading line, no code "
+                        "fences, and NO commentary, preamble, or explanation of what you are "
+                        "doing. Your entire reply is inserted verbatim into the document.\n\n"
+                        + needs.INSTRUCTION,
+                    )
                 sections.append({
                     "num": num, "mk": mk, "en": en,
-                    "content": _drop_echoed_heading(_clean_section(text), num, mk, en),
+                    "content": _drop_echoed_heading(_clean_section(turn["text"]), num, mk, en),
                 })
+                provenance.append(_provenance_entry(num, author_name, ctx.model, turn))
                 await db.job_update(job_id, stage=f"generate {num}")
         else:
-            text = await client.send_message(
-                agents[ANNEX_AUTHOR],
-                f"Design the {doctype} '{meta['title_mk']} | {meta['title_en']}' "
-                f"(code {meta['code']}). Content brief:\n{brief}\n\n"
-                "Return ONLY the bilingual Markdown body, using [[FORM:grid]] for the "
-                "metadata block and [[TABLE]] for data grids. Blank write-in values. "
-                "NO commentary, preamble, or explanation — your entire reply is inserted "
-                "verbatim into the document.\n"
-                "Do NOT emit a <!--HEADERDATA--> block: the document header is added "
-                "around your output and a second one conflicts with it. Do NOT use the "
-                "SOP 9-section numbers (1 ЦЕЛ, 6 ПОСТАПКА, ...) — that structure is for "
-                "SOPs only; number any headings you need from 1 upward, or title them by "
-                "intent. Keep every [[FORM:grid]] row to the same column count.",
-            )
+            async with agent_lock(ANNEX_AUTHOR):
+                turn = await client.send_message_full(
+                    agents[ANNEX_AUTHOR],
+                    f"Design the {doctype} '{meta['title_mk']} | {meta['title_en']}' "
+                    f"(code {meta['code']}). Content brief:\n{brief}\n\n"
+                    "Return ONLY the bilingual Markdown body, using [[FORM:grid]] for the "
+                    "metadata block and [[TABLE]] for data grids. Blank write-in values. "
+                    "NO commentary, preamble, or explanation — your entire reply is inserted "
+                    "verbatim into the document.\n"
+                    "Do NOT emit a <!--HEADERDATA--> block: the document header is added "
+                    "around your output and a second one conflicts with it. Do NOT use the "
+                    "SOP 9-section numbers (1 ЦЕЛ, 6 ПОСТАПКА, ...) — that structure is for "
+                    "SOPs only; number any headings you need from 1 upward, or title them by "
+                    "intent. Keep every [[FORM:grid]] row to the same column count.\n\n"
+                    + needs.INSTRUCTION,
+                )
             sections.append(
                 {"num": "1.0", "mk": "СОДРЖИНА", "en": "CONTENT",
                  "content": _drop_echoed_heading(
-                     _clean_section(text, structured=True), "1.0", "СОДРЖИНА", "CONTENT")}
+                     _clean_section(turn["text"], structured=True), "1.0", "СОДРЖИНА", "CONTENT")}
             )
+            provenance.append(_provenance_entry("1.0", ANNEX_AUTHOR, ctx.model, turn))
 
         # ---- per-section regulatory check ----
         # Each section gets its OWN short-lived agent (spawn_ephemeral), used
@@ -821,18 +1123,29 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # found and can choose to raise it as an issue itself.
         reg_context = _reg_findings_context(reg_findings)
         for attempt in range(max(0, settings.max_repair_rounds) + 1):
-            audit = await client.send_message(
-                agents[QA_AUDITOR],
-                "Run the §6A review on this assembled document Markdown. "
-                "Return verdict PASS or FIX with issues.\n\n"
-                "SCOPE: review the CONTENT. The `<!--HEADERDATA-->` block and the "
-                "`# <number> <MK>|<EN>` section heading lines are emitted by the "
-                "formatter in canonical form — they are not the author's and not "
-                "yours to restyle. Do not raise issues about their spacing, level "
-                "or punctuation; no author can act on those and the document "
-                "cannot pass.\n\n" + reg_context + markdown,
-            )
+            async with agent_lock(QA_AUDITOR):
+                audit_turn = await client.send_message_full(
+                    agents[QA_AUDITOR],
+                    "Run the §6A review on this assembled document Markdown. "
+                    "Return verdict PASS or FIX with issues.\n\n"
+                    "SCOPE: review the CONTENT. The `<!--HEADERDATA-->` block and the "
+                    "`# <number> <MK>|<EN>` section heading lines are emitted by the "
+                    "formatter in canonical form — they are not the author's and not "
+                    "yours to restyle. Do not raise issues about their spacing, level "
+                    "or punctuation; no author can act on those and the document "
+                    "cannot pass.\n\n"
+                    "[NEEDS INPUT: …] markers are the engine's own placeholder for a fact "
+                    "the requester has not supplied yet, and are reported to them "
+                    "separately. Treat one as an honest gap, NOT an issue to fix — the "
+                    "alternative an author has is inventing the value, which is the thing "
+                    "this document must never contain. Do raise an issue if a marker is "
+                    "used where the answer WAS supplied, or where the blank belongs to a "
+                    "human filling the form during execution.\n\n" + reg_context + markdown,
+                )
+            audit = audit_turn["text"]
             audits.append(audit)
+            provenance.append({**_provenance_entry("§6A", QA_AUDITOR, ctx.model, audit_turn),
+                               "judged_sha256": _sha256(markdown)})
             if _qa_audit_passed(audit) or attempt >= settings.max_repair_rounds:
                 break
 
@@ -842,12 +1155,19 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 log.warning("job %s repair %d unusable — failing on the audit", job_id, attempt + 1)
                 break
             # A repair can break parity (dropping one language while rewording a
-            # cell). Re-run the same per-section gate rather than trusting it.
-            gaps = _bilingual_gaps(repaired)
-            if gaps:
-                log.warning("job %s repair %d broke bilingual parity %s — discarded",
-                            job_id, attempt + 1, gaps)
+            # cell) or widen a grid row past what the packer will place. Re-run
+            # BOTH per-section gates rather than trusting the repair: they ran
+            # before the audit for reasons a repair does nothing to retire.
+            broke = _bilingual_gaps(repaired) or _grid_overflow(repaired, doctype)
+            if broke:
+                log.warning("job %s repair %d broke a structural gate %s — discarded",
+                            job_id, attempt + 1, broke)
                 break
+            for s in repaired:
+                if s["content"] != next(o["content"] for o in sections if o["num"] == s["num"]):
+                    provenance.append({"section": s["num"], "agent": author,
+                                       "model": ctx.model, "origin": f"repair {attempt + 1}",
+                                       "text_sha256": _sha256(s["content"])})
             sections = repaired
             markdown = assemble_markdown(meta, sections)
 
@@ -872,6 +1192,15 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 "version": meta.get("version", "1.0"),
                 "path": str(result.path), "bytes": result.bytes,
                 "verify": result.verify_report,
+                # attribution + lineage + provenance (DI-06 / DI-07 / DI-14).
+                # reviewed_by stays NULL: no human has reviewed this document.
+                # The canvas design is where a named QA/QP approval will set it.
+                "created_by": job.get("created_by") or "",
+                "org_id": job.get("org_id"),
+                "source": "workflow",
+                "qa_audit": audits[-1],
+                "provenance": {"sections": provenance, "regulatory": reg_findings,
+                               "markdown_sha256": _sha256(markdown)},
             },
         )
         await db.job_update(
@@ -879,6 +1208,13 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
             result={
                 "document_id": did,
                 "markdown": markdown,
+                # Structured, not just the assembled string — a later direct
+                # edit (run_revision) targets one section by number and must
+                # not re-derive section boundaries by re-parsing the rendered
+                # Markdown. `meta` (with doctype filled in, unlike the raw
+                # payload) travels with it for the same reason.
+                "sections": sections,
+                "meta": meta,
                 "verify": result.verify_report,
                 "regulatory": reg_findings,
                 "qa_audit": audits[-1],
@@ -886,6 +1222,12 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 # time. Every verdict in order, and how many hand-backs it took.
                 "qa_audit_history": audits,
                 "qa_repair_rounds": len(audits) - 1,
+                # What the agents did NOT know. The document ships with a
+                # visible [NEEDS INPUT: …] marker at each of these points; this
+                # is the same list, lifted out so the requester is TOLD what to
+                # supply instead of having to find the markers by reading.
+                "needs_input": needs.extract_needs(sections),
+                "provenance": provenance,
                 "bytes": result.bytes,
             },
         )
@@ -943,6 +1285,252 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # run_workflow returns. Its pooled httpx.AsyncClient (see letta.py)
         # must be closed here or the connection/file descriptor it holds
         # outlives the job that opened it, across every job this worker runs.
+        try:
+            await client.aclose()
+        except Exception:  # noqa: BLE001 — cleanup must never mask a job result
+            log.warning("job %s: failed to close Letta client", job_id, exc_info=True)
+
+
+async def run_revision(job_id: str, client: LettaClient | None = None) -> None:
+    """A direct-edit follow-up on a document run_workflow already built — a
+    chat instruction or a preset, scoped to one section or the whole
+    document. `job.payload` for this kind of job is
+    {source_document_id, sections, meta, instruction, section_num}: `sections`
+    and `meta` are the exact structures run_workflow's own "done" result
+    stored, carried forward by the caller rather than re-derived here by
+    re-parsing rendered Markdown.
+
+    Runs _direct_edit_sections (the same repair-clone machinery the §6A audit
+    loop uses), then the same gates a first draft clears — bilingual and
+    grid structure, the canon D5 content floor against the version being
+    revised, the §6A audit with its repair loop — and only then rebuilds and
+    re-verifies exactly as run_workflow does. There is no HUMAN accept/reject
+    step between the edit and the registry row (the canvas design is where
+    that belongs), which is why the row it registers is a NEW document that
+    supersedes the source at the next version, never an edit of the one it
+    started from: the source document, the instruction that was given, and
+    the document it produced all stay on the record."""
+    client = client or LettaClient()
+    sections: list[dict] = []
+    markdown = ""
+    audits: list[str] = []
+    provenance: list[dict] = []
+    try:
+        job = await db.job_get(job_id)
+        p = job["payload"]
+        source_meta = dict(p["meta"])
+        source_sections = [dict(s) for s in p["sections"]]
+        sections = [dict(s) for s in source_sections]
+        instruction = p["instruction"]
+        section_num = p.get("section_num") or None
+        doctype = source_meta["doctype"]
+        # Lineage and identity (DI-07): the new document supersedes its
+        # source and carries the NEXT version. Registering a second row under
+        # the source's own code+version was two documents with one identity.
+        # The next version is bumped from the LATEST version registered
+        # under this code — not from the source's: revising the same source
+        # twice ("tighten", then "simplify") bumped 1.0 -> 1.1 both times and
+        # registered two 1.1s (review 2026-09-27, DI2-03). The identity index
+        # in db.py refuses that too; this is what makes the second revision
+        # land at 1.2 instead of failing.
+        meta = dict(source_meta)
+        source_version = str(source_meta.get("version", "1.0") or "1.0")
+        latest = max([source_version, *await db.registered_versions(job.get("org_id"), meta["code"])],
+                     key=_version_key)
+        meta["version"] = _bump_version(latest)
+        supersedes_id = p.get("source_document_id")
+        await db.job_update(job_id, status="running", stage="revise")
+
+        # late import: fleet needs live Letta
+        from .fleet import agent_lock, ensure_fleet_ctx
+
+        ctx = await ensure_fleet_ctx(client)
+        agents = ctx.agents
+        author = SOP_AUTHOR if doctype == "SOP" else ANNEX_AUTHOR
+
+        if section_num and not any(s["num"] == section_num for s in sections):
+            raise RevisionFailed(f"no section {section_num} on this document")
+
+        await db.job_update(job_id, stage="editing" + (f" {section_num}" if section_num else ""))
+        revised, reason = await _direct_edit_sections(
+            client, author, sections, instruction, job_id, ctx=ctx, section_num=section_num,
+        )
+        if revised is None:
+            raise RevisionFailed(reason)
+
+        # Same two structural gates run_workflow enforces before it will build
+        # anything, for the same reason: a revision can drop a language out of
+        # a section, or widen a [[FORM]]/[[TABLE]] row past what the packer
+        # will place, just as easily as a first draft can.
+        gaps = _bilingual_gaps(revised)
+        if gaps:
+            raise BilingualGap(gaps)
+        overflow = _grid_overflow(revised, doctype)
+        if overflow:
+            raise GridOverflow(overflow)
+
+        for s in revised:
+            if s["content"] != next(o["content"] for o in sections if o["num"] == s["num"]):
+                provenance.append({"section": s["num"], "agent": author, "model": ctx.model,
+                                   "origin": "edit", "instruction": instruction,
+                                   "text_sha256": _sha256(s["content"])})
+        sections = revised
+        markdown = assemble_markdown(meta, sections)
+
+        # Canon D5 content floor: the revision carries at least what the
+        # version it supersedes carried. Checked BEFORE the audit and the
+        # build so the failure names the shortfall instead of surfacing as a
+        # §5A fidelity line on the .docx (which compares against the revised
+        # markdown, not the prior version, and so could never see it).
+        short = _d5_floor_gap(assemble_markdown(source_meta, source_sections), markdown)
+        if short:
+            raise RevisionFailed(short)
+
+        # ---- §6A audit ----
+        # The same gate, the same repair loop and the same PASS requirement
+        # run_workflow imposes. A revision reaches exactly the same place — a
+        # registered, downloadable controlled document — so it clears exactly
+        # the same bar; an edit is not a lesser act of authorship than a first
+        # draft. (Unlike run_workflow there is no regulatory-check context to
+        # fold in: this path runs no gf_reg_checker pass, and the source job's
+        # findings were computed on sections this edit may have just changed,
+        # so passing them here would describe a document that no longer
+        # exists. The auditor judges the revised document on its own terms.)
+        await db.job_update(job_id, stage="qa-audit")
+        for attempt in range(max(0, settings.max_repair_rounds) + 1):
+            async with agent_lock(QA_AUDITOR):
+                audit_turn = await client.send_message_full(
+                    agents[QA_AUDITOR],
+                    "Run the §6A review on this assembled document Markdown. "
+                    "Return verdict PASS or FIX with issues.\n\n"
+                    "SCOPE: review the CONTENT. The `<!--HEADERDATA-->` block and the "
+                    "`# <number> <MK>|<EN>` section heading lines are emitted by the "
+                    "formatter in canonical form — they are not the author's and not "
+                    "yours to restyle. Do not raise issues about their spacing, level "
+                    "or punctuation; no author can act on those and the document "
+                    "cannot pass.\n\n"
+                    "[NEEDS INPUT: …] markers are the engine's own placeholder for a fact "
+                    "the requester has not supplied yet, and are reported to them "
+                    "separately. Treat one as an honest gap, NOT an issue to fix — the "
+                    "alternative an author has is inventing the value, which is the thing "
+                    "this document must never contain. Do raise an issue if a marker is "
+                    "used where the answer WAS supplied, or where the blank belongs to a "
+                    "human filling the form during execution.\n\n" + markdown,
+                )
+            audit = audit_turn["text"]
+            audits.append(audit)
+            provenance.append({**_provenance_entry("§6A", QA_AUDITOR, ctx.model, audit_turn),
+                               "judged_sha256": _sha256(markdown)})
+            if _qa_audit_passed(audit) or attempt >= settings.max_repair_rounds:
+                break
+
+            await db.job_update(job_id, stage=f"qa-repair {attempt + 1}")
+            repaired = await _repair_sections(client, author, sections, audit, job_id, ctx=ctx)
+            if repaired is None:
+                log.warning("job %s (revision) repair %d unusable — failing on the audit",
+                            job_id, attempt + 1)
+                break
+            broke = _bilingual_gaps(repaired) or _grid_overflow(repaired, doctype)
+            if broke:
+                log.warning("job %s (revision) repair %d broke a structural gate %s — discarded",
+                            job_id, attempt + 1, broke)
+                break
+            # The floor holds for the repaired text too: a repair is a
+            # revision of the revision.
+            short = _d5_floor_gap(assemble_markdown(source_meta, source_sections),
+                                  assemble_markdown(meta, repaired))
+            if short:
+                log.warning("job %s (revision) repair %d fell under the D5 floor — discarded",
+                            job_id, attempt + 1)
+                break
+            for s in repaired:
+                if s["content"] != next(o["content"] for o in sections if o["num"] == s["num"]):
+                    provenance.append({"section": s["num"], "agent": author,
+                                       "model": ctx.model, "origin": f"repair {attempt + 1}",
+                                       "text_sha256": _sha256(s["content"])})
+            sections = repaired
+            markdown = assemble_markdown(meta, sections)
+
+        if not _qa_audit_passed(audits[-1]):
+            raise QaAuditFailed(audits[-1], audits, markdown)
+
+        await db.job_update(job_id, stage="format")
+        result = await asyncio.to_thread(
+            builder.build, markdown, settings.out_dir, meta["code"]
+        )
+        did = await db.document_create(
+            job_id,
+            {
+                "code": meta["code"], "doctype": doctype,
+                "title_mk": meta["title_mk"], "title_en": meta["title_en"],
+                "version": meta["version"],
+                "path": str(result.path), "bytes": result.bytes,
+                "verify": result.verify_report,
+                "created_by": job.get("created_by") or "",
+                "org_id": job.get("org_id"),
+                "source": "revise",
+                "supersedes_id": supersedes_id,
+                "qa_audit": audits[-1],
+                "provenance": {"sections": provenance, "instruction": instruction,
+                               "section_num": section_num,
+                               "markdown_sha256": _sha256(markdown)},
+            },
+        )
+        await db.job_update(
+            job_id, status="done", stage="done",
+            result={
+                "document_id": did,
+                "markdown": markdown,
+                "sections": sections,
+                "meta": meta,
+                "verify": result.verify_report,
+                "instruction": instruction,
+                "section_num": section_num,
+                "source_document_id": supersedes_id,
+                "supersedes_id": supersedes_id,
+                "qa_audit": audits[-1],
+                "qa_audit_history": audits,
+                "qa_repair_rounds": len(audits) - 1,
+                "needs_input": needs.extract_needs(sections),
+                "provenance": provenance,
+                "bytes": result.bytes,
+            },
+        )
+    except builder.VerifyFailed as e:
+        log.error("job %s (revision) verify FAILED", job_id)
+        await db.job_update(job_id, status="failed", error="verify FAILED",
+                            result={"verify": e.report, "markdown": markdown, "sections": sections,
+                                    "qa_audit_history": audits})
+    except QaAuditFailed as e:
+        log.error("job %s (revision) §6A audit did not pass", job_id)
+        await db.job_update(job_id, status="failed", error="§6A audit did not pass",
+                            result={"qa_audit": e.verdict,
+                                    "qa_audit_history": e.history,
+                                    "qa_repair_rounds": len(e.history) - 1,
+                                    "markdown": e.markdown,
+                                    "sections": sections,
+                                    "instruction": instruction})
+    except RevisionFailed as e:
+        log.error("job %s (revision) could not be applied: %s", job_id, e.reason)
+        await db.job_update(job_id, status="failed", error=str(e.reason)[:500])
+    except BilingualGap as e:
+        log.error("job %s (revision) bilingual gap: %s", job_id, e.gaps)
+        await db.job_update(job_id, status="failed",
+                            error="revision broke bilingual parity: " + ", ".join(e.gaps),
+                            result={"bilingual_gaps": e.gaps, "sections": sections})
+    except GridOverflow as e:
+        log.error("job %s (revision) grid overflow: %s", job_id, e.gaps)
+        await db.job_update(job_id, status="failed",
+                            error="revision broke a table/form grid: " + str(e)[:400],
+                            result={"grid_overflow": e.gaps, "sections": sections})
+    except LettaError as e:
+        log.error("job %s (revision) letta error: %s", job_id, e)
+        await db.job_update(job_id, status="failed", error=f"letta: {e}")
+    except Exception as e:  # noqa: BLE001 — job must record any failure
+        log.exception("job %s (revision) failed", job_id)
+        detail = str(e).strip() or repr(e)
+        await db.job_update(job_id, status="failed", error=f"{type(e).__name__}: {detail}"[:500])
+    finally:
         try:
             await client.aclose()
         except Exception:  # noqa: BLE001 — cleanup must never mask a job result

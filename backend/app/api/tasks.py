@@ -17,11 +17,11 @@ from pydantic import BaseModel, Field
 
 from app.api.weekwindow import ensure_week
 from app.automation import canned_recipients
-from app.db import rls
-from app.deps import dept_scope, require_password_set, require_role
-from app.notify import participants, safe_emit
+from app.db import rls, users_admin_pool
+from app.deps import dept_family, dept_scope, require_password_set, require_role
+from app.notify import participants, safe_emit, savepointed
 from app.roles import ADMIN, ELEVATED_ROLES
-from app.worktime import facility_today, classify, session_hours
+from app.worktime import MAX_SESSION_HOURS, facility_today, classify, session_hours
 
 _log = logging.getLogger("app.tasks")
 
@@ -56,41 +56,82 @@ def _ser(rows):
     return [dict(r) for r in rows]
 
 
-async def _assert_scope_visible(c, task_id: str, user: dict) -> None:
+# The one visibility rule for a department-scoped manager, spelled once for
+# the EXISTS form (_assert_scope_visible / task_in_scope) — _scope_clause is
+# the same rule for a WHERE. The `handoffs` arm is the read-only one: a
+# proposal addressed to my department lets me OPEN the task to accept or
+# reject it; it does not make the task mine to edit (review 2026-09-27,
+# R2-BC-04), so write paths evaluate the rule with include_handoffs=False.
+_SCOPE_ARMS = (
+    " t.department_id = ANY(app.dept_family($2)) OR t.user_id=$3"
+    " OR EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id=t.id AND a.user_id=$3)"
+    " OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id = ANY(app.dept_family($2)) AND ch.is_deleted=false)"
+    " OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id = ANY(app.dept_family($2)))"
+)
+_HANDOFF_ARM = (
+    " OR EXISTS (SELECT 1 FROM handoffs h WHERE h.task_id=t.id AND h.status='proposed' AND h.to_dept_id = ANY(app.dept_family($2)))"
+)
+
+
+async def task_in_scope(c, task_id: str, scope: str, user_id, *, include_handoffs: bool = True) -> bool:
+    """Whether the task is inside the department scope `scope` for the person
+    `user_id` — the predicate behind _assert_scope_visible, usable for someone
+    OTHER than the caller (collab.py asks it of an @mentioned manager before
+    sending them a task's title). Under the caller's RLS connection a plain
+    USER sees fewer rows than an elevated one, so for a third party the answer
+    can only ever be conservative (False where the manager could in fact open
+    the task), never the reverse."""
+    return await c.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id=$1 AND t.is_deleted=false AND ("
+        + _SCOPE_ARMS + (_HANDOFF_ARM if include_handoffs else "") + "))",
+        task_id, scope, str(user_id))
+
+
+async def _assert_scope_visible(c, task_id: str, user: dict, *, include_handoffs: bool = True) -> None:
     """THE single in-scope guard for department-scoped managers. RLS alone is
     NOT a department boundary — app.is_elevated() grants every manager role
     org-wide row access (department scoping is an app-layer concept, see
     app/roles.DEPT_SCOPED_ROLES), so every task read/mutation and sub-resource
     endpoint whose access could otherwise reach org-wide must call this.
 
-    In-scope = own dept, personally owned, assigned, a subtask delegated into
-    my dept, or a child whose parent lives in my dept. Org-wide roles
-    (dept_scope is None) are unaffected. Raises 404 rather than 403 to avoid
-    confirming a foreign task's existence.
+    In-scope = own dept (and its sub-departments), personally owned, assigned,
+    a subtask delegated into my dept, a child whose parent lives in my dept,
+    or — for READS — a task with an OPEN handoff addressed to my department:
+    the receiving manager must be able to open what is being offered to them
+    to accept or reject it, and the task still sits in the SOURCE department
+    until they do (review 2026-09-27, BC-04). Org-wide roles (dept_scope is
+    None) are unaffected. Raises 404 rather than 403 to avoid confirming a
+    foreign task's existence.
+
+    `include_handoffs=False` is what every WRITE path passes. A pending
+    proposal opened the task to the receiving manager for reads AND writes:
+    they could retitle it, log sessions on it, move its status and sign it
+    off while it was still the source department's — and attach a subtask of
+    their own to it, which kept the parent in their scope through the
+    "child in my family" arm after the proposal was rejected (review
+    2026-09-27, R2-BC-04). Reads, the handoff list and the comment thread
+    (the discussion around a proposal) keep the arm; everything that changes
+    the task or hangs new records off it does not, until the handoff is
+    accepted and the task actually moves.
 
     get_task and every guarded write path call THIS function (not a re-derived
     copy of the rule) so read-scope and write-scope can never drift apart —
     the drift that silently reopens this exact bypass class. When adding a new
-    endpoint that touches a task (or its sub-resources) by id, call this."""
+    endpoint that touches a task (or its sub-resources) by id, call this — with
+    include_handoffs=False if it writes. The list predicate (_scope_clause) is
+    the same rule spelled for a WHERE."""
     scope = dept_scope(user)
     if not scope:
         return
-    visible = await c.fetchval(
-        "SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id=$1 AND t.is_deleted=false AND ("
-        " t.department_id=$2 OR t.user_id=$3"
-        " OR EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id=t.id AND a.user_id=$3)"
-        " OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id=$2 AND ch.is_deleted=false)"
-        " OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id=$2)"
-        "))",
-        task_id, scope, str(user["id"]))
-    if not visible:
+    if not await task_in_scope(c, task_id, scope, user["id"], include_handoffs=include_handoffs):
         raise HTTPException(404, "Task not found or not permitted")
 
 
 @router.get("/departments")
 async def departments(user: dict = Depends(require_password_set)):
     async with rls(user) as c:
-        return _ser(await c.fetch("SELECT id,code,name,name_mk,parent_id,is_active FROM departments ORDER BY name"))
+        return _ser(await c.fetch(
+            "SELECT id,code,name,name_mk,parent_id,head_user_id,is_active FROM departments ORDER BY name"))
 
 
 class DepartmentIn(BaseModel):
@@ -99,6 +140,35 @@ class DepartmentIn(BaseModel):
     code: str = Field(max_length=64, pattern=r"^[a-z0-9_]{1,64}$")
     name: str = Field(max_length=120)
     name_mk: str | None = Field(default=None, max_length=120)
+    # A SUB-department (Cloning and Nursery under Cultivation): its parent's
+    # manager runs it — see app.dept_family / roles.py. Optional; top-level
+    # departments have none.
+    parent_id: str | None = Field(default=None, max_length=64)
+    # The department's head — the person a cross-department handoff pings and
+    # who may resolve it (collab.py). The column had existed since the
+    # baseline with nothing ever writing it (review 2026-09-27, BC-04).
+    head_user_id: str | None = Field(default=None, max_length=64)
+
+
+class DepartmentPatch(BaseModel):
+    name: str | None = Field(default=None, max_length=120)
+    name_mk: str | None = Field(default=None, max_length=120)
+    head_user_id: str | None = Field(default=None, max_length=64)
+
+
+async def _validate_department_head(org_id, head_user_id) -> None:
+    """profiles live in the users database with no cross-database FK, so the
+    head must be checked app-side: an active, non-deleted member of THIS org
+    holding an elevated role (a department is run by a manager, not by an
+    operator). Same idiom as auth._validate_department in the other direction."""
+    _uuid_or_422(head_user_id, "head_user_id")
+    row = await users_admin_pool().fetchrow(
+        "SELECT role FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=false AND is_active",
+        head_user_id, org_id)
+    if row is None:
+        raise HTTPException(422, "Unknown user for head_user_id")
+    if row["role"] not in ELEVATED_ROLES:
+        raise HTTPException(422, "A department head must hold a manager or executive role")
 
 
 @router.post("/departments", status_code=201)
@@ -112,15 +182,57 @@ async def create_department(body: DepartmentIn, user: dict = Depends(require_rol
     returns the existing row (UNIQUE (org_id, code) + DO NOTHING), so reruns
     are safe. Inside rls(user) so the audit_departments trigger attributes the
     actor and RLS pins the org."""
+    if body.head_user_id is not None:
+        await _validate_department_head(user["org_id"], body.head_user_id)
     async with rls(user) as c:
+        if body.parent_id is not None:
+            # Org-scoped existence check under RLS, same reason as every other
+            # id this file accepts: a bare FK would admit any org's real id.
+            _uuid_or_422(body.parent_id, "parent_id")
+            if not await c.fetchval("SELECT 1 FROM departments WHERE id=$1 AND is_active",
+                                    body.parent_id):
+                raise HTTPException(422, "Unknown parent department")
         row = await c.fetchrow(
-            "INSERT INTO departments(org_id, code, name, name_mk) VALUES ($1,$2,$3,$4)"
+            "INSERT INTO departments(org_id, code, name, name_mk, parent_id, head_user_id)"
+            " VALUES ($1,$2,$3,$4,$5,$6)"
             " ON CONFLICT (org_id, code) DO NOTHING RETURNING *",
-            user["org_id"], body.code, body.name, body.name_mk)
+            user["org_id"], body.code, body.name, body.name_mk, body.parent_id, body.head_user_id)
         if row is None:  # already existed — return it unchanged
             row = await c.fetchrow(
                 "SELECT * FROM departments WHERE org_id=$1 AND code=$2",
                 user["org_id"], body.code)
+    return dict(row)
+
+
+@router.patch("/departments/{dept_id}")
+async def update_department(dept_id: str, body: DepartmentPatch,
+                            user: dict = Depends(require_role(ADMIN))):
+    """ADMIN-only edit of a department's names and head. `head_user_id` is
+    the only field with behaviour behind it (collab.py's handoff routing);
+    an explicit null clears it. Structure (code, parent, active) stays as
+    seeded — reparenting a department silently rescopes every manager above
+    it, which is not a PATCH-sized decision."""
+    _uuid_or_422(dept_id, "dept_id")
+    fields = body.model_dump(exclude_unset=True)
+    if fields.get("head_user_id") is not None:
+        await _validate_department_head(user["org_id"], fields["head_user_id"])
+    sets, args = [], []
+    for col in ("name", "name_mk", "head_user_id"):
+        if col not in fields:
+            continue
+        if fields[col] is None and col == "name":
+            continue  # NOT NULL — an explicit null means "leave as-is"
+        args.append(fields[col]); sets.append(f"{col}=${len(args)}")
+    async with rls(user) as c:
+        if not sets:
+            row = await c.fetchrow("SELECT * FROM departments WHERE id=$1", dept_id)
+        else:
+            args.append(dept_id)
+            row = await c.fetchrow(
+                f"UPDATE departments SET {', '.join(sets)}, updated_at=now()"
+                f" WHERE id=${len(args)} RETURNING *", *args)
+    if row is None:
+        raise HTTPException(404, "Department not found")
     return dict(row)
 
 
@@ -161,20 +273,9 @@ async def list_tasks(
     # Department managers see their own department's tasks plus anything they
     # personally own or are assigned (so cross-department handoffs they're on
     # never vanish). Executives / QP / ADMIN stay org-wide (scope is None).
-    # Multi-departmental families stay visible IN FULL to every side involved:
-    # a parent task whose subtask is delegated to my department, and a subtask
-    # whose parent lives in my department, both match.
-    scope = dept_scope(user)
-    if scope:
-        args.append(scope); d = len(args)
-        args.append(str(user["id"])); u = len(args)
-        clauses.append(
-            f"(t.department_id=${d} OR t.user_id=${u}"
-            f" OR EXISTS (SELECT 1 FROM task_assignees sa WHERE sa.task_id=t.id AND sa.user_id=${u})"
-            f" OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id"
-            f"            AND ch.department_id=${d} AND ch.is_deleted=false)"
-            f" OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id=${d}))")
-    where = " AND ".join(clauses)
+    # ONE predicate (_scope_clause) for the list, the tree-shaped readers and
+    # the reports — this used to be a hand-copied duplicate of it.
+    where = " AND ".join(clauses) + _scope_clause(user, args)
     async with rls(user) as c:
         return _ser(await c.fetch(
             f"SELECT {_TASK_COLS},"
@@ -199,40 +300,30 @@ async def list_tasks(
 
 
 def _scope_clause(user: dict, args: list) -> str:
-    """The department-manager visibility predicate shared by list/tree — own
-    department, personally owned/assigned, or either side of a multi-dept
-    family. Executives / QP / ADMIN have scope None → no clause (org-wide).
-    Appends its bind params to `args` and returns the SQL fragment (or '')."""
+    """The department-manager visibility predicate shared by the list and the
+    reports — own department and its sub-departments, personally owned or
+    assigned, either side of a multi-dept family, or an open handoff addressed
+    to my department (the WHERE spelling of _assert_scope_visible; keep the
+    two in step). Executives / QP / ADMIN have scope None → no clause
+    (org-wide). Appends its bind params to `args` and returns the SQL
+    fragment (or '')."""
     scope = dept_scope(user)
     if not scope:
         return ""
     args.append(scope); d = len(args)
     args.append(str(user["id"])); u = len(args)
     return (
-        f" AND (t.department_id=${d} OR t.user_id=${u}"
+        f" AND (t.department_id = ANY(app.dept_family(${d})) OR t.user_id=${u}"
         f" OR EXISTS (SELECT 1 FROM task_assignees sa WHERE sa.task_id=t.id AND sa.user_id=${u})"
-        f" OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id=${d} AND ch.is_deleted=false)"
-        f" OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id=${d}))")
+        f" OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id = ANY(app.dept_family(${d})) AND ch.is_deleted=false)"
+        f" OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id = ANY(app.dept_family(${d})))"
+        f" OR EXISTS (SELECT 1 FROM handoffs h WHERE h.task_id=t.id AND h.status='proposed' AND h.to_dept_id = ANY(app.dept_family(${d}))))")
 
 
-@router.get("/tasks/tree")
-async def task_tree(include_archived: bool = False, user: dict = Depends(require_password_set)):
-    """The task hierarchy as a flat, scoped list the client nests by parent_id.
-    Lightweight columns only (id/parent_id/title/node_kind/status/priority/
-    task_type/department_id/due_date/dep counts) — the board renders a
-    document→annex→step spine without pulling every task's full detail. Ordered
-    parent-first then created_at so a simple client fold reconstructs the tree.
-    (Declared before /tasks/{task_id} so 'tree' isn't captured as a task id.)"""
-    args: list = []
-    arch = "" if include_archived else " AND t.is_archived=false"
-    where = "t.is_deleted=false" + arch + _scope_clause(user, args)
-    async with rls(user) as c:
-        rows = await c.fetch(
-            "SELECT t.id,t.parent_id,t.title,t.node_kind,t.status,t.priority,t.task_type,"
-            "t.department_id,t.due_date,t.progress,"
-            "(SELECT count(*) FROM task_dependencies dd WHERE dd.task_id=t.id) AS blocked_by_count "
-            f"FROM tasks t WHERE {where} ORDER BY t.parent_id NULLS FIRST, t.created_at", *args)
-    return _ser(rows)
+# GET /tasks/tree used to live here: a flat, scoped hierarchy listing that
+# web/gf never called (api.js kept a wrapper with no caller). Removed with the
+# other unreachable surface (review 2026-09-27, BC-19); /tasks carries
+# parent_id and subtask counts, which is what the board actually nests by.
 
 
 @router.get("/tasks/{task_id}")
@@ -397,6 +488,12 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     _check_days(body.days)
     _check_attributes(body.attributes)
     _check_tags(body.tags)
+    # The org-scoped existence checks below bind these straight into uuid
+    # comparisons; a malformed value raised asyncpg.DataError OUTSIDE the
+    # _FK_ERRORS try around the INSERT and surfaced as a 500 (review
+    # 2026-09-27, BC-14). Validate the shape first, like every read path does.
+    for name in ("department_id", "parent_id", "week_id", "batch_id"):
+        _uuid_or_422(getattr(body, name), name)
     # A dept-scoped manager creates TOP-LEVEL tasks in their own department
     # only; an omitted department defaults to theirs instead of landing
     # unassigned (which their scoped list could then never show them again).
@@ -404,12 +501,16 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     # (or personally theirs) — that delegation is exactly how a task becomes
     # multi-departmental, visible in full to every side involved.
     scope = dept_scope(user)
-    if scope and not body.parent_id:
-        if body.department_id and str(body.department_id) != scope:
-            raise HTTPException(403, "Managers may create tasks only in their own department")
-        if not body.department_id:
-            body.department_id = scope
     async with rls(user) as c:
+        # The manager's department PLUS its sub-departments: a cultivation
+        # head files work under Cloning or Nursery as naturally as under
+        # Cultivation itself. `scope` stays the department a bare task lands in.
+        fam = await dept_family(c, scope) if scope else None
+        if scope and not body.parent_id:
+            if body.department_id and str(body.department_id) not in fam:
+                raise HTTPException(403, "Managers may create tasks only in their own department")
+            if not body.department_id:
+                body.department_id = scope
         if body.parent_id is not None:
             # Org-scoped existence check (RLS-filtered SELECT under this same
             # connection — same idiom as batch_id below). Postgres validates a
@@ -428,7 +529,7 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
             if parent is None:
                 raise HTTPException(422, "Unknown parent task")
             if scope:
-                mine = (parent["department_id"] and str(parent["department_id"]) == scope) \
+                mine = (parent["department_id"] and str(parent["department_id"]) in fam) \
                     or str(parent["user_id"]) == str(user["id"])
                 if not mine:
                     # A foreign parent is attachable ONLY if it is ALREADY visible
@@ -438,8 +539,8 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
                     # visibility clause on that task — a self-served scope
                     # escalation (_assert_scope_visible counts existing children,
                     # so the check runs before the new child exists).
-                    await _assert_scope_visible(c, str(body.parent_id), user)
-                if not mine and body.department_id and str(body.department_id) != scope:
+                    await _assert_scope_visible(c, str(body.parent_id), user, include_handoffs=False)
+                if not mine and body.department_id and str(body.department_id) not in fam:
                     raise HTTPException(403, "Managers may delegate subtasks only under their own department's tasks")
                 if not body.department_id:
                     # Inherit the parent's department ONLY when the parent is the
@@ -632,6 +733,11 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
     # an omitted completed_date (auto-fill today) instead of accepting it.
     if patch.get("status") == "completed" and patch.get("completed_date") is None:
         patch["completed_date"] = facility_today()
+    # Same shape guard as create_task (BC-14): these feed uuid comparisons
+    # that run before the _FK_ERRORS-wrapped UPDATE.
+    for name in ("department_id", "week_id", "batch_id"):
+        if patch.get(name) is not None:
+            _uuid_or_422(patch[name], name)
     scope = dept_scope(user)
     fields, args = [], []
     for col, val in patch.items():
@@ -661,7 +767,7 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         # this runs for EVERY patch (including a no-op) so an out-of-scope or
         # nonexistent task returns 404, never a misleading noop-success; scope
         # must be enforced on writes exactly as it already is on reads.
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         if noop:
             # _assert_scope_visible no-ops for an org-wide caller (dept_scope
             # is None) — it never confirms the row exists in that case. Without
@@ -696,20 +802,27 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         if scope and "department_id" in patch:
             cur_dept = str(cur_t["department_id"]) if cur_t and cur_t["department_id"] else None
             if cur_t is not None and str(patch["department_id"] or "") != (cur_dept or ""):
-                fam = await c.fetchrow(
+                # The manager's department AND its sub-departments, exactly as
+                # create_task admits them: a cultivation head re-files work
+                # between Cultivation, Cloning and Nursery as freely as within
+                # one of them. This guard compared against the bare scope and
+                # answered 403 for that move — including on the manager's own
+                # task (review 2026-09-27, BC-03).
+                fam = await dept_family(c, scope)
+                parent = await c.fetchrow(
                     "SELECT p.department_id AS pd, p.user_id AS pu FROM tasks t"
                     " JOIN tasks p ON p.id=t.parent_id"
                     " WHERE t.id=$1 AND t.is_deleted=false", task_id)
-                delegable = fam is not None and (
-                    (fam["pd"] and str(fam["pd"]) == scope) or str(fam["pu"]) == str(user["id"]))
+                delegable = parent is not None and (
+                    (parent["pd"] and str(parent["pd"]) in fam) or str(parent["pu"]) == str(user["id"]))
                 owns = str(cur_t["user_id"]) == str(user["id"])
                 # Both directions are guarded: OUT of their department (the
                 # original rule) and IN to it — without src_ok a scoped
                 # manager could hijack any task they can merely see (e.g. as
                 # assignee) onto their own board by setting department_id to
                 # their scope, which the old !=scope condition never checked.
-                src_ok = cur_dept == scope or owns or delegable
-                dst_ok = str(patch["department_id"] or "") == scope or delegable
+                src_ok = cur_dept in fam or owns or delegable
+                dst_ok = str(patch["department_id"] or "") in fam or delegable
                 if not (src_ok and dst_ok):
                     raise HTTPException(403, "Managers may not move tasks outside their own department")
         if patch.get("department_id") is not None:
@@ -760,27 +873,25 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         # Status-change awareness: participants (creator/owner/assignees/
         # commenters) get notified; the actor never is (emit guards that).
         if "status" in patch and prev_status != row["status"]:
-            try:
-                who = await participants(c, task_id)
-                # Canned automation recipients go FIRST: emit()'s recipient
-                # dedup keeps the first (user_id, reason) pair it sees, so a
-                # quality manager who is also a participant still gets the
-                # more specific "capa_stuck"/"validation_stuck" reason
-                # instead of the generic "status" one.
-                canned = await canned_recipients(user, row["task_type"], row["status"])
-                recipients = canned + [(u, "status") for u in who]
-                await safe_emit(c, user, verb="status_changed", object_type="task", object_id=task_id,
-                           recipients=recipients, task_id=task_id,
-                           department_id=row["department_id"],
-                           params={"title": row["title"], "old": prev_status, "new": row["status"]})
-            except Exception:
-                # safe_emit() itself never raises (it logs and swallows
-                # internally) — anything caught here came from participants()
-                # or canned_recipients() before it. Must not fail the status
-                # update, but must not vanish silently either (H4 idiom).
-                _log.warning("status-change notification setup failed for task %s",
-                             task_id, exc_info=True)
+            # Savepointed (notify.savepointed): a failed lookup here must cost
+            # the notification, never the UPDATE just made (BC-13).
+            await savepointed(c, "status-change", task_id, _status_change_recipients_and_emit,
+                              c, user, task_id, row, prev_status)
     return out
+
+
+async def _status_change_recipients_and_emit(c, user, task_id, row, prev_status) -> None:
+    who = await participants(c, task_id)
+    # Canned automation recipients go FIRST: emit()'s recipient dedup keeps
+    # the first (user_id, reason) pair it sees, so a quality manager who is
+    # also a participant still gets the more specific "capa_stuck"/
+    # "validation_stuck" reason instead of the generic "status" one.
+    canned = await canned_recipients(user, row["task_type"], row["status"])
+    recipients = canned + [(u, "status") for u in who]
+    await safe_emit(c, user, verb="status_changed", object_type="task", object_id=task_id,
+                    recipients=recipients, task_id=task_id,
+                    department_id=row["department_id"],
+                    params={"title": row["title"], "old": prev_status, "new": row["status"]})
 
 
 class ProgressIn(BaseModel):
@@ -795,7 +906,7 @@ async def add_progress(task_id: str, body: ProgressIn, user: dict = Depends(requ
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         row = await c.fetchrow(
             "INSERT INTO task_progress(org_id,task_id,user_id,day_label,note)"
             " VALUES ($1,$2,$3,$4,$5) RETURNING day_label,note,created_at",
@@ -807,7 +918,10 @@ async def add_progress(task_id: str, body: ProgressIn, user: dict = Depends(requ
 class SessionIn(BaseModel):
     started_at: datetime
     ended_at: datetime | None = None
-    hours: Decimal | None = Field(default=None, gt=0)
+    # One sitting of work is at most a day: 80 typed for 8.0 was accepted as
+    # an 80-hour session in one bucket and fed the Thursday report's
+    # off-hours evidence (BC-24). The same bound applies to ended_at below.
+    hours: Decimal | None = Field(default=None, gt=0, le=MAX_SESSION_HOURS)
     note: str | None = Field(default=None, max_length=10_000)
     source: Literal["manual", "timer", "capture"] = "manual"
 
@@ -843,11 +957,13 @@ async def add_session(task_id: str, body: SessionIn, user: dict = Depends(requir
         raise HTTPException(422, "Provide ended_at or hours")
     if body.ended_at is not None and body.ended_at <= body.started_at:
         raise HTTPException(422, "ended_at must be after started_at")
+    if body.ended_at is not None and body.ended_at - body.started_at > timedelta(hours=MAX_SESSION_HOURS):
+        raise HTTPException(422, f"a session is at most {MAX_SESSION_HOURS} hours — split a longer one")
     async with rls(user) as c:
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         row = await c.fetchrow(
             "INSERT INTO work_sessions(org_id,task_id,user_id,started_at,ended_at,hours,note,source)"
             " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
@@ -889,7 +1005,7 @@ async def delete_session(session_id: str, user: dict = Depends(require_password_
         # endpoint takes only a session_id — no task in the path). Resolve the
         # session's task and enforce department scope on it first, so a manager
         # can only delete sessions on tasks they can actually see.
-        await _assert_scope_visible(c, str(row["task_id"]), user)
+        await _assert_scope_visible(c, str(row["task_id"]), user, include_handoffs=False)
         if str(row["user_id"]) != str(user["id"]) and user["role"] not in _ELEVATED:
             raise HTTPException(403, "Only the session's author or an elevated role can delete it")
         await c.execute("DELETE FROM work_sessions WHERE id=$1", session_id)
@@ -917,7 +1033,7 @@ async def add_link(task_id: str, body: LinkIn, user: dict = Depends(require_pass
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         row = await c.fetchrow(
             "INSERT INTO task_links(org_id,task_id,url,label,kind,created_by)"
             " VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
@@ -937,7 +1053,7 @@ async def delete_link(task_id: str, link_id: str, user: dict = Depends(require_p
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         res = await c.execute("DELETE FROM task_links WHERE id=$1 AND task_id=$2", link_id, task_id)
     if res.split()[-1] == "0":
         raise HTTPException(404, "Link not found")
@@ -973,7 +1089,7 @@ async def add_dependency(task_id: str, body: DependencyIn, user: dict = Depends(
             t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", tid)
             if t is None:
                 raise HTTPException(404, "Task not found or not permitted")
-            await _assert_scope_visible(c, tid, user)
+            await _assert_scope_visible(c, tid, user, include_handoffs=False)
         # Cycle guard: can `dep` already reach `task_id` through the graph? If
         # so, task_id -> dep would close a loop. Walk the edges from dep.
         reaches = await c.fetchval(
@@ -1008,7 +1124,7 @@ async def delete_dependency(task_id: str, dep_id: str, user: dict = Depends(requ
             t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", tid)
             if t is None:
                 raise HTTPException(404, "Task not found or not permitted")
-            await _assert_scope_visible(c, tid, user)
+            await _assert_scope_visible(c, tid, user, include_handoffs=False)
         res = await c.execute(
             "DELETE FROM task_dependencies WHERE task_id=$1 AND depends_on_task_id=$2", task_id, dep_id)
     if res.split()[-1] == "0":
@@ -1080,7 +1196,7 @@ async def workflow_transition(task_id: str, body: WorkflowIn,
             " WHERE id=$1 AND is_deleted=false FOR UPDATE", task_id)
         if t is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        await _assert_scope_visible(c, task_id, user, include_handoffs=False)
         cur = t["workflow_state"] or "draft"
         role = user["role"]
         if action == "SUBMIT":
@@ -1121,19 +1237,17 @@ async def workflow_transition(task_id: str, body: WorkflowIn,
         await c.execute(
             "UPDATE tasks SET workflow_state=$1, updated_by=$2, updated_at=now() WHERE id=$3",
             new, user["id"], task_id)
-        try:
+
+        async def _emit_workflow():
             who = await participants(c, task_id)
             await safe_emit(c, user, verb="workflow_" + action.lower(), object_type="task",
-                       object_id=task_id, recipients=[(u, "workflow") for u in who],
-                       task_id=task_id, department_id=t["department_id"],
-                       params={"title": t["title"], "from": cur, "to": new,
-                               **({"remark": remark} if remark else {})})
-        except Exception:
-            # safe_emit() itself never raises — anything caught here came from
-            # participants() before it. Must not fail the workflow transition,
-            # but must not vanish silently either (H4 idiom).
-            _log.warning("workflow-transition notification setup failed for task %s",
-                         task_id, exc_info=True)
+                            object_id=task_id, recipients=[(u, "workflow") for u in who],
+                            task_id=task_id, department_id=t["department_id"],
+                            params={"title": t["title"], "from": cur, "to": new,
+                                    **({"remark": remark} if remark else {})})
+        # Savepointed (notify.savepointed): a failed participant lookup must
+        # cost the notification, never the sign-off event just written.
+        await savepointed(c, "workflow-transition", task_id, _emit_workflow)
     out = _wf_event_out(dict(row))
     out["workflow_state"] = new
     return out

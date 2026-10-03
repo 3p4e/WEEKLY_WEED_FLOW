@@ -25,9 +25,10 @@ from pydantic import BaseModel, Field
 
 from app.api.tasks import _assert_scope_visible
 from app.api.weekwindow import ensure_week
+from app.config import capture_import_token
 from app.db import rls, rls_users, users_admin_pool
-from app.deps import dept_scope, require_password_set
-from app.worktime import TZ
+from app.deps import dept_scope
+from app.worktime import MAX_SESSION_HOURS, TZ
 
 router = APIRouter(prefix="/capture", tags=["capture"])
 _log = logging.getLogger("app.capture")
@@ -106,9 +107,21 @@ def _tz(dt: datetime | None) -> datetime | None:
 
 async def _capture_actor(authorization: str | None) -> dict | None:
     """The connector path: a static token (env CAPTURE_IMPORT_TOKEN, only
-    honored on this route) acting as the configured capture user."""
-    token = os.environ.get("CAPTURE_IMPORT_TOKEN", "")
-    username = os.environ.get("CAPTURE_IMPORT_USER", "qcm.blani")
+    honored on this route) acting as the configured capture user.
+
+    The token passes through config.capture_import_token first: a placeholder
+    (".env.example" used to ship `change-me`) or a value shorter than 32
+    characters is treated as UNSET, so a deployment that copied the template
+    accepts only real user sessions here instead of handing an ADMIN-
+    equivalent import authority to anyone who can read the template (review
+    2026-09-27, BC-11). config.py warns about it at startup."""
+    token = capture_import_token(os.environ.get("CAPTURE_IMPORT_TOKEN", ""))
+    # The import acts as a NAMED account; the name is deployment
+    # configuration, never a real person's username baked into the code as a
+    # fallback (review 2026-09-27, DI-22). Unset means the token path is off.
+    username = os.environ.get("CAPTURE_IMPORT_USER", "").strip()
+    if not username:
+        return None
     # LOW (reviewed, Wave 3 item 4) — accepted as an operational concern, not
     # a code bug: this single static token grants full import authority as
     # whatever role CAPTURE_IMPORT_USER holds (an ADMIN-equivalent account in
@@ -126,7 +139,14 @@ async def _capture_actor(authorization: str | None) -> dict | None:
     #
     # Constant-time compare so the static token can't be recovered byte-by-byte
     # via response-timing (same reason security.py always pays the bcrypt cost).
-    if not token or not authorization or not hmac.compare_digest(authorization, f"Bearer {token}"):
+    # Compared as BYTES: hmac.compare_digest(str, str) raises TypeError on any
+    # non-ASCII character, and an Authorization header is client-supplied —
+    # one Cyrillic letter in it turned every import into a 500 whenever the
+    # token was configured (review 2026-09-27, BC-18). A header that is not
+    # pure ASCII cannot equal an ASCII token, so it is simply not the token.
+    if not token or not authorization or not authorization.isascii():
+        return None
+    if not hmac.compare_digest(authorization.encode("ascii"), f"Bearer {token}".encode("ascii")):
         return None
     row = await users_admin_pool().fetchrow(
         "SELECT id, org_id, username, full_name, role, department_id, function_role,"
@@ -163,6 +183,18 @@ def _validate(t: CaptureTask) -> str | None:
         return f"invalid recurrence_hint '{t.recurrence_hint}'"
     if t.status == "completed" and not t.completed_date:
         return "completed without completed_date"
+    # One sitting of work is at most a day (tasks.SessionIn carries the same
+    # bound): a session over it is a typo, and it would be bucketed whole
+    # into the Thursday report's off-hours evidence (BC-24).
+    # Both ends through _tz first: the model accepts a naive and an aware
+    # timestamp side by side, and subtracting them raised TypeError before
+    # the per-task try — the whole import answered 500 instead of one task
+    # being skipped with a reason (review 2026-09-27, R2-BC-06).
+    for s in t.sessions:
+        span_h = s.hours if s.hours is not None else (
+            (_tz(s.ended_at) - _tz(s.started_at)).total_seconds() / 3600.0 if s.ended_at else None)
+        if span_h is not None and span_h > MAX_SESSION_HOURS:
+            return f"session longer than {MAX_SESSION_HOURS} hours"
     return None
 
 
@@ -296,7 +328,7 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                     # generic phrasing here instead of composing a more specific
                     # ("outside your department scope") message.
                     try:
-                        await _assert_scope_visible(c, str(row["id"]), actor)
+                        await _assert_scope_visible(c, str(row["id"]), actor, include_handoffs=False)
                     except HTTPException:
                         skipped.append({"external_ref": t.external_ref,
                                          "reason": "task not found or not permitted"})

@@ -1,7 +1,7 @@
 /* gf/mobile.css — Mobile + tablet adaptations for the unified GrowFlow shell.
    Applied on top of gf/app.css. Two breakpoints:
      ≤ 880px  → tablet (sidebar becomes drawer, denser headers)
-     ≤ 600px  → phone (cards instead of tables, full-width buttons, bottom nav bar) */
+     ≤ 600px  → phone (cards instead of tables, full-width buttons) */
 
 /* ── Touch-friendly defaults everywhere ── */
 @media (hover: none) and (pointer: coarse) {
@@ -16,7 +16,10 @@
   .header { padding: 0 14px; gap: 8px; height: 56px; }
   .search { max-width: none; padding: 0 12px; }
   .search input { padding: 9px 0; font-size: 14px; }
-  .header .btn:not(.hamburger):not(.btn-primary):not(.btn-orange) { display: none; }
+  /* #today-btn stays: it is the one-tap jump to the current week, and the
+     tablet/phone rule that hid every non-primary header button took it with
+     it (review 2026-09-27, FE-21). */
+  .header .btn:not(.hamburger):not(.btn-primary):not(.btn-orange):not(#today-btn) { display: none; }
   .lang-toggle { display: none; }
   .nav-badge { display: none; }
   .workspace { padding: 0; }
@@ -24,7 +27,6 @@
   .day-pills { padding: 6px 16px; }
   .telemetry { margin: 10px 16px 4px; }
   .panels { padding: 6px 16px 28px; }
-  #content > div { padding: 16px !important; }
   [style*="grid-template-columns"] { font-size: 12px !important; }
 }
 
@@ -55,14 +57,6 @@
 
   /* ── Sidebar fills 90% on phones ── */
   .sidebar { width: 86vw; max-width: 320px; }
-
-  /* ── Hide all data-table-style grids' less-important columns ── */
-  #content [style*="display:grid"][style*="grid-template-columns"]:not([style*="repeat(12"]):not([style*="repeat(7"]) {
-    grid-template-columns: 1fr 1fr !important;
-    padding: 10px 12px !important;
-    row-gap: 4px;
-  }
-  #content [style*="display:grid"][style*="grid-template-columns"] > div { padding: 2px 0 !important; }
 
   /* ── KPI cards stack vertically ── */
   .row[style*="gap:14px"], .row[style*="gap:16px"], .row[style*="gap:12px"] {
@@ -109,42 +103,6 @@
   .side-divider { margin: 10px 18px; }
 }
 
-/* ════════════ BOTTOM NAV BAR (phone only) ════════════ */
-@media (max-width: 600px) {
-  .mobile-bottombar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-    display: flex; height: 64px;
-    padding-bottom: env(safe-area-inset-bottom);
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border-top: 1px solid var(--glass-border);
-    box-shadow: 0 -8px 24px rgba(0,0,0,.5);
-  }
-  .mobile-bottombar button {
-    flex: 1; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 3px;
-    background: none; border: none; cursor: pointer;
-    font-size: 10px; font-weight: 700; color: var(--ink-3); font-family: var(--font);
-    padding: 8px 4px;
-  }
-  .mobile-bottombar button.on { color: var(--primary); }
-  .mobile-bottombar button .icon { width: 22px; height: 22px; stroke-width: 2; }
-  .main { padding-bottom: 64px; }
-  /* Bronze floating action button */
-  .mobile-fab {
-    position: fixed; bottom: calc(80px + env(safe-area-inset-bottom)); right: 18px;
-    width: 56px; height: 56px; border-radius: 999px; border: none; cursor: pointer;
-    background: var(--orange); color: #fff;
-    box-shadow: 0 8px 24px rgba(224,167,62,.40);
-    display: flex; align-items: center; justify-content: center; z-index: 49;
-  }
-  .mobile-fab .icon { width: 28px; height: 28px; stroke-width: 2; }
-}
-@media (min-width: 601px) {
-  .mobile-bottombar, .mobile-fab { display: none !important; }
-}
-
 /* ════════════ REPORT + AUDIT views on phones (~390px) ════════════ */
 @media (max-width: 600px) {
   #report-view .report-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -166,7 +124,7 @@
 
 /* ════════════ Print-friendly tweaks ════════════ */
 @media print {
-  .sidebar, .header, .mobile-bottombar, .mobile-fab, .overlay { display: none !important; }
+  .sidebar, .header, .overlay { display: none !important; }
   .main { margin: 0 !important; padding: 0 !important; }
   body { background: #fff !important; color: #000 !important; }
 }
