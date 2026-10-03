@@ -25,7 +25,7 @@ const PRE = `
 `;
 
 function load(role) {
-  const h = loadGF({ files: ['data.js', 'core.js', 'qccoa-view.js'], preScript: PRE });
+  const h = loadGF({ files: ['data.js', 'core.js', 'datepicker.js', 'codefield.js', 'qccoa-view.js'], preScript: PRE });
   if (role) h.window.GF.API.user = { role };
   return h;
 }
@@ -127,4 +127,58 @@ test('VERIFIED is only offered while an EN-MK certificate is unverified', () => 
   assert.ok(!verified.includes('VERIFIED'), 'already verified — no reason to offer it again');
   const english = sigMeaningValues(renderCoaDetail(h, { ...BASE, status: 'RELEASED', issue_language: 'EN', translation_verified_at: null })) || [];
   assert.ok(!english.includes('VERIFIED'), 'no translation to verify on an EN-only issue');
+});
+
+/* ── Fix round 2: the iCoA numeric box, the facility clock, the Void gate ── */
+
+test('the numeric box is never parseFloat-ed: a comma is refused, a point number travels as text too (QR-13)', async () => {
+  const h = load('QC_MGR');
+  const w = h.window;
+  renderCoaDetail(h, BASE);
+  const fields = { 'qcr-param': '', 'qcr-name': 'Lead', 'qcr-val': '', 'qcr-num': '22,61', 'qcr-unit': '%',
+                   'qcr-labv': '', 'qcr-lo': '', 'qcr-hi': '' };
+  w.document.getElementById = (id) => (id in fields ? { value: fields[id] } : null);
+  let sent = null, toast = null;
+  w.GF.API.qcAddResult = async (id, b) => { sent = b; return {}; };
+  w.GF.API.qcCoa = async () => ({ coa: BASE, results: [], signatures: [] });
+  w.GF.toast = (m) => { toast = m; };
+  await w.GF.WWF.qcCoaAddResult('a1');
+  assert.equal(sent, null, '22,61 is not silently sent as 22');
+  assert.match(toast, /decimal/);
+  fields['qcr-num'] = '22.61';
+  await w.GF.WWF.qcCoaAddResult('a1');
+  assert.equal(sent.result_numeric, 22.61);
+  assert.equal(sent.result_value, '22.61', 'the typed number is sent as text so the server reconciles it');
+  fields['qcr-val'] = '< LOQ'; fields['qcr-num'] = '';
+  await w.GF.WWF.qcCoaAddResult('a1');
+  assert.equal(sent.result_value, '< LOQ');
+  assert.equal(sent.result_numeric, null);
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'web', 'gf', 'qccoa-view.js'), 'utf8');
+  assert.doesNotMatch(src, /parseFloat\(/, "no client-side number parsing left in the view");
+});
+
+test('a certificate signature and the CoQ preview print on the facility clock (R2-FE-02)', () => {
+  const h = load('QC_MGR');
+  const w = h.window;
+  const coa = { ...BASE, status: 'RELEASED', decision: 'PASS', coq_generated_at: '2026-07-30T22:30:00+00:00' };
+  w.GF.WWF._qccoa = Object.assign(w.GF.WWF._qccoa || {}, {
+    coas: [coa], loading: false, error: null, specs: [], samples: [], labs: [], q: '', status: '',
+    sel: coa.id, preview: coa.id,
+    detail: { coa, results: [], signatures: [{ meaning: 'RELEASED', signer_name: 'Q', signer_role: 'QP',
+                                               signed_at: '2026-07-30T06:05:00+00:00' }] },
+  });
+  w.GF.WWF._qccoq = { list: [], sel: null, loading: false, error: null, detail: null, cultivars: [] };
+  const html = w.GF.views.qccoa();
+  assert.match(html, /2026-07-30 08:05/, 'signature: 06:05 UTC is 08:05 at the facility');
+  assert.doesNotMatch(html, /2026-07-30 06:05/);
+  assert.match(html, /2026-07-31 00:30/, 'issued: 22:30 UTC is the next facility day');
+});
+
+test('the QP sees Void on a certificate; a CU manager does not (R2-FE-10)', () => {
+  let html = renderCoaDetail(load('QP'), { ...BASE, status: 'APPROVED' });
+  assert.match(html, /GF\.WWF\.qcCoaVoid\('a1'\)/);
+  html = renderCoaDetail(load('QC_MGR'), { ...BASE, status: 'APPROVED' });
+  assert.match(html, /GF\.WWF\.qcCoaVoid\('a1'\)/);
+  html = renderCoaDetail(load('CU_MGR'), { ...BASE, status: 'APPROVED' });
+  assert.doesNotMatch(html, /GF\.WWF\.qcCoaVoid\(/);
 });

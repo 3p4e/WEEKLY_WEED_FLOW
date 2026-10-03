@@ -47,6 +47,36 @@ async def _start(client, cast="dune"):
     return body, {"Authorization": f"Bearer {body['access_token']}"}
 
 
+async def test_demo_seed_stamps_the_demo_org_on_its_audit_rows(client, demo_on):
+    """Review 2026-09-27, BC-22: the wipe/seed wrote on pooled admin
+    connections with no app.org_id, so every audit row it produced had
+    org_id NULL — readable through GET /audit by every OTHER organisation's
+    elevated users (the audit_read policy admits NULL-org rows)."""
+    body, _ = await _start(client)
+    demo_id = await demo_org.get_demo_org_id()
+    for pool, table in ((tasks_admin_pool(), "departments"), (users_admin_pool(), "profiles")):
+        rows = await pool.fetch(
+            "SELECT org_id FROM audit_log WHERE table_name=$1 AND action='INSERT'"
+            " AND new_values->>'org_id' = $2", table, str(demo_id))
+        assert rows, f"the seed wrote no {table} audit rows"
+        assert all(str(r["org_id"]) == str(demo_id) for r in rows), f"a demo {table} audit row carried no org"
+
+
+async def test_demo_admin_cannot_list_or_bind_letta_agents(client, demo_on):
+    """Review 2026-09-27, BC-27 (CODE-REVIEW-DEEP M3). The visitor token is the
+    demo cast's ADMIN; /ai/agents lists every agent on the shared Letta
+    instance and /ai/bindings would point corpus_qa at any of them — another
+    tenant's agent and its archival memory, queried by an anonymous visitor.
+    The demo org gets no agent surface at all."""
+    _, h = await _start(client)
+    assert (await client.get("/ai/agents", headers=h)).status_code == 403
+    r = await client.put("/ai/bindings/corpus_qa", json={"letta_agent_id": "agent-someone-elses"}, headers=h)
+    assert r.status_code == 403, r.text
+    assert (await client.delete("/ai/bindings/corpus_qa", headers=h)).status_code == 403
+    # nothing was written
+    assert (await client.get("/ai/bindings", headers=h)).json() == []
+
+
 async def test_disabled_by_default(client):
     # Default settings.demo_enabled is False — the endpoint simply doesn't exist.
     r = await client.post("/demo/start", json={"cast": "dune"})

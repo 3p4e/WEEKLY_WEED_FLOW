@@ -1,14 +1,15 @@
 from app.db import rls
-from app.worktime import SITE_YEAR_SQL
+from app.worktime import SITE_YEAR_SQL, TZ, facility_today
 from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
 from datetime import date
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from .common import (_HOQC, _QP_ROLES, _WRITERS, _evaluate, _lab_verdict_bool, _uuid_or_404,
-                     _uuid_or_422, router, splice_stamps)
+from .common import (_COQ_ROLES, _HOQC, _QP_ROLES, _WRITERS, _evaluate, _lab_verdict_bool,
+                     _norm_unit, _uuid_or_404, _uuid_or_422, norm_batch, reconcile_numeric,
+                     router, splice_stamps)
 from .laboratories import _lab_out, _lab_scope_set, _resolve_lab, _result_in_scope
 from .signatures import _sig_out
 
@@ -16,7 +17,19 @@ from .signatures import _sig_out
 _COA_STATUSES = ("DRAFT", "REVIEWED", "APPROVED", "RELEASED", "SUPERSEDED", "VOIDED")
 
 
-_CERT_TYPES = ("ICOA", "ECOA", "COQ", "WATER", "OTHER")
+# Types a NEW certificate may be created as. "COQ" is deliberately absent
+# (review 2026-09-27 QC-07): a hand-made COQ-type certificate skipped the
+# compile, the source citations and the HoQC review of the SOP path
+# (POST /qc/coq), took a CoQ-PP number from the shared series, and — because
+# every non-ICOA type was gated on the QP — could be approved ONLY by the
+# Qualified Person, the inverse of URS §3 / QCSOP 012 C5. The Certificate of
+# Quality is the aggregation record; existing COQ-type rows stay readable and
+# walk their remaining lifecycle under the HoQC gate (_COQ_ROLES) below.
+_CERT_TYPES = ("ICOA", "ECOA", "WATER", "OTHER")
+
+
+# Every type the register may hold, including the retired creation type.
+_ALL_CERT_TYPES = _CERT_TYPES + ("COQ",)
 
 
 _CERT_PREFIX = {"ICOA": "iCoA-PP", "ECOA": "eCoA-PP", "COQ": "CoQ-PP",
@@ -90,6 +103,16 @@ _QUARANTINABLE = {"IN_TEST", "TESTED", "RECEIVED", "COLLECTED"}
 
 class CoaIn(BaseModel):
     batch_id: str = Field(max_length=120)
+
+    @field_validator("batch_id")
+    @classmethod
+    def _norm_batch_id(cls, v: str) -> str:
+        # QC-27: every OOS/CoQ gate keys on this text — one canonical form.
+        v = norm_batch(v)
+        if not v:
+            raise ValueError("batch_id must not be blank")
+        return v
+
     specification_id: str
     sample_id: str | None = None
     cert_type: str = "ICOA"
@@ -289,7 +312,9 @@ async def get_coa(coa_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES
     dated = [r for r in results if r["result_date"]]
     if dated:
         last_available = max(r["result_date"] for r in dated)
-        last_entered = max(r["created_at"] for r in results).date()
+        # facility calendar day, not the UTC day asyncpg's aware timestamp
+        # renders under (review 2026-09-27 QC-21)
+        last_entered = max(r["created_at"] for r in results).astimezone(TZ).date()
         drafted_same_day = last_entered <= last_available
     return {"coa": _coa_out(dict(coa)),
             "laboratory": _lab_out(dict(lab)) if lab else None,
@@ -300,6 +325,10 @@ async def get_coa(coa_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES
 
 @router.post("/certificates", status_code=201)
 async def create_coa(body: CoaIn, user: dict = Depends(require_role(*_WRITERS))):
+    if body.cert_type == "COQ":
+        raise HTTPException(
+            422, "a Certificate of Quality is compiled from the batch's approved certificates"
+                 " (POST /qc/coq, QCSOP 012 §6.4) — it is not created as a certificate type")
     if body.cert_type not in _CERT_TYPES:
         raise HTTPException(422, f"cert_type must be one of: {', '.join(_CERT_TYPES)}")
     _uuid_or_422(body.specification_id, "specification_id")
@@ -349,11 +378,22 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
                  " parameter, or record the value without limits as reference data.")
     async with rls(user) as c:
         coa = await c.fetchrow(
-            "SELECT id, status, sample_id, specification_id FROM qc_certificates WHERE id=$1", coa_id)
+            "SELECT id, status, sample_id, specification_id, laboratory_id"
+            " FROM qc_certificates WHERE id=$1", coa_id)
         if coa is None:
             raise HTTPException(404, "Certificate not found")
         if coa["status"] != "DRAFT":
             raise HTTPException(409, "Results may only be entered while the CoA is DRAFT")
+        # QC-03: the numeric of record is read from the transcribed text under
+        # the issuing laboratory's decimal separator (in-house = '.'); a
+        # supplied numeric that disagrees with the text is refused.
+        sep = "."
+        if coa["laboratory_id"]:
+            sep = await c.fetchval("SELECT decimal_separator FROM qc_laboratories WHERE id=$1",
+                                   coa["laboratory_id"]) or "."
+        result_numeric = reconcile_numeric(body.result_value, body.result_numeric, sep,
+                                           field="result_numeric")
+        unit = body.unit
         lo, hi = body.lower_limit, body.upper_limit
         # A cited spec parameter must exist and belong to THIS certificate's
         # specification (an unknown or cross-spec/cross-org id must 422, never a
@@ -396,8 +436,26 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
                     422, "upper_limit does not match the cited spec parameter"
                          f" (spec: {spec_hi}) — the acceptance criterion comes from the"
                          " specification; omit it to use the spec's bound.")
-            lo, hi = spec_lo, spec_hi
-        complies, status = _evaluate(body.result_numeric, lo, hi)
+            # The stored limits are the spec's own numeric values (Decimal), so
+            # the grade below compares exactly (QC-05).
+            lo, hi = p["lower_limit"], p["upper_limit"]
+            # QC-17: the unit of record is the criterion's unit. A stated unit
+            # that differs is refused ("0.004 mg/kg" against a µg/kg limit was
+            # graded 0.004 ≤ 2 and printed under "Conforms"); an omitted unit
+            # inherits the parameter's. No conversion is attempted.
+            if unit is None or not unit.strip():
+                unit = p["unit"]
+            elif p["unit"] and _norm_unit(unit) != _norm_unit(p["unit"]):
+                raise HTTPException(
+                    422, f"unit '{unit}' differs from the cited parameter's '{p['unit']}' — a"
+                         " result is graded only in the criterion's unit; re-express the value"
+                         " in the specification's unit")
+        complies, status = _evaluate(result_numeric, lo, hi)
+        # QC-09: "latest result wins" in the CoQ is ordered by the measurement
+        # date, so every result carries one — the facility day it is recorded
+        # on when the analyst states none (the date the result was available,
+        # never a blank that sorts arbitrarily).
+        result_date = body.result_date or facility_today()
         row = await c.fetchrow(
             "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
             " result_numeric, unit, lower_limit, upper_limit, complies, status, analyst_id,"
@@ -405,7 +463,7 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
             " lab_verdict, created_by)"
             " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$12) RETURNING *",
             user["org_id"], coa_id, body.parameter_id, body.test_name, body.result_value,
-            body.result_numeric, body.unit, lo, hi, complies, status, user["id"], body.result_date,
+            result_numeric, unit, lo, hi, complies, status, user["id"], result_date,
             body.source_document_code, body.source_document_date, body.source_institution,
             body.lab_verdict)
         # OOS hook: a failing result quarantines the linked sample.
@@ -472,6 +530,32 @@ def _frozen_content_edit(patch: dict, cur: dict) -> bool:
     return False
 
 
+async def _results_bar_pass(c, coa_id) -> str | None:
+    """Why a PASS disposition would contradict the certificate's own results
+    (review 2026-09-27 QC-06), or None when the results support it. A PASS
+    attests that every recorded result complies; a failing result, an
+    unmeasured (unknown) verdict, or no result at all cannot be attested as
+    conformance — the single-parameter iCoA page was printing "✗ Does not
+    conform" under a "Conforms to Specification" badge."""
+    rows = await c.fetch("SELECT test_name, complies FROM qc_results WHERE coa_id=$1", coa_id)
+    if not rows:
+        return "the certificate has no results — there is nothing a PASS could attest"
+    bad = [r["test_name"] for r in rows if r["complies"] is not True]
+    if bad:
+        names = ", ".join(sorted(set(bad))[:5])
+        return (f"{len(bad)} result(s) do not comply or are unmeasured ({names}) — a PASS"
+                " disposition cannot be recorded over them")
+    return None
+
+
+async def _live_coq_citing(c, coa_id) -> str | None:
+    """The number of a DRAFT/APPROVED aggregation CoQ that snapshotted this
+    certificate's lines, or None (review 2026-09-27 QC-02)."""
+    return await c.fetchval(
+        "SELECT q.coq_number FROM qc_coq_sources s JOIN qc_coq q ON q.id = s.coq_id"
+        " WHERE s.coa_id=$1 AND q.status IN ('DRAFT','APPROVED') LIMIT 1", coa_id)
+
+
 @router.patch("/certificates/{coa_id}")
 async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_role(*_WRITERS))):
     _uuid_or_404(coa_id, "Certificate")
@@ -523,6 +607,19 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
                                      " correct it with a revision; only register fields update in place")
         if patch.get("laboratory_id") is not None:
             await _resolve_lab(c, user["org_id"], patch["laboratory_id"])
+        # QC-31: the retention window must be a window. Judged on the EFFECTIVE
+        # pair (this patch merged over the record), so a partial patch cannot
+        # invert it either.
+        eff_start = patch["retention_start"] if "retention_start" in patch else cur["retention_start"]
+        eff_expiry = patch["retention_expiry"] if "retention_expiry" in patch else cur["retention_expiry"]
+        if eff_start and eff_expiry and eff_expiry < eff_start:
+            raise HTTPException(
+                422, f"retention_expiry ({eff_expiry}) precedes retention_start ({eff_start})")
+        # QC-06: a PASS disposition is attested against the results of record.
+        if patch.get("decision") == "PASS":
+            bar = await _results_bar_pass(c, coa_id)
+            if bar:
+                raise HTTPException(409, bar)
         extra_sql, extra_args = [], []
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]
@@ -545,6 +642,14 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
                             403, f"{target} on an internal CoA is a Head-of-QC decision"
                                  " (3-tier chain: Analyst → Senior Analyst → Head of QC;"
                                  " the Qualified Person is not part of iCoA sign-off)")
+                elif cur["cert_type"] == "COQ":
+                    # QC-07: a Certificate of Quality is a Head-of-QC act (URS §3,
+                    # QCSOP 012 C5) — the QP RECEIVES it, never approves it. The
+                    # same gate the aggregation path applies (_COQ_ROLES).
+                    if user["role"] not in _COQ_ROLES:
+                        raise HTTPException(
+                            403, f"{target} on a Certificate of Quality is a Head-of-QC decision"
+                                 " — the Qualified Person receives the CoQ and does not sign it")
                 elif user["role"] not in _QP_ROLES:
                     raise HTTPException(403, f"{target} is a Qualified-Person decision")
             # A certificate cannot be APPROVED or RELEASED without a recorded
@@ -557,6 +662,24 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
                     raise HTTPException(
                         409, f"record a PASS or FAIL disposition before {target.lower()}"
                              " — a certificate's approval attests its disposition of record")
+                # QC-06: the disposition being attested must still be borne out
+                # by the results (a failing result may have been added after
+                # the PASS was recorded while the certificate was DRAFT).
+                if eff_decision == "PASS":
+                    bar = await _results_bar_pass(c, coa_id)
+                    if bar:
+                        raise HTTPException(409, f"cannot {target.lower()} as PASS: {bar}")
+            # QC-02: releasing a revision retires its origin (RELEASED →
+            # SUPERSEDED below). A live CoQ compiled from the origin's lines
+            # would then assert conformance from a superseded record — the
+            # CoQ is voided (and recompiled from the revision) first.
+            if target == "RELEASED" and cur["supersedes_id"]:
+                cited = await _live_coq_citing(c, cur["supersedes_id"])
+                if cited:
+                    raise HTTPException(
+                        409, f"the certificate this revision supersedes is a source of CoQ"
+                             f" {cited} (DRAFT/APPROVED) — void that CoQ before releasing the"
+                             " revision, then recompile it from the corrected certificate")
             # GxP second-person review: the reviewer must not be anyone who
             # produced the data — neither the CoA's analyst-of-record NOR any
             # analyst who entered a result on it (each qc_results row stamps its
@@ -631,7 +754,7 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
         if patch.get("status") == "RELEASED" and cur["supersedes_id"]:
             await c.execute(
                 "UPDATE qc_certificates SET status='SUPERSEDED', updated_by=$1, updated_at=now()"
-                " WHERE id=$2 AND status='RELEASED'", user["id"], cur["supersedes_id"])
+                " WHERE id=$2 AND status IN ('APPROVED','RELEASED')", user["id"], cur["supersedes_id"])
     return _coa_out(dict(row))
 
 
@@ -654,23 +777,39 @@ async def revise_certificate(coa_id: str, body: ReviseIn,
         cur = await c.fetchrow("SELECT * FROM qc_certificates WHERE id=$1", coa_id)
         if cur is None:
             raise HTTPException(404, "Certificate not found")
-        if cur["status"] != "RELEASED":
-            raise HTTPException(409, f"Only a RELEASED certificate is revised — this one is"
-                                     f" {cur['status']} (edit or re-review it directly)")
+        # Review 2026-09-27 QC-18: an APPROVED certificate is frozen exactly like
+        # a RELEASED one and has no transition back, so a known-wrong APPROVED
+        # certificate could only be released first or voided. It is revisable.
+        if cur["status"] not in _ISSUED_FROZEN:
+            raise HTTPException(409, f"Only an APPROVED or RELEASED certificate is revised — this"
+                                     f" one is {cur['status']} (edit or re-review it directly)")
         open_rev = await c.fetchval(
             "SELECT coa_number FROM qc_certificates WHERE supersedes_id=$1"
             " AND status <> 'SUPERSEDED' LIMIT 1", coa_id)
         if open_rev:
             raise HTTPException(409, f"A revision already exists ({open_rev})")
         coa_number = await _mint_cert_number(c, user["org_id"], cur["cert_type"])
+        # Every template column is carried (QC-18): the revision used to lose
+        # the cultivation batch, product code, packaging, manufacture/expiry/
+        # retest dates, botanical type, chemotype, analysis dates, sampling
+        # location and issue language, so the superseding certificate rendered
+        # without them unless someone re-typed them.
         row = await c.fetchrow(
             "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id,"
             " sample_id, cert_type, report_date, source_lab, laboratory_id, notes, analyst_id,"
-            " supersedes_id, revision_reason, decision, created_by, updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$11,$11) RETURNING *",
+            " supersedes_id, revision_reason, decision, cultivation_batch, product_code,"
+            " packaging, packaging_date, manufacture_date, expiry_date, retest_date,"
+            " botanical_type, chemotype, analysis_start_date, analysis_end_date,"
+            " sampling_location, issue_language, created_by, updated_by)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,"
+            "         $21,$22,$23,$24,$25,$26,$27,$11,$11) RETURNING *",
             user["org_id"], coa_number, cur["batch_id"], cur["specification_id"], cur["sample_id"],
             cur["cert_type"], cur["report_date"], cur["source_lab"], cur["laboratory_id"],
-            cur["notes"], user["id"], coa_id, body.reason, cur["decision"])
+            cur["notes"], user["id"], coa_id, body.reason, cur["decision"],
+            cur["cultivation_batch"], cur["product_code"], cur["packaging"], cur["packaging_date"],
+            cur["manufacture_date"], cur["expiry_date"], cur["retest_date"], cur["botanical_type"],
+            cur["chemotype"], cur["analysis_start_date"], cur["analysis_end_date"],
+            cur["sampling_location"], cur["issue_language"])
         # carry the result set forward so the correction edits the real state
         await c.execute(
             "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
@@ -704,6 +843,15 @@ async def void_certificate(coa_id: str, body: VoidIn,
             raise HTTPException(404, "Certificate not found")
         if cur["status"] not in _VOIDABLE:
             raise HTTPException(409, f"a {cur['status']} certificate cannot be voided")
+        # QC-02: a DRAFT/APPROVED aggregation CoQ that snapshotted this
+        # certificate's lines would go on asserting conformance from a record
+        # declared fundamentally invalid. The CoQ is voided first (§6.6 applies
+        # to it for the same reason), then the certificate.
+        cited = await _live_coq_citing(c, coa_id)
+        if cited:
+            raise HTTPException(
+                409, f"this certificate is a source of CoQ {cited} (DRAFT/APPROVED) — void that"
+                     " CoQ first; a Certificate of Quality cannot stand on a voided source")
         row = await c.fetchrow(
             "UPDATE qc_certificates SET status='VOIDED', void_reason=$1, voided_by=$2,"
             " voided_at=now(), updated_by=$2, updated_at=now() WHERE id=$3 RETURNING *",

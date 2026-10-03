@@ -161,21 +161,57 @@ GF.WWF._deptName = (id) => {
   return d ? (GF.state.lang === 'mk' ? d.mk : d.name) : (id || '—');
 };
 
+// Who may do what with a proposed handoff — the client reading of
+// collab.py resolve_handoff, case for case, so the card offers exactly the
+// buttons the server will honour. The old rule (task owner or any elevated
+// role) showed Accept/Reject to a USER who owned the task, to the source
+// department's manager and to the executive who proposed it — all of whom
+// got 403 — while the receiving department's manager, the one person the
+// proposal is addressed to, had no button at all (review 2026-09-27, FE-06
+// / BC-04).
+//
+//   target side = the receiving department's head, or an elevated role whose
+//                 department is the target or one of its ancestors
+//                 (Cultivation's manager receives Cloning's handoffs);
+//   org-wide    = an elevated role with no department scope (ADMIN, the
+//                 executives, QP);
+//   accept      = target side, or org-wide AND not the proposer (second-
+//                 person rule: nobody accepts their own proposal);
+//   reject      = target side or org-wide;
+//   cancel      = any of those, or the proposer withdrawing their own.
+GF.WWF.handoffRights = (h) => {
+  const u = GF.API.user || {};
+  const me = String(u.id || '');
+  const elevated = (GF.ELEVATED_MODULE_ROLES || []).includes(u.role);
+  const to = String(h.to_dept_id || '');
+  const dept = (GF.DEPTS || []).find(d => String(d.id) === to);
+  const isHead = !!(dept && dept.head_user_id && String(dept.head_user_id) === me);
+  const fam = (u.department_id && GF.WWF.deptFamily) ? GF.WWF.deptFamily(u.department_id) : [];
+  const targetSide = isHead || (elevated && fam.includes(to));
+  const orgWide = elevated && !(GF.WWF.deptScope && GF.WWF.deptScope());
+  const isRequester = String(h.requested_by || '') === me;
+  return {
+    accept: targetSide || (orgWide && !isRequester),
+    reject: targetSide || orgWide,
+    cancel: targetSide || orgWide || isRequester,
+    targetSide, orgWide, isRequester,
+  };
+};
+
 GF.WWF.renderHandoffs = (t, x) => {
-  const me = (GF.API.user || {}).id;
-  const canResolve = GF.WWF.canManageTask(t);
   const rows = x.handoffs.length ? x.handoffs.map(h => {
     const st = {
       proposed: AL('proposed', 'предложено'), accepted: AL('accepted', 'прифатено'),
       rejected: AL('rejected', 'одбиено'), cancelled: AL('cancelled', 'откажано'),
     }[h.status] || h.status;
-    const canCancel = canResolve || String(h.requested_by) === String(me);
     let actions = '';
     if (h.status === 'proposed') {
-      if (canResolve) actions += `
-        <button class="mini-btn" style="color:var(--green)" title="${AL('Accept', 'Прифати')}" onclick="GF.WWF.resolveHandoff('${h.id}','accepted')">✓</button>
+      const r = GF.WWF.handoffRights(h);
+      if (r.accept) actions += `
+        <button class="mini-btn" style="color:var(--green)" title="${AL('Accept', 'Прифати')}" onclick="GF.WWF.resolveHandoff('${h.id}','accepted')">✓</button>`;
+      if (r.reject) actions += `
         <button class="mini-btn" style="color:#E5484D" title="${AL('Reject', 'Одбиј')}" onclick="GF.WWF.resolveHandoff('${h.id}','rejected')">✕</button>`;
-      if (canCancel) actions += `
+      if (r.cancel) actions += `
         <button class="mini-btn" style="color:var(--ink-3)" title="${AL('Cancel', 'Откажи')}" onclick="GF.WWF.resolveHandoff('${h.id}','cancelled')">⊘</button>`;
     }
     return `

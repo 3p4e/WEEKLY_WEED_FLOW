@@ -31,6 +31,61 @@ async def test_list_audit_and_redaction(client, admin_headers):
             assert e["new_values"]["password_hash"] == "***"
 
 
+async def test_audit_cursor_pages_through_rows_that_share_one_timestamp(client, admin_headers, org):
+    """Review 2026-09-27, BC-08 (CODE-REVIEW-DEEP-2026-07 M7, still open).
+    audit_log.created_at defaults to now(), which is constant for a whole
+    transaction, so every row one write produces shares a timestamp. Paging
+    with `created_at < before` from a boundary inside such a group skipped the
+    rest of the group for good. The opaque cursor (X-Next-Cursor) is a
+    per-chain (created_at, id) keyset and resumes inside the group."""
+    import uuid as _uuid
+    # Three departments in ONE transaction: three audit rows, one created_at.
+    async with tasks_admin_pool().acquire() as c:
+        async with c.transaction():
+            await c.execute("SELECT set_config('app.org_id', $1, true)", org["org_id"])
+            for i in range(3):
+                await c.execute(
+                    "INSERT INTO departments(org_id, code, name) VALUES ($1,$2,$3)",
+                    org["org_id"], f"cur_{i}_{_uuid.uuid4().hex[:4]}", f"Cursor {i}")
+    # Newest first, so the three rows just written lead the listing. Other
+    # tests' department writes on the raw admin pool leave NULL-org audit
+    # rows behind (the BC-22 leak class, visible to every org through
+    # audit_read), so this looks only at the head of the trail.
+    filters = {"table_name": "departments", "action": "INSERT"}
+    r = await client.get("/audit", params={**filters, "limit": 500}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    head = r.json()[:5]
+    mine = [e for e in head if (e["new_values"] or {}).get("name", "").startswith("Cursor")]
+    assert len(mine) == 3, [e["new_values"] for e in head]
+    assert len({e["created_at"] for e in mine}) == 1, \
+        "the three rows must share one created_at for this test to mean anything"
+
+    seen, cursor = [], None
+    for _ in range(len(head)):
+        params = {**filters, "limit": 1}
+        if cursor:
+            params["cursor"] = cursor
+        r = await client.get("/audit", params=params, headers=admin_headers)
+        assert r.status_code == 200, r.text
+        rows = r.json()
+        assert len(rows) == 1
+        seen += [e["id"] for e in rows]
+        cursor = r.headers.get("X-Next-Cursor")
+        assert cursor
+    assert seen == [e["id"] for e in head], \
+        "one-row pages through the cursor must visit every row exactly once, in order — " \
+        "including the rest of a group that shares one created_at"
+
+    # the legacy timestamp keyset is the lossy one this replaces: from a page
+    # boundary inside the group it skips the group's remaining rows
+    r = await client.get("/audit", params={**filters, "limit": 500, "before": mine[0]["created_at"]},
+                         headers=admin_headers)
+    assert not any(e["id"] in {m["id"] for m in mine} for e in r.json())
+    # garbage cursor is a clean 422
+    r = await client.get("/audit", params={"cursor": "not-a-cursor"}, headers=admin_headers)
+    assert r.status_code == 422
+
+
 async def test_audit_tables_endpoint(client, admin_headers):
     await client.post("/tasks", json={"title": "For tables endpoint", "status": "pending"},
                        headers=admin_headers)

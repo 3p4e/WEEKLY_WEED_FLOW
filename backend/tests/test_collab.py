@@ -258,6 +258,220 @@ async def test_handoff_propose_and_accept_moves_department(client, admin_headers
     assert r.status_code == 409
 
 
+async def _mgr(client, admin_headers, role, dept_id):
+    prof, otp = await create_user(client, admin_headers, role=role, department_id=dept_id)
+    tok = await login_and_set_password(client, prof["username"], otp)
+    return prof, {"Authorization": f"Bearer {tok}"}
+
+
+async def test_handoff_reaches_the_receiving_manager_who_can_open_the_task_while_it_is_pending(
+        client, admin_headers):
+    """Review 2026-09-27, BC-04. departments.head_user_id was never written, so
+    propose_handoff pinged nobody on the receiving side; and the receiving
+    manager could not open the task or its handoff list (404 from the scope
+    guard — the task still sits in the SOURCE department), so the Accept
+    button never rendered for the one person meant to press it.
+
+    Now: the manager provisioned into the target department becomes its head
+    (departments.head_user_id), the proposal notifies the target department's
+    managers AND those of its parent (Cultivation's manager receives a handoff
+    addressed to Cloning), and the task is in their scope while the proposal
+    is pending — and out of it again once it is rejected."""
+    src = (await client.post("/departments", json={"code": "ho_src", "name": "Source"},
+                             headers=admin_headers)).json()
+    cult = (await client.post("/departments", json={"code": "ho_cult", "name": "Cultivation"},
+                              headers=admin_headers)).json()
+    clone = (await client.post("/departments", json={"code": "ho_clone", "name": "Cloning",
+                                                     "parent_id": cult["id"]},
+                               headers=admin_headers)).json()
+    _, src_mgr_h = await _mgr(client, admin_headers, "QC_MGR", src["id"])
+    cu, cu_h = await _mgr(client, admin_headers, "CU_MGR", cult["id"])
+    # provisioning the manager set them as the department's head (BC-04 backend half)
+    depts = {d["code"]: d for d in (await client.get("/departments", headers=admin_headers)).json()}
+    assert str(depts["ho_cult"]["head_user_id"]) == cu["id"]
+
+    task = (await client.post("/tasks", json={"title": "Clones needed", "department_id": src["id"]},
+                              headers=src_mgr_h)).json()
+    tid = task["id"]
+    # before the proposal the cultivation manager cannot see it at all
+    assert (await client.get(f"/tasks/{tid}", headers=cu_h)).status_code == 404
+
+    r = await client.post(f"/tasks/{tid}/handoffs", json={"to_dept_id": clone["id"]}, headers=src_mgr_h)
+    assert r.status_code == 201, r.text
+    hid = r.json()["id"]
+
+    # notified — through the parent department, not only an exact match
+    inbox = (await client.get("/notifications", headers=cu_h)).json()
+    assert any(n["verb"] == "handoff" and n["task_id"] == tid for n in inbox), inbox
+    # …and the task, its handoff list and the board now show it
+    assert (await client.get(f"/tasks/{tid}", headers=cu_h)).status_code == 200
+    hl = (await client.get(f"/tasks/{tid}/handoffs", headers=cu_h)).json()
+    assert [h["id"] for h in hl] == [hid]
+    assert tid in {t["id"] for t in (await client.get("/tasks", headers=cu_h)).json()}
+
+    # the receiving manager rejects it → the task leaves their scope again
+    r = await client.post(f"/handoffs/{hid}/resolve", json={"status": "rejected"}, headers=cu_h)
+    assert r.status_code == 200, r.text
+    assert (await client.get(f"/tasks/{tid}", headers=cu_h)).status_code == 404
+
+
+async def test_pending_handoffs_lists_what_the_caller_may_decide_until_it_is_resolved(
+        client, admin_headers):
+    """Review 2026-09-27b, R2-FE-09. The Approvals list was rebuilt from
+    `handoff` notifications, so marking the notification Done dropped the
+    proposal from the only list that showed it. GET /handoffs/pending reads
+    the handoffs themselves: the receiving side (here through the parent
+    department) sees the proposal after the notification is done; the
+    proposing department-scoped manager does not; an org-wide role sees it as
+    an arbiter; nobody sees it once it is resolved."""
+    src = (await client.post("/departments", json={"code": "hp_src", "name": "Source"},
+                             headers=admin_headers)).json()
+    cult = (await client.post("/departments", json={"code": "hp_cult", "name": "Cultivation"},
+                              headers=admin_headers)).json()
+    clone = (await client.post("/departments", json={"code": "hp_clone", "name": "Cloning",
+                                                     "parent_id": cult["id"]},
+                               headers=admin_headers)).json()
+    _, src_h = await _mgr(client, admin_headers, "QC_MGR", src["id"])
+    _, cu_h = await _mgr(client, admin_headers, "CU_MGR", cult["id"])
+    tid = (await client.post("/tasks", json={"title": "Cuttings for GP", "department_id": src["id"]},
+                             headers=src_h)).json()["id"]
+    hid = (await client.post(f"/tasks/{tid}/handoffs", json={"to_dept_id": clone["id"]},
+                             headers=src_h)).json()["id"]
+
+    # the recipient marks the notification done — the proposal must stay listed
+    for n in (await client.get("/notifications", headers=cu_h)).json():
+        if n["verb"] == "handoff" and n["task_id"] == tid:
+            assert (await client.post(f"/notifications/{n['id']}/done", headers=cu_h)).status_code in (200, 204)
+    assert not [n for n in (await client.get("/notifications", headers=cu_h)).json()
+                if n["verb"] == "handoff" and n["task_id"] == tid]
+    rows = (await client.get("/handoffs/pending", headers=cu_h)).json()
+    assert [(r["id"], r["task_title"], r["target_side"]) for r in rows] == [(hid, "Cuttings for GP", True)]
+    # the proposer's department is not the receiving side
+    assert (await client.get("/handoffs/pending", headers=src_h)).json() == []
+    # an org-wide role may arbitrate it, and is told it is not the target side
+    arb = [r for r in (await client.get("/handoffs/pending", headers=admin_headers)).json() if r["id"] == hid]
+    assert len(arb) == 1 and arb[0]["target_side"] is False
+
+    assert (await client.post(f"/handoffs/{hid}/resolve", json={"status": "accepted"},
+                              headers=cu_h)).status_code == 200
+    assert (await client.get("/handoffs/pending", headers=cu_h)).json() == []
+
+
+async def test_a_pending_handoff_opens_the_task_to_the_receiving_manager_for_reading_only(
+        client, admin_headers):
+    """Review 2026-09-27, R2-BC-04. A proposal addressed to my department lets
+    me OPEN the task to accept or reject it — it does not make the task mine
+    to edit. The receiving manager could retitle it, log sessions on it, move
+    its status and sign it off while it still sat in the source department,
+    and attach a subtask of their own to it, which kept the parent in their
+    scope through the "child in my family" arm after the proposal was
+    rejected. Reads and the comment thread keep the pending-handoff arm;
+    every write is refused (404, the guard's usual answer) until the handoff
+    is accepted and the task actually moves."""
+    src = (await client.post("/departments", json={"code": "hr_src", "name": "Source"},
+                             headers=admin_headers)).json()
+    cult = (await client.post("/departments", json={"code": "hr_cult", "name": "Cultivation"},
+                              headers=admin_headers)).json()
+    _, src_mgr_h = await _mgr(client, admin_headers, "QC_MGR", src["id"])
+    _, cu_h = await _mgr(client, admin_headers, "CU_MGR", cult["id"])
+    tid = (await client.post("/tasks", json={"title": "Clones needed", "department_id": src["id"]},
+                             headers=src_mgr_h)).json()["id"]
+    r = await client.post(f"/tasks/{tid}/handoffs", json={"to_dept_id": cult["id"]}, headers=src_mgr_h)
+    assert r.status_code == 201, r.text
+    hid = r.json()["id"]
+
+    # reads and the discussion around the proposal
+    assert (await client.get(f"/tasks/{tid}", headers=cu_h)).status_code == 200
+    assert (await client.get(f"/tasks/{tid}/handoffs", headers=cu_h)).status_code == 200
+    assert (await client.get(f"/tasks/{tid}/comments", headers=cu_h)).status_code == 200
+    assert (await client.post(f"/tasks/{tid}/comments", json={"content": "can we make it Nursery?"},
+                              headers=cu_h)).status_code == 201
+    # …but nothing that changes the task or hangs new records off it
+    writes = [
+        ("patch", f"/tasks/{tid}", {"title": "Renamed by the receiver"}),
+        ("patch", f"/tasks/{tid}", {"status": "completed"}),
+        ("post", f"/tasks/{tid}/workflow", {"action": "SUBMIT"}),
+        ("post", f"/tasks/{tid}/sessions", {"started_at": "2026-07-06T09:00:00", "hours": 1}),
+        ("post", f"/tasks/{tid}/progress", {"day_label": "Mon", "note": "x"}),
+        ("post", f"/tasks/{tid}/links", {"url": "https://example.invalid/x", "label": "x"}),
+        ("post", f"/tasks/{tid}/assignees", {"user_id": str(uuid.uuid4())}),
+        ("post", f"/tasks/{tid}/handoffs", {"to_dept_id": src["id"]}),
+    ]
+    for method, path, body in writes:
+        r = await getattr(client, method)(path, json=body, headers=cu_h)
+        assert r.status_code == 404, (method, path, r.status_code, r.text)
+    # a subtask under the pending task is a write on it too: refused, so the
+    # parent cannot be pinned into the receiver's scope through a child
+    r = await client.post("/tasks", json={"title": "child", "parent_id": tid,
+                                          "department_id": cult["id"]}, headers=cu_h)
+    assert r.status_code == 404, r.text
+    t = (await client.get(f"/tasks/{tid}", headers=src_mgr_h)).json()["task"]
+    assert t["title"] == "Clones needed" and t["status"] != "completed"
+
+    # rejected → out of scope again, with no child left behind to keep it
+    r = await client.post(f"/handoffs/{hid}/resolve", json={"status": "rejected"}, headers=cu_h)
+    assert r.status_code == 200, r.text
+    assert (await client.get(f"/tasks/{tid}", headers=cu_h)).status_code == 404
+    assert tid not in {x["id"] for x in (await client.get("/tasks", headers=cu_h)).json()}
+
+    # accepted → the task moves, and only then does the receiver edit it
+    hid = (await client.post(f"/tasks/{tid}/handoffs", json={"to_dept_id": cult["id"]},
+                             headers=src_mgr_h)).json()["id"]
+    assert (await client.post(f"/handoffs/{hid}/resolve", json={"status": "accepted"},
+                              headers=cu_h)).status_code == 200
+    r = await client.patch(f"/tasks/{tid}", json={"title": "Now ours"}, headers=cu_h)
+    assert r.status_code == 200, r.text
+    r = await client.post("/tasks", json={"title": "child", "parent_id": tid}, headers=cu_h)
+    assert r.status_code == 201, r.text
+
+
+async def test_department_head_is_maintained_by_the_roster_and_editable_by_admin(client, admin_headers):
+    """The head follows the roster (first scoped manager in, out again on
+    move/demotion/delete; an existing head is never displaced automatically)
+    and ADMIN can set it explicitly on create or via PATCH /departments/{id}."""
+    d = (await client.post("/departments", json={"code": "head_d", "name": "Head Dept"},
+                           headers=admin_headers)).json()
+    first, _ = await _mgr(client, admin_headers, "PR_MGR", d["id"])
+    second, _ = await _mgr(client, admin_headers, "PR_MGR", d["id"])
+
+    async def head():
+        rows = (await client.get("/departments", headers=admin_headers)).json()
+        return next(x for x in rows if x["code"] == "head_d")["head_user_id"]
+
+    assert str(await head()) == first["id"], "the first manager in becomes head; the second does not displace them"
+    # moving the head out of the department clears it, and the vacancy is
+    # filled by the next manager who is (re)assigned there
+    other = (await client.post("/departments", json={"code": "head_o", "name": "Other"},
+                               headers=admin_headers)).json()
+    r = await client.patch(f"/auth/users/{first['id']}", json={"department_id": other["id"]},
+                           headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert await head() is None
+    r = await client.patch(f"/auth/users/{second['id']}", json={"department_id": d["id"]},
+                           headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert str(await head()) == second["id"]
+    # deleting the head clears it
+    assert (await client.delete(f"/auth/users/{second['id']}", headers=admin_headers)).status_code == 200
+    assert await head() is None
+    # ADMIN sets it explicitly; a base USER is refused as head; null clears
+    op, _ = await create_user(client, admin_headers, role="USER", department_id=d["id"])
+    r = await client.patch(f"/departments/{d['id']}", json={"head_user_id": op["id"]}, headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.patch(f"/departments/{d['id']}", json={"head_user_id": first["id"]}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert str(await head()) == first["id"]
+    r = await client.patch(f"/departments/{d['id']}", json={"head_user_id": None}, headers=admin_headers)
+    assert r.status_code == 200 and await head() is None
+    # and on create
+    r = await client.post("/departments", json={"code": "head_c", "name": "Created With Head",
+                                                "head_user_id": first["id"]}, headers=admin_headers)
+    assert r.status_code == 201 and str(r.json()["head_user_id"]) == first["id"]
+    # managers may not edit departments
+    _, pr_h = await _mgr(client, admin_headers, "WH_MGR", d["id"])
+    assert (await client.patch(f"/departments/{d['id']}", json={"name": "x"}, headers=pr_h)).status_code == 403
+
+
 async def test_handoff_to_same_department_rejected(client, admin_headers):
     d = (await client.post("/departments", json={"code": "ho_same", "name": "HO Same"},
                            headers=admin_headers)).json()

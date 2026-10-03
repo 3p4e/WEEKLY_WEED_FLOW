@@ -15,7 +15,11 @@ GF.progress = (t) => {
   if (Number.isFinite(t.progressPct) && t.progressPct > 0) return t.progressPct;
   return { done: 100, working: 50, review: 75, stuck: 25, postponed: 10, pending: 0 }[t.status] ?? 0;
 };
-GF.HANDOFF = { clone:'veg', veg:'flower', flower:'prod', prod:'qc', qc:'qa', qa:'whout', irr:'prod', whin:'prod', maint:'irr' };
+// The department handoff pipeline, keyed by REAL department id. integrate.js
+// fills it from CODE_HANDOFF once /departments has loaded; until then it is
+// empty. (The old seed was keyed by demo department ids that never matched
+// a real one — review 2026-09-27, FE-21.)
+GF.HANDOFF = {};
 
 // The Mass Weed status pill opens an explicit picker (mockup interaction)
 // instead of blind-cycling through the six states. Falls back to the cycle
@@ -54,6 +58,29 @@ GF.flashCompleted = (id) => {
 // Task ids that have already played their entrance animation once in this
 // browser tab's session. See card()/panels() below.
 const _animatedIds = new Set();
+
+/* Drop nav group labels that ended up with nothing under them.
+   The rail emits a label for Floor (and QMS Studio) BEFORE the views that
+   belong there insert themselves, because those views register by
+   monkey-patching GF.render.sidebar — their insertions run after the base
+   renderer returns. When a module has no such views the label is left
+   standing over empty space, which is how a COO came to find a "FLOOR"
+   heading with no rows beneath it. Called from a microtask at the end of
+   render.sidebar, i.e. after the whole patch chain has finished. */
+GF.pruneNavGroups = () => {
+  const nav = GF.$('nav'); if (!nav) return;
+  const kids = Array.from(nav.children);
+  kids.forEach((el, i) => {
+    if (!el.classList.contains('nav-group')) return;
+    let empty = true;
+    for (let j = i + 1; j < kids.length; j++) {
+      if (kids[j].classList.contains('nav-group')) break;
+      // A hidden end-marker (data-nav="floor-end") is an anchor, not an item.
+      if (kids[j].classList.contains('nav-item')) { empty = false; break; }
+    }
+    el.hidden = empty;
+  });
+};
 
 GF.render = {
   all() {
@@ -120,11 +147,15 @@ GF.render = {
     if (GF.hasDeptHome && GF.hasDeptHome()) ops.push(['depthome', 'dept_home', 'home']);
     ops.push(['mywork', 'my_week', 'check'], ['board', 'board', 'grid'],
              ['timeline', 'timeline', 'timeline'], ['calendar', 'calendar', 'calendar']);
-    const mgr = [];
-    if (GF.isExec && GF.isExec()) mgr.push(['exec', 'exec_overview', 'layers']);
-    mgr.push(['coord', 'coordination', 'at', coordPending], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user']);
-    // Workload balancing is a coordination tool — managers/execs only.
-    if (GF.can('team')) mgr.push(['workload', 'workload', 'clock']);
+    const mgr = [['coord', 'coordination', 'at', coordPending], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user']];
+    // Workload and the Executive overview belong to the ANALYTICS module
+    // (modules.js keys). They used to sit in the task rail: clicking one
+    // switched the module, the rail re-rendered without them, and the way
+    // back was the module picker (review 2026-09-27, FE-12). They are
+    // emitted in their own module's rail instead, with their own gates.
+    const ana = [];
+    if (GF.isExec && GF.isExec()) ana.push(['exec', 'exec_overview', 'layers']);
+    if (GF.can('team')) ana.push(['workload', 'workload', 'clock']);   // a coordination tool — managers/execs only
     const sys = [['inbox', 'inbox', 'bell', unreadN]];
     const item = ([id, key, ic, badge]) => `
       <div class="nav-item ${id === GF.state.view ? 'active' : ''}" data-nav="${id}" onclick="GF.setView('${id}')">
@@ -142,11 +173,35 @@ GF.render = {
     const qmsGroup = activeModule === 'qc' && role && role !== 'USER'
       ? `<div class="nav-group">${AL('QMS Studio', 'QMS Студио')}</div>
          <div data-nav="qms-end" style="display:none"></div>` : '';
+    // THE FLOOR GROUP. Facility, Cultivation, Harvest and Irrigation register
+    // themselves through _registerFullPageView({insertBefore:'mywork'}). When
+    // the task module is not the active one, 'mywork' is not rendered, the
+    // insertion falls through to an append, and those four land underneath
+    // whatever label happens to be last — which is how a COO came to find the
+    // whole floor filed under "System". So the rail always emits a labelled
+    // anchor for them, whichever module is active, and they insert before it.
+    const floorGroup = `<div class="nav-group">${AL('Floor', 'Погон')}</div>`
+      + `<div data-nav="floor-end" style="display:none"></div>`;
+    // The Analytics group is emitted for its module; the Analytics and
+    // Executive Report views register into the rail after this body returns
+    // and land beneath it (their anchor is a task-module item, so they fall
+    // back to "before the last group label").
     GF.$('nav').innerHTML =
       (activeModule === 'tasks' ? group(AL('Operations', 'Операции'), ops) : '')
+      + floorGroup
       + (activeModule === 'tasks' ? group(AL('Management', 'Менаџмент'), mgr) : '')
+      + (activeModule === 'analytics' ? group(AL('Analytics', 'Аналитика'), ana) : '')
       + qmsGroup
       + group(AL('System', 'Систем'), sys);
+    // Floor and QMS Studio are ANCHOR groups: their label is emitted here, but
+    // the items are inserted afterwards by the full-page views that register
+    // into them (_registerFullPageView monkey-patches this very function, so
+    // its insertions run after this body returns). Which means a label can be
+    // left standing over nothing — a COO opening the task module met a "FLOOR"
+    // heading with no rows under it. The prune runs in a microtask, after the
+    // whole patch chain has finished inserting, and drops any group label that
+    // ended up with no nav item beneath it.
+    queueMicrotask(() => GF.pruneNavGroups());
     GF.syncModuleBtn && GF.syncModuleBtn();
 
     GF.$('side-label').textContent = GF.t('departments');
@@ -157,15 +212,30 @@ GF.render = {
     // a multi-departmental family (delegated subtask both sides see in full).
     const scope = GF.WWF && GF.WWF.deptScope ? GF.WWF.deptScope() : null;
     const sideDepts = scope ? GF.DEPTS.filter(d => d.id === scope || counts[d.id]) : GF.DEPTS;
-    GF.$('dept-list').innerHTML = sideDepts.map(d => `
-      <div class="dept-row ${GF.state.deptFilter === d.id ? 'active' : ''}" onclick="GF.filterDept('${d.id}')">
+    // Departments are a TREE since 2026-09: Cloning and Nursery sit under
+    // Cultivation (departments.parent_id) and its manager runs them. A flat
+    // list said otherwise — it read as eight peers, so the one department that
+    // owns three of the rows looked like a sibling of its own sub-departments.
+    // Children are nested under their parent, in the order the server sent
+    // them, and a child whose parent is out of scope still shows at top level
+    // rather than disappearing.
+    const byId = {}; sideDepts.forEach(d => { byId[d.id] = d; });
+    const kids = {};
+    sideDepts.forEach(d => {
+      const pid = d.parent_id && byId[d.parent_id] ? d.parent_id : null;
+      (kids[pid] = kids[pid] || []).push(d);
+    });
+    const deptRow = (d, depth) => `
+      <div class="dept-row${depth ? ' dept-sub' : ''} ${GF.state.deptFilter === d.id ? 'active' : ''}"
+           onclick="GF.filterDept('${d.id}')">
         <span class="dept-dot" style="background:${d.color}"></span>${GF.esc(GF.depName(d.id))}
         ${counts[d.id] ? `<span class="dept-count">${counts[d.id]}</span>` : ''}
-      </div>`).join('')
+      </div>` + (kids[d.id] || []).map(c => deptRow(c, depth + 1)).join('');
+    GF.$('dept-list').innerHTML = (kids[null] || []).map(d => deptRow(d, 0)).join('')
       + (GF.WWF && GF.WWF.isAdmin && GF.WWF.isAdmin()
-        ? `<div class="dept-row" style="opacity:.7" onclick="GF.WWF.openDeptForm()">
-            <span class="dept-dot" style="background:transparent;border:1px dashed currentColor"></span>${
-            GF.state.lang === 'mk' ? '+ Додади оддел' : '+ Add department'}</div>`
+        ? `<div class="dept-row dept-add" onclick="GF.WWF.openDeptForm()">
+            <span class="dept-dot"></span>${
+            GF.state.lang === 'mk' ? 'Додади оддел' : 'Add department'}</div>`
         : '');
 
     const u = GF.PEOPLE[GF.state.user] || { name: '—', roleLabel: '' };
@@ -293,7 +363,7 @@ GF.render = {
     const meta = [t.id].filter(Boolean);
     // v2 badges: due date (danger when overdue + not done), type chip,
     // reference code, subtask progress, logged session hours, tags.
-    const overdue = t.due && t.status !== 'done' && t.due < GF.todayISO();
+    const overdue = t.due && t.status !== 'done' && t.due < GF.facilityToday();
     const dueBadge = t.due ? `<span class="due-badge ${overdue ? 'overdue' : ''}" title="${GF.t('due_date')}">
       ${GF.icon('calendar', 'icon')}${GF.esc(t.due)}${overdue ? ' · ' + GF.t('overdue') : ''}</span>` : '';
     const typeChip = (t.type && t.type !== 'other') ? `<span class="type-chip t-${GF.esc(t.type)}">${GF.esc(GF.taskTypeLabel(t.type))}</span>` : '';

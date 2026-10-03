@@ -5,7 +5,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]          # docengine/
 ENGINE_SCRIPTS = ROOT / "engine" / "scripts"
-ENGINE_ASSETS = ROOT / "engine" / "assets"
 
 
 class Settings:
@@ -17,8 +16,10 @@ class Settings:
     letta_base: str = os.environ.get("LETTA_BASE_URL", "").rstrip("/")
     letta_key: str = os.environ.get("LETTA_API_KEY", "")
     # A stateful-agent generation can take minutes; the read timeout must cover
-    # ONE agent turn (the pipeline makes ~11 sequential calls, each polled as a
-    # background job). Connect stays short so an unreachable server fails fast.
+    # ONE agent turn (the pipeline makes 20-40 sequential synchronous POSTs
+    # per job, inside one background task, and reports progress through its
+    # per-stage job updates). Connect stays short so an unreachable server
+    # fails fast.
     #
     # 300 was too tight and cost two real jobs on Moonshot Kimi K2.6, which
     # reasons before it answers: VERIFY-ANNEX-003 died at qa-audit and

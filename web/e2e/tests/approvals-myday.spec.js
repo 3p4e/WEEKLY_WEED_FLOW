@@ -23,7 +23,7 @@ test('assignment flows through Approvals and My Day acknowledgment', async ({ pa
       return task.id;
     }, { t: title, uid: creds.operator_id });
     expect(tid).toBeTruthy();
-    await gotoModule(page, 'audit');   // Approvals lives in the audit module
+    await gotoModule(page, 'tasks');   // Approvals is a task-module view (R2-FE-01)
     await page.locator('.nav-item', { hasText: 'Approvals' }).click();
     await expect(page.locator('.view-title', { hasText: 'Approvals' })).toBeVisible({ timeout: 10_000 });
     const team = page.locator('.apv-row', { hasText: title });

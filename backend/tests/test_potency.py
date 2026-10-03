@@ -283,3 +283,24 @@ async def test_disposition_reads_the_approved_ladder(client, admin_headers):
     # below the floor → below spec, no tier
     below = await disp(13.0)
     assert below["below_spec"] is True and below["disposition"] is None
+
+
+async def test_whoever_rewrote_the_tiers_cannot_approve_the_ladder(client, admin_headers):
+    """Review 2026-09-27 QR-05 (QC-11 for ladders): a ranges-only PATCH used
+    to leave the parent row unstamped, so the person who wrote the tiers
+    could approve them. The PATCH now stamps updated_by, and approval also
+    refuses anyone who authored a tier row."""
+    cv = await _cultivar(client, admin_headers)
+    spec = await _ladder(client, admin_headers, cv["id"])            # authored by admin
+    _, b = await _actor(client, admin_headers, "QC_MGR")
+    _, c = await _actor(client, admin_headers, "QC_MGR")
+    tiers = [{"tier": 1, "range_min": 24, "range_max": 30, "nominal": 27.0},
+             {"tier": 2, "range_min": 13.83, "range_max": 24, "nominal": 19.0}]
+    r = await client.patch(f"/qc/potency-specs/{spec['id']}", json={"ranges": tiers}, headers=b)
+    assert r.status_code == 200, r.text
+    r = await client.post(f"/qc/potency-specs/{spec['id']}/approve", headers=b)
+    assert r.status_code == 403 and "segregation" in r.text.lower(), r.text
+    r = await client.post(f"/qc/potency-specs/{spec['id']}/approve", headers=admin_headers)
+    assert r.status_code == 403, "the original author is still refused"
+    r = await client.post(f"/qc/potency-specs/{spec['id']}/approve", headers=c)
+    assert r.status_code == 200, r.text

@@ -25,10 +25,112 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
   const who = (id) => (GF.PEOPLE && GF.PEOPLE[id] && GF.PEOPLE[id].name) || AL('Someone', 'Некој');
 
+  // Object-type nouns for the generic line below — the backend's object_type
+  // enum as a person would say it. An unknown type prints as itself.
+  const OBJ = {
+    task: { en: 'task', mk: 'задача' }, plant_batch: { en: 'batch', mk: 'серија' },
+    qc_sample: { en: 'sample', mk: 'примерок' }, qc_certificate: { en: 'certificate', mk: 'сертификат' },
+    qc_coq: { en: 'CoQ', mk: 'CoQ' }, qc_coa_document: { en: 'CoA document', mk: 'CoA документ' },
+    qc_specification: { en: 'specification', mk: 'спецификација' }, qc_product: { en: 'product', mk: 'производ' },
+    qc_potency_spec: { en: 'potency ladder', mk: 'скала на потентност' }, qc_oos: { en: 'OOS', mk: 'OOS' },
+    decon_room_cycle: { en: 'decon cycle', mk: 'циклус на деконтаминација' }, decon_swab: { en: 'swab', mk: 'брис' },
+    room: { en: 'room', mk: 'соба' }, waste_manifest: { en: 'waste manifest', mk: 'манифест за отпад' },
+    biosecurity_event: { en: 'biosecurity check', mk: 'биобезбедносна проверка' },
+    mother_plant: { en: 'mother plant', mk: 'мајка растение' }, selection_campaign: { en: 'campaign', mk: 'кампања' },
+    harvest: { en: 'harvest', mk: 'жетва' }, ipm_application: { en: 'IPM application', mk: 'IPM третман' },
+    irrigation_event: { en: 'feeding', mk: 'наводнување' }, trichome_check: { en: 'trichome check', mk: 'проверка на трихоми' },
+    report_document: { en: 'weekly document', mk: 'неделен документ' }, facility_room: { en: 'room', mk: 'соба' },
+  };
+  const objNoun = (n) => { const o = OBJ[n.object_type]; return o ? AL(o.en, o.mk) : (n.object_type || ''); };
+  const HO_ST = {
+    accepted: { en: 'accepted', mk: 'прифати' }, rejected: { en: 'rejected', mk: 'одби' },
+    cancelled: { en: 'cancelled', mk: 'откажа' },
+  };
+
+  // The pieces every batch sentence shares, each tolerant of an absent key.
+  const batchBits = (p) => ({
+    code: p.code ? `${p.code} — ` : '',
+    count: p.plant_count != null ? String(p.plant_count) : '?',
+    strain: p.strain || p.cultivar || p.product_code || AL('batch', 'серија'),
+    room: p.room || p.room_name || '',
+    phase: p.phase ? ` (${p.phase})` : '',
+  });
+
   // verb + params → sentence, per current language. Structured params only.
+  // Every verb the backend emits (grep 'verb="' over backend/app) has a
+  // sentence here; anything new falls to the generic line, which still
+  // names the actor, the object and the action in both languages rather
+  // than printing a raw machine word (review 2026-09-27, FE-18).
   const sentence = (n) => {
     const p = n.params || {}, a = who(n.actor_id), t = p.title || '';
     switch (n.verb) {
+      case 'handoff':        return AL(`${a} proposed a handoff to ${p.to_dept}: ${t}`,
+                                       `${a} предложи префрлање до ${p.to_dept}: ${t}`);
+      case 'handoff_resolved': {
+        const s = HO_ST[p.status] || { en: p.status, mk: p.status };
+        return AL(`${a} ${s.en} the handoff: ${t}`, `${a} го ${s.mk} префрлањето: ${t}`);
+      }
+      case 'oos_opened':     return AL(`${a} opened ${p.oos_number} on batch ${p.batch_id}`,
+                                       `${a} отвори ${p.oos_number} за серија ${p.batch_id}`);
+      case 'qc_deviation':   return AL(`QC deviation (${p.reason}) on batch ${p.batch_id}`,
+                                       `КК отстапување (${p.reason}) за серија ${p.batch_id}`);
+      case 'decon_swab_positive': return AL(`Positive swab ${p.swab_code} in ${p.room}`,
+                                            `Позитивен брис ${p.swab_code} во ${p.room}`);
+      case 'decon_cycle_started': return AL(`${a} started a decon cycle in ${p.room} (${p.campaign})`,
+                                            `${a} започна циклус на деконтаминација во ${p.room} (${p.campaign})`);
+      case 'decon_room_released': return AL(`${a} released ${p.room} (${p.campaign})`,
+                                            `${a} ја ослободи ${p.room} (${p.campaign})`);
+      case 'decon_cycle_failed': return AL(`${a} failed the decon cycle in ${p.room}: ${p.reason}`,
+                                           `${a} го означи циклусот во ${p.room} како неуспешен: ${p.reason}`);
+      case 'decon_bleach_below_spec':
+      case 'decon_tool_below_spec':
+      case 'decon_corridor_below_spec':
+                             return AL(`${p.ppm} ppm below specification in ${p.room}`,
+                                       `${p.ppm} ppm под спецификација во ${p.room}`);
+      case 'biosecurity_logged': return AL(`Biosecurity ${p.kind}: ${p.result}${p.room_name ? ' — ' + p.room_name : ''}`,
+                                           `Биобезбедност ${p.kind}: ${p.result}${p.room_name ? ' — ' + p.room_name : ''}`);
+      case 'mother_registered': return AL(`${a} registered mother ${p.code} (${p.product_code})`,
+                                          `${a} регистрираше мајка ${p.code} (${p.product_code})`);
+      case 'campaign_started': return AL(`${a} started selection campaign S${p.seq} (${p.material})`,
+                                         `${a} започна кампања за селекција S${p.seq} (${p.material})`);
+      case 'harvest_recorded': return AL(`${a} recorded harvest ${p.lot_code} from ${p.batch}`,
+                                         `${a} запиша жетва ${p.lot_code} од ${p.batch}`);
+      case 'harvest_dried':    return AL(`${p.lot_code} dried: ${p.dry_total_g} g`, `${p.lot_code} исушено: ${p.dry_total_g} g`);
+      case 'harvest_closed':   return AL(`${a} closed lot ${p.lot_code}`, `${a} ја затвори серијата ${p.lot_code}`);
+      case 'ipm_applied':      return AL(`${a} applied ${p.product} (${p.category})`, `${a} примени ${p.product} (${p.category})`);
+      case 'trichome_checked': return AL(`${a}: trichome check on ${p.batch} — ${p.verdict}`,
+                                         `${a}: проверка на трихоми за ${p.batch} — ${p.verdict}`);
+      case 'trichome_corrected': return AL(`${a} corrected the trichome check on ${p.batch} (${(p.fields || []).join(', ')})`,
+                                           `${a} ја поправи проверката на трихоми за ${p.batch} (${(p.fields || []).join(', ')})`);
+      case 'irrigation_logged': return AL(`${a} logged feeding in ${p.room_name} (${p.method})`,
+                                          `${a} запиша наводнување во ${p.room_name} (${p.method})`);
+      case 'waste_manifest_sealed':    return AL(`${a} sealed waste manifest ${p.code}`, `${a} го затвори манифестот ${p.code}`);
+      case 'waste_manifest_witnessed': return AL(`${a} witnessed waste manifest ${p.code}`, `${a} го потврди манифестот ${p.code}`);
+      case 'waste_manifest_disposed':  return AL(`${a} disposed waste manifest ${p.code}${p.carrier_ref ? ' (' + p.carrier_ref + ')' : ''}`,
+                                                 `${a} го уништи манифестот ${p.code}${p.carrier_ref ? ' (' + p.carrier_ref + ')' : ''}`);
+      case 'sample_collected':   return AL(`${a} collected sample ${p.sample_id} (${p.batch_id})`,
+                                           `${a} зеде примерок ${p.sample_id} (${p.batch_id})`);
+      case 'sample_quarantined': return AL(`Sample quarantined — ${p.test_name}`, `Примерок во карантин — ${p.test_name}`);
+      case 'spec_created':       return AL(`${a} created specification ${p.spec_id} (${p.material_code})`,
+                                           `${a} креираше спецификација ${p.spec_id} (${p.material_code})`);
+      case 'coa_signed':         return AL(`${a} signed a certificate (${p.meaning})`, `${a} потпиша сертификат (${p.meaning})`);
+      case 'coa_verified':       return AL(`${a} verified a certificate: ${p.verdict} (${p.mismatches}/${p.checked} mismatches)`,
+                                           `${a} провери сертификат: ${p.verdict} (${p.mismatches}/${p.checked} отстапувања)`);
+      case 'coa_original_stored': return AL(`${a} stored the original ${p.filename}`, `${a} го зачува оригиналот ${p.filename}`);
+      case 'ecoa_promoted':      return AL(`${a} promoted ${p.doc_number} to ${p.coa_number}`, `${a} го промовираше ${p.doc_number} во ${p.coa_number}`);
+      case 'coq_compiled':       return AL(`${a} compiled ${p.coq_number} for batch ${p.batch_id}`, `${a} состави ${p.coq_number} за серија ${p.batch_id}`);
+      case 'coq_reviewed':       return AL(`${a} reviewed ${p.coq_number}`, `${a} прегледа ${p.coq_number}`);
+      case 'coq_rendered':       return AL(`${a} rendered ${p.coq_number}`, `${a} генерираше ${p.coq_number}`);
+      case 'coq_generated':      return AL(`${a} generated the CoQ for ${p.coa_number}`, `${a} генерираше CoQ за ${p.coa_number}`);
+      case 'coq_voided':         return AL(`${a} voided ${p.coq_number}: ${p.reason}`, `${a} поништи ${p.coq_number}: ${p.reason}`);
+      case 'potency_spec_created':  return AL(`${a} created potency ladder v${p.version}`, `${a} креираше скала на потентност v${p.version}`);
+      case 'potency_spec_approved': return AL(`${a} approved potency ladder v${p.version}`, `${a} одобри скала на потентност v${p.version}`);
+      case 'facility_room_classified': return AL(`${a} classified room ${p.code}`, `${a} ја класифицираше собата ${p.code}`);
+      case 'workflow_submit':  return AL(`${a} submitted for sign-off: ${t}`, `${a} поднесе за одобрување: ${t}`);
+      case 'workflow_approve': return AL(`${a} approved: ${t}`, `${a} одобри: ${t}`);
+      case 'workflow_reject':  return AL(`${a} rejected: ${t}`, `${a} одби: ${t}`);
+      case 'workflow_block':   return AL(`${a} placed a QP block: ${t}`, `${a} стави QP блок: ${t}`);
+      case 'workflow_unblock': return AL(`${a} lifted the QP block: ${t}`, `${a} го тргна QP блокот: ${t}`);
       case 'assigned':       return AL(`${a} assigned you: ${t}`, `${a} ви додели: ${t}`);
       case 'commented':      return AL(`${a} commented on: ${t}`, `${a} коментираше на: ${t}`)
                                    + (p.preview ? ` — “${p.preview}”` : '');
@@ -50,13 +152,85 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       case 'unassigned':     return AL(`${a} unassigned you from: ${t}`, `${a} ве отстрани од: ${t}`);
       case 'due_soon':       return AL(`Due today: ${t}`, `Рок денес: ${t}`);
       case 'overdue':        return AL(`Overdue (${p.due}): ${t}`, `Задоцнето (${p.due}): ${t}`);
-      case 'batch_added':    return AL(`${a} added ${p.plant_count} × ${p.strain} to ${p.room} (${p.phase})`,
-                                       `${a} додаде ${p.plant_count} × ${p.strain} во ${p.room} (${p.phase})`);
-      case 'batch_moved':    return AL(`${a} moved ${p.plant_count} × ${p.strain}: ${p.old_room} (${p.old_phase}) → ${p.room} (${p.phase})`,
-                                       `${a} премести ${p.plant_count} × ${p.strain}: ${p.old_room} (${p.old_phase}) → ${p.room} (${p.phase})`);
-      case 'batch_closed':   return AL(`${a} closed the ${p.strain} batch in ${p.room} (${p.plant_count} plants)`,
-                                       `${a} ја затвори серијата ${p.strain} во ${p.room} (${p.plant_count} растенија)`);
-      default:               return `${a}: ${n.verb} ${t}`;
+      // Batch registration / phase move (cultivation.py). The contract is
+      // `code`, `strain` (cultivar NAME), `room` (room NAME), `plant_count`,
+      // `phase`, and `old_room` / `old_phase` on a move; older events carry
+      // `cultivar` and no room, so every key falls back and nothing prints
+      // "undefined" (review 2026-09-27, R2-FE-04 / INV-02).
+      case 'batch_added': {
+        const b = batchBits(p);
+        return AL(`${a} registered ${b.code}${b.count} × ${b.strain}${b.room ? ' in ' + b.room : ''}${b.phase}`,
+                  `${a} регистрираше ${b.code}${b.count} × ${b.strain}${b.room ? ' во ' + b.room : ''}${b.phase}`);
+      }
+      case 'clone_run_started': return AL(`${a} started a clone run: ${p.cultivar} · ${p.planned_count} cuttings from ${p.mothers} mothers (${p.started_on})`,
+                                          `${a} започна клонирање: ${p.cultivar} · ${p.planned_count} резници од ${p.mothers} мајки (${p.started_on})`);
+      case 'batch_moved': {
+        const b = batchBits(p);
+        // "old room (old phase) → room (phase)"; whichever side has no room
+        // prints its phase alone, and a phase-only move prints "clone → veg".
+        const side = (room, phase) => room && phase ? `${room} (${phase})` : (room || phase || '');
+        const from = side(p.old_room, p.old_phase), to = side(p.room, p.phase);
+        const hop = from || to ? `: ${from || '?'} → ${to || '?'}` : '';
+        // A room change keeps the phase clock (CS-06): say so instead of
+        // printing "flower → flower".
+        if (p.room_change) {
+          const where = p.old_room && p.room ? `: ${p.old_room} → ${p.room}` : (p.room ? `: → ${p.room}` : '');
+          return AL(`${a} changed room for ${b.code}${b.count} × ${b.strain}${where}${p.phase ? ` (${p.phase})` : ''}`,
+                    `${a} ја премести во друга просторија ${b.code}${b.count} × ${b.strain}${where}${p.phase ? ` (${p.phase})` : ''}`);
+        }
+        return AL(`${a} moved ${b.code}${b.count} × ${b.strain}${hop}`,
+                  `${a} премести ${b.code}${b.count} × ${b.strain}${hop}`);
+      }
+      // The product catalogue (qc/products.py) and the owner's out-of-grade
+      // rule of 2026-09-06: a Total Δ9-THC outside the certified product's
+      // window is handed to Cultivation and Production as a deviation.
+      case 'potency_deviation': {
+        const w = (p.window_min != null && p.window_max != null) ? ` (${p.window_min}–${p.window_max} %)` : '';
+        const fall = p.regrade_to
+          ? AL(` — the lot falls to ${p.regrade_to}`, ` — серијата паѓа на ${p.regrade_to}`)
+          : AL(' — no grade of the strain holds it', ' — ниту една класа на сортата не ја содржи');
+        return AL(`Potency deviation on batch ${p.batch_id}: Total Δ9-THC ${p.total_d9_thc} % is outside ${p.product_code}${w}${fall}; a formal OOS is required on the batch disposition (${p.coq_number})`,
+                  `Отстапување на јачина кај серија ${p.batch_id}: вкупен Δ9-THC ${p.total_d9_thc} % е надвор од ${p.product_code}${w}${fall}; потребен е формален OOS за диспозицијата на серијата (${p.coq_number})`);
+      }
+      case 'product_created':   return AL(`${a} authored product ${p.product_code} (${p.cultivar})`,
+                                          `${a} состави производ ${p.product_code} (${p.cultivar})`);
+      case 'product_approved':  return AL(`${a} approved product ${p.product_code} (${p.cultivar}${p.doc_version ? ', ' + p.doc_version : ''})`,
+                                          `${a} одобри производ ${p.product_code} (${p.cultivar}${p.doc_version ? ', ' + p.doc_version : ''})`);
+      case 'product_ladder_created': return AL(`${a} authored the ${p.cultivar} ladder ${p.doc_version}: grades ${(p.grades || []).join(', ')}`,
+                                               `${a} ја состави скалата ${p.cultivar} ${p.doc_version}: класи ${(p.grades || []).join(', ')}`);
+      case 'product_catalogue_imported': return AL(`${a} imported the ImB pages ${p.doc_code} ${p.doc_version}: ${p.created} created, ${p.skipped} skipped, ${p.conflicts} conflicts`,
+                                                   `${a} ги внесе ImB страниците ${p.doc_code} ${p.doc_version}: ${p.created} внесени, ${p.skipped} прескокнати, ${p.conflicts} конфликти`);
+      case 'fitted_catalogue_imported':  return AL(`${a} imported the fitted specifications ${p.doc_code} ${p.doc_version}: ${p.created} created, ${p.skipped} skipped, ${p.conflicts} conflicts`,
+                                                   `${a} ги внесе фитуваните спецификации ${p.doc_code} ${p.doc_version}: ${p.created} внесени, ${p.skipped} прескокнати, ${p.conflicts} конфликти`);
+      // The five emitters that still fell to the generic line (review
+      // 2026-09-27, INV-03): the CoQ e-signature (signatures.py), the
+      // commercial identities (commercial.py), the ladder import
+      // (potency_import.py) and the facility layout import (facility_layout.py).
+      case 'coq_signed':         return AL(`${a} signed a certificate of quality (${p.meaning})`, `${a} потпиша сертификат за квалитет (${p.meaning})`);
+      // A direct Studio build registers a controlled document without the
+      // §6A audit (DECISIONS F-2); the sentence says so rather than implying one.
+      case 'studio_build': {
+        const doc = [p.code, p.version].filter(Boolean).join(' v') || AL('a document', 'документ');
+        const t = p.title_en ? ` — ${p.title_en}` : '';
+        const note = p.audited ? '' : AL(' (not audited)', ' (без ревизија)');
+        return AL(`${a} built ${doc}${t} in Document Studio${note}`,
+                  `${a} изгради ${doc}${t} во Document Studio${note}`);
+      }
+      case 'commercial_identity_upserted': return AL(`${a} set the commercial identity of ${p.batch_code}${p.neu_name ? ': ' + p.neu_name : ''}`,
+                                                     `${a} го постави комерцијалниот идентитет на ${p.batch_code}${p.neu_name ? ': ' + p.neu_name : ''}`);
+      case 'portfolio_master_imported': return AL(`${a} imported the portfolio master: ${p.imported} commercial identities`,
+                                                  `${a} го внесе портфолио регистарот: ${p.imported} комерцијални идентитети`);
+      case 'potency_catalogue_imported': return AL(`${a} imported the ${p.family} potency ladders v${p.version}: ${p.created} created, ${p.skipped} skipped, ${p.conflicts} conflicts`,
+                                                   `${a} ги внесе скалите на потентност ${p.family} v${p.version}: ${p.created} внесени, ${p.skipped} прескокнати, ${p.conflicts} конфликти`);
+      case 'facility_layout_imported': return AL(`${a} imported the facility layout${p.source ? ' from ' + p.source : ''}: ${p.created} rooms created, ${p.updated} updated`,
+                                                 `${a} го внесе распоредот на објектот${p.source ? ' од ' + p.source : ''}: ${p.created} соби креирани, ${p.updated} ажурирани`);
+      default: {
+        // Generic, still bilingual by structure: actor · object · action.
+        // The verb is a machine word; it is printed as words, never invented.
+        const verb = String(n.verb || '').replace(/_/g, ' ');
+        const obj = t || objNoun(n) || '';
+        return AL(`${a} · ${verb}${obj ? ': ' + obj : ''}`, `${a} · ${verb}${obj ? ': ' + obj : ''}`);
+      }
     }
   };
 
@@ -82,15 +256,41 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     overdue: { en: 'Overdue', mk: 'Задоцнети' },
     batch_added: { en: 'Batches added', mk: 'Додадени серии' },
     batch_moved: { en: 'Batches moved', mk: 'Преместени серии' },
-    batch_closed: { en: 'Batches closed', mk: 'Затворени серии' },
+    clone_run_started: { en: 'Clone runs started', mk: 'Започнати клонирања' },
+    potency_deviation: { en: 'Potency deviations', mk: 'Отстапувања на јачина' },
+    product_created: { en: 'Products authored', mk: 'Составени производи' },
+    product_approved: { en: 'Products approved', mk: 'Одобрени производи' },
+    product_ladder_created: { en: 'Ladders authored', mk: 'Составени скали' },
+    product_catalogue_imported: { en: 'ImB pages imported', mk: 'Внесени ImB страници' },
+    fitted_catalogue_imported: { en: 'Fitted specs imported', mk: 'Внесени фитувани спецификации' },
+    handoff: { en: 'Handoffs proposed', mk: 'Предложени префрлања' },
+    handoff_resolved: { en: 'Handoffs resolved', mk: 'Решени префрлања' },
+    oos_opened: { en: 'OOS opened', mk: 'Отворени OOS' },
+    decon_swab_positive: { en: 'Positive swabs', mk: 'Позитивни брисеви' },
+    harvest_recorded: { en: 'Harvests', mk: 'Жетви' },
+    trichome_checked: { en: 'Trichome checks', mk: 'Проверки на трихоми' },
+    trichome_corrected: { en: 'Trichome checks corrected', mk: 'Поправени проверки на трихоми' },
+    coq_signed: { en: 'CoQs signed', mk: 'Потпишани CoQ' },
+    studio_build: { en: 'Studio builds', mk: 'Изградени документи' },
+    commercial_identity_upserted: { en: 'Commercial identities set', mk: 'Поставени комерцијални идентитети' },
+    portfolio_master_imported: { en: 'Portfolio masters imported', mk: 'Внесени портфолио регистри' },
+    potency_catalogue_imported: { en: 'Potency ladders imported', mk: 'Внесени скали на потентност' },
+    facility_layout_imported: { en: 'Facility layouts imported', mk: 'Внесени распореди на објектот' },
   };
-  const verbLabel = (v) => { const l = VERB_LBL[v]; return l ? AL(l.en, l.mk) : v; };
+  // No backend code emits batch_closed (review 2026-09-27, FE-18) — the case
+  // that handled it was dead and has been dropped; an unknown verb prints as
+  // words rather than a machine token.
+  const verbLabel = (v) => { const l = VERB_LBL[v]; return l ? AL(l.en, l.mk) : String(v || '').replace(/_/g, ' '); };
 
+  // Grouped by the FACILITY's day of the instant, compared against the
+  // facility's today — not the UTC day of the stamp against the browser's
+  // day. Between facility midnight and 02:00 those disagreed, and an item
+  // from 00:30 sat under "Yesterday" (review 2026-09-27, FE-05).
   const dayLabel = (iso) => {
-    const d = iso.slice(0, 10), today = GF.localDateStr ? GF.localDateStr(new Date()) : new Date().toISOString().slice(0, 10);
+    const d = GF.fmtDate(iso), today = GF.facilityToday();
     if (d === today) return AL('Today', 'Денес');
-    const y = new Date(Date.now() - 864e5);
-    if (d === (GF.localDateStr ? GF.localDateStr(y) : y.toISOString().slice(0, 10))) return AL('Yesterday', 'Вчера');
+    const y = GF.fmtDate(new Date(new Date(today + 'T12:00:00Z').getTime() - 864e5).toISOString());
+    if (d === y) return AL('Yesterday', 'Вчера');
     return d;
   };
 
@@ -99,7 +299,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       <div class="ntf-b">
         <div class="ntf-tt">${GF.esc(sentence(n))}</div>
         <div class="ntf-meta"><span class="ntf-reason">${GF.esc(AL(REASONS[n.reason]?.en || n.reason, REASONS[n.reason]?.mk || n.reason))}</span>
-          <span class="ntf-ts">${GF.esc(n.created_at.slice(11, 16))}</span></div>
+          <span class="ntf-ts">${GF.esc(GF.fmtTime(n.created_at))}</span></div>
       </div>
       <button class="mini-btn ntf-done" title="${AL('Done', 'Завршено')}"
         onclick="event.stopPropagation();GF.WWF.notifDone('${GF.esc(n.id)}')">${GF.icon('check', 'icon')}</button>
@@ -107,7 +307,9 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
   // Timeline dot colour by verb class (mockup .mw-feed): completions and
   // locks read "ok", stuck-ish state changes "warn", everything else accent.
-  const dotKind = (e) => e.verb === 'report_locked' || e.verb === 'acknowledged' ? 'ok'
+  // The acknowledgement verb is `ack` (collab.py), not 'acknowledged' — the
+  // green dot never lit for one (review 2026-09-27, INV-04).
+  const dotKind = (e) => e.verb === 'report_locked' || e.verb === 'ack' ? 'ok'
     : e.verb === 'overdue' || e.verb === 'due_soon' ? 'warn'
     : e.verb === 'status_changed' ? ((e.params || {}).new === 'completed' ? 'ok' : 'warn') : '';
 
@@ -115,7 +317,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     <div class="ntf ntf-feed">
       <div class="ntf-rail"><span class="ntf-fdot ${dotKind(e)}"></span></div>
       <div class="ntf-b"><div class="ntf-tt">${GF.esc(sentence(e))}</div>
-        <div class="ntf-meta"><span class="ntf-ts">${GF.esc(e.created_at.slice(11, 16))}</span>
+        <div class="ntf-meta"><span class="ntf-ts">${GF.esc(GF.fmtTime(e.created_at))}</span>
           ${e.department_id && GF.depName ? `<span class="ntf-reason">${GF.esc(GF.depAbbr(e.department_id) || '')}</span>` : ''}</div></div>
     </div>`;
 
@@ -287,6 +489,20 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     } catch (e) { GF.toast(AL('Load failed: ', 'Неуспешно вчитување: ') + e.message, 'error'); }
   };
 
+  // Can the signed-in user land on the Approvals view? Mirrors the two gates
+  // _registerFullPageView ANDs together for it: its module must be accessible
+  // for the role (modules.js — `approvals` is a task-module key, so every
+  // signed-in role passes) and the view's own guard (role !== 'USER').
+  GF.WWF.canOpenApprovals = () => {
+    const role = (GF.API && GF.API.user && GF.API.user.role) || '';
+    if (!role || role === 'USER') return false;
+    // Without the module registry (modules.js) there is no module gate to
+    // fail — the same optional-chaining _registerFullPageView uses.
+    if (!GF.moduleForKey || !GF.moduleAccessibleFor) return true;
+    const mod = GF.moduleForKey('approvals');
+    return !!mod && GF.moduleAccessibleFor(mod, role);
+  };
+
   GF.WWF.openNotif = async (id, taskId) => {
     // Mirror notifDone/notifReadAll: a failed write must abort BEFORE the
     // optimistic local mutation below, not after — otherwise a network blip
@@ -297,6 +513,16 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     const n = st.items.find(x => x.id === id);
     if (n && !n.read) { n.read = true; st.unread = Math.max(0, st.unread - 1); }
     st._justRead[id] = Date.now() + 10000;
+    // A handoff proposal is addressed to the receiving department, whose
+    // manager cannot see the task on their own board (it still sits in the
+    // source department). The place to act on it is the Approvals list of
+    // handoffs to their department, not a board jump that lands nowhere
+    // (review 2026-09-27, FE-06). Only when that view is OPENABLE for this
+    // user, though: every task participant gets the same ping, and a USER
+    // assignee (the Approvals guard is role !== 'USER') used to be sent to a
+    // view render.all() bounces straight back to My Week — with no message.
+    // They keep the task jump they had before (R2-FE-01).
+    if (n && n.verb === 'handoff' && GF.setView && GF.WWF.canOpenApprovals()) { GF.setView('approvals'); return; }
     if (taskId && GF.WWF.xrJump) {
       const t = GF.task && GF.task(taskId);
       GF.WWF.xrJump(taskId, (t && t.week_start) || '');

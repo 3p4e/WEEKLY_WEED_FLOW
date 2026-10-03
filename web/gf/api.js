@@ -13,17 +13,80 @@ GF.API = {
     if (this.token) h['Authorization'] = 'Bearer ' + this.token;
     return h;
   },
-  async _req(method, path, body) {
+  // AL() lives in core.js, which loads AFTER this file (index.html's ordered
+  // script list). By the time any request can fail it is long since defined —
+  // but this file must not assume that, so fall back to English rather than
+  // let a ReferenceError replace the error we are trying to report.
+  _msg(en, mk) {
+    try { return AL(en, mk); } catch (e) { return en; }
+  },
+  // Without a timeout a hung backend never settles: the await never resolves,
+  // the caller's spinner never clears, and the only thing between the user and
+  // a permanently stuck screen is GF.once's per-button guard — which blocks a
+  // SECOND click, it does not rescue the first one.
+  //
+  // Both values sit just PAST the matching nginx proxy_read_timeout
+  // (web/nginx.conf: 60s general, 180s for /intake and the DocEngine agent
+  // routes), never before it. That ordering is the whole point: whichever hop
+  // gives up first is the one that writes the error the user sees, and nginx's
+  // 504 says something ("the server took too long") that a silent client-side
+  // abort cannot. Undercutting the proxy would also cancel slow-but-healthy
+  // calls — a large report that nginx would happily have waited out.
+  _TIMEOUT_MS: 65000,
+  _SLOW_TIMEOUT_MS: 190000,
+  // Exactly the paths web/nginx.conf gives its own 180s block — kept in step
+  // with that file deliberately, and no wider: /ai is NOT here, because nginx
+  // reads it for 60s and its backend timeout is 15s.
+  // (`/qms/rag-query` left with BC-19; review 2026-09-27, R2-BC-09.)
+  _SLOW_PATHS: /^\/(?:intake\/|qms\/studio\/(?:build|workflows\/[^/]+\/(?:chat|revise)))/,
+
+  _timeoutFor(path) {
+    return this._SLOW_PATHS.test(path) ? this._SLOW_TIMEOUT_MS : this._TIMEOUT_MS;
+  },
+
+  // The JSON body only — what every wrapper below returns. A caller that
+  // needs a response HEADER as well (the audit trail's X-Next-Cursor) uses
+  // _reqFull, which is the same request with the headers kept.
+  async _req(method, path, body, timeoutMs) {
+    return (await this._reqFull(method, path, body, timeoutMs)).data;
+  },
+
+  // { data, headers, status }: the parsed body plus the response Headers.
+  // Same auth, timeout and error handling as _req — this IS _req, with the
+  // headers not thrown away (review 2026-09-27, R2-BC-02 / A-7).
+  async _reqFull(method, path, body, timeoutMs) {
     // Capture the token THIS request actually sends, before the fetch's
     // await hands control back to the event loop. _headers() reads
     // `this.token` synchronously right here, so `sentToken` is exactly what
     // went out on the wire for this call — even if `this.token` is rotated
     // to a different value while this request is still in flight.
     const sentToken = this.token;
-    const res = await fetch(this.base + path, {
-      method, headers: this._headers(),
-      body: body == null ? undefined : JSON.stringify(body),
-    });
+    const ctl = new AbortController();
+    const limit = timeoutMs || this._timeoutFor(path);
+    const timer = setTimeout(() => ctl.abort(), limit);
+    let res;
+    try {
+      res = await fetch(this.base + path, {
+        method, headers: this._headers(),
+        body: body == null ? undefined : JSON.stringify(body),
+        signal: ctl.signal,
+      });
+    } catch (e) {
+      // Distinguish "we gave up waiting" from "the network refused" — the two
+      // need different things from the user, and both used to surface as the
+      // same opaque "Failed to fetch".
+      const timedOut = e && e.name === 'AbortError';
+      const err = new Error(timedOut
+        ? GF.API._msg('The server did not respond in time — it may still be working. Try again in a moment.',
+                      'Серверот не одговори навреме — можеби сè уште работи. Обидете се повторно за момент.')
+        : GF.API._msg('Could not reach the server. Check your connection.',
+                      'Не може да се дојде до серверот. Проверете ја врската.'));
+      err.status = 0;              // no HTTP status: nothing came back
+      err.timeout = !!timedOut;    // callers that want to offer a retry can key on this
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
     if (res.status === 401) {
       // A failed /auth/login must NOT tear down and rebuild the login card the
       // user is already looking at — showLogin() re-renders the entry splash,
@@ -87,7 +150,8 @@ GF.API = {
       throw err;
     }
     const ct = res.headers.get('content-type') || '';
-    return ct.includes('application/json') ? res.json() : res.text();
+    const data = await (ct.includes('application/json') ? res.json() : res.text());
+    return { data, headers: res.headers, status: res.status };
   },
 
   async login(username, password) {
@@ -124,7 +188,6 @@ GF.API = {
   },
   me() { return this._req('GET', '/auth/me'); },
   directory()      { return this._req('GET', '/auth/directory'); },
-  listUsers()      { return this._req('GET', '/auth/users'); },
   createUser(body) { return this._req('POST', '/auth/users', body); },
   updateUser(id, body) { return this._req('PATCH', '/auth/users/' + id, body); },
   resetPassword(id)    { return this._req('POST', '/auth/users/' + id + '/reset-password'); },
@@ -161,6 +224,37 @@ GF.API = {
   // auto-generated per-phase set plus any hand-linked via the ordinary task
   // create/PATCH endpoints. Read-only; linking happens on the task side.
   cultivationBatchTasks(batchId) { return this._req('GET', '/cultivation/batches/' + batchId + '/tasks'); },
+  // Registering from the product specification: the next batch number for a
+  // cultivar (constant head = the cultivar code, tail suggested from what the
+  // org already holds). The code field pre-fills it; the tail stays editable.
+  // `extra` carries any further query key the route takes (clone_date), so a
+  // view never has to bypass this wrapper with an inline _req (R2-FE-18).
+  cultivationBatchCode(cultivarId, extra) {
+    const u = new URLSearchParams(Object.assign({ cultivar_id: cultivarId }, extra || {})).toString();
+    return this._req('GET', '/cultivation/batch-code?' + u);
+  },
+  cultivationBatchPatch(id, b)   { return this._req('PATCH', '/cultivation/batches/' + id, b); },
+  // Trichome maturation checks (0066): the documented record behind a harvest
+  // date. Never a gate — the harvest form shows the latest verdict, nothing more.
+  trichomeChecks(q)              { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/cultivation/trichome-checks' + (u?'?'+u:'')); },
+  trichomeCheck(b)               { return this._req('POST', '/cultivation/trichome-checks', b); },
+  // A correction of a recorded check (trichome.py; the original stays, the
+  // correction is a new row that names it) — the history list above shows both.
+  trichomeCheckPatch(id, b)      { return this._req('PATCH', '/cultivation/trichome-checks/' + id, b); },
+  // Selection campaigns — the S<n> in a mother-plant id, numbered facility-wide.
+  campaigns()                    { return this._req('GET', '/cultivation/campaigns'); },
+  campaignCreate(b)              { return this._req('POST', '/cultivation/campaigns', b); },
+  // Propagation (migration 0065, app/api/propagation.py): the mother-plant
+  // bank and clone runs — the clone end of cultivation's span. Same
+  // /cultivation prefix, separate server module, like harvest and irrigation.
+  mothers(active = true)         { return this._req('GET', '/cultivation/mothers?active=' + (active ? 'true' : 'false')); },
+  motherNextCode(q)              { const u = new URLSearchParams(q).toString(); return this._req('GET', '/cultivation/mothers/next-code?' + u); },
+  motherPotency(id)              { return this._req('GET', '/cultivation/mothers/' + id + '/potency'); },
+  motherCreate(body)             { return this._req('POST', '/cultivation/mothers', body); },
+  motherPatch(id, body)          { return this._req('PATCH', '/cultivation/mothers/' + id, body); },
+  cloneRuns(active = true)       { return this._req('GET', '/cultivation/clone-runs?active=' + (active ? 'true' : 'false')); },
+  cloneRunCreate(body)           { return this._req('POST', '/cultivation/clone-runs', body); },
+  cloneRunPatch(id, body)        { return this._req('PATCH', '/cultivation/clone-runs/' + id, body); },
 
   // ── Harvest / yield + IPM applications (migration 0051) ──
   // Same /cultivation prefix, separate server module: a harvest and a spray
@@ -197,11 +291,14 @@ GF.API = {
   // an all-negative swab set — the server rejects violations with 409, so the
   // UI should surface `detail` rather than pre-guessing the rule.
   deconCycles(campaign)          { return this._req('GET',  '/decon/cycles' + (campaign ? '?campaign=' + encodeURIComponent(campaign) : '')); },
-  deconCycle(id)                 { return this._req('GET',  '/decon/cycles/' + id); },
   deconCycleCreate(body)         { return this._req('POST', '/decon/cycles', body); },
   deconStep(cycleId, body)       { return this._req('POST', '/decon/cycles/' + cycleId + '/steps', body); },
   deconRelease(cycleId, body)    { return this._req('POST', '/decon/cycles/' + cycleId + '/release', body || {}); },
-  deconBleachLog(q = {})         { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/bleach-log' + (u ? '?' + u : '')); },
+  // The counterpart to release: a cycle with a positive or inconclusive swab
+  // can never pass, cannot take more steps, and blocks a new cycle for the
+  // room in the same campaign — failing it (with a stated reason) is the only
+  // way forward. Same QA-tier gate as release (review 2026-09-27, FE-03).
+  deconFail(cycleId, body)       { return this._req('POST', '/decon/cycles/' + cycleId + '/fail', body); },
   deconBleachAdd(body)           { return this._req('POST', '/decon/bleach-log', body); },
   deconSwabs(q = {})             { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/swabs' + (u ? '?' + u : '')); },
   deconSwabAdd(body)             { return this._req('POST', '/decon/swabs', body); },
@@ -212,7 +309,6 @@ GF.API = {
   // cleaning recorded after them. Read the flags; do not recompute the interval
   // client-side, or the two copies will disagree about what "overdue" means.
   deconCorridors(campaign)       { return this._req('GET',  '/decon/corridors' + (campaign ? '?campaign=' + encodeURIComponent(campaign) : '')); },
-  deconCorridorCleanings(roomId) { return this._req('GET',  '/decon/corridors/' + roomId + '/cleanings'); },
   deconCorridorClean(body)       { return this._req('POST', '/decon/corridors/cleanings', body); },
   // Two real, migration-backed decon routes have no frontend caller at all
   // (product/feature-completeness gap, not a bug — no UI built here):
@@ -222,6 +318,10 @@ GF.API = {
   // contact plate/sentinel bioassay, gowning. Second module on /decon.
   biosecurity(q = {})            { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/biosecurity' + (u ? '?' + u : '')); },
   biosecurityLog(body)           { return this._req('POST', '/decon/biosecurity', body); },
+  // Resolve a `pending` check (a contact plate read after incubation, a
+  // sentinel bioassay scored later) to its final result. Same fail-needs-
+  // action_taken gate as logging one (review 2026-09-27, FE-10).
+  biosecurityResult(id, body)    { return this._req('PATCH', '/decon/biosecurity/' + id + '/result', body); },
 
   // ── Destruction / waste manifests (migration 0048) ──
   // A manifest climbs draft -> sealed -> witnessed -> disposed and each rung is a
@@ -280,24 +380,38 @@ GF.API = {
   qcReviewCoq(id)          { return this._req('POST', '/qc/coq/' + id + '/review'); },
   qcVoidCoq(id, reason)    { return this._req('POST', '/qc/coq/' + id + '/void', { reason }); },
   qcRenderCoq(id)          { return this._req('POST', '/qc/coq/' + id + '/render'); },
+  // Annex 11 e-signature on a CoQ (signatures.py): re-authenticated
+  // attestation, listed back with its meaning and the signer.
+  qcCoqSign(id, b)         { return this._req('POST', '/qc/coq/' + id + '/sign', b); },
+  qcCoqSignatures(id)      { return this._req('GET', '/qc/coq/' + id + '/signatures'); },
   // QC potency ladders (PP-QC-SPEC-001 / QCSP 001) + batch commercial identities
   qcPotencySpecs(q)        { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/potency-specs' + (u?'?'+u:'')); },
   qcPotencySpec(id)        { return this._req('GET', '/qc/potency-specs/' + id); },
-  qcCreatePotencySpec(b)   { return this._req('POST', '/qc/potency-specs', b); },
-  qcApprovePotencySpec(id) { return this._req('POST', '/qc/potency-specs/' + id + '/approve'); },
-  qcSupersedePotencySpec(id){ return this._req('POST', '/qc/potency-specs/' + id + '/supersede'); },
   qcImportPotencySpecs(b)  { return this._req('POST', '/qc/potency-specs/import', b || {}); },
-  qcPotencyDisposition(q)  { const u = new URLSearchParams(q).toString(); return this._req('GET', '/qc/potency-disposition?' + u); },
   qcSpecDocumentUrl(id, tier) { return '/qc/potency-specs/' + encodeURIComponent(id) + '/document?tier=' + encodeURIComponent(tier); },
+  // The official product catalogue (qc_products) — one page per product with
+  // the window it stores (the ImB v.03 pages, or the fitted specifications of
+  // 2026-09-18). The ladders above stay readable for CoQs issued before it,
+  // but the catalogue is what a batch, a mother and a CoQ now name.
+  qcProducts(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/products' + (u?'?'+u:'')); },
+  qcProduct(id)            { return this._req('GET', '/qc/products/' + id); },
+  qcProductLadderCreate(b) { return this._req('POST', '/qc/products/ladder', b); },
+  qcApproveProduct(id)     { return this._req('POST', '/qc/products/' + id + '/approve'); },
+  qcSupersedeProduct(id)   { return this._req('POST', '/qc/products/' + id + '/supersede'); },
+  qcImportProducts(b)      { return this._req('POST', '/qc/products/import', b || {}); },
+  qcImportFittedProducts(b){ return this._req('POST', '/qc/products/import-fitted', b); },
+  qcProductConformance(q)  { const u = new URLSearchParams(q).toString(); return this._req('GET', '/qc/products/conformance?' + u); },
+  // The A4 page (GET /qc/products/{id}/document, spec_html.py). A plain
+  // navigation carries no bearer header, so callers fetch it with the token
+  // and open a blob URL (qcpotency-view.js qcPotOpenDoc) — never an <a href>.
+  qcProductDocumentUrl(id) { return '/qc/products/' + encodeURIComponent(id) + '/document'; },
   // GET /qc/certificates/{coa_id}/icoa-html?parameter_id=... (the single-
   // parameter internal-CoA HTML view, spec_html.py) is real and migration-
   // backed but has no frontend caller — sibling gap to the one above.
-  qcCommercialIdentities(q){ const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/commercial-identities' + (u?'?'+u:'')); },
-  qcImportCommercial()     { return this._req('POST', '/qc/commercial-identities/import'); },
-  // PUT/DELETE /qc/commercial-identities/{batch_code} (edit/delete a single
-  // commercial identity) is real and migration-backed but has no frontend
-  // caller — only list + bulk-import are wired here. Feature-completeness
-  // gap, not a bug; out of scope for a Low-severity mechanical fix.
+  // The commercial identities (/qc/commercial-identities, list / import /
+  // PUT / DELETE) are API-only: no screen reads them, so no wrapper is kept
+  // (review 2026-09-27, INV-05 / INV-06; docs/FRONTEND-DESIGN-HANDOVER.md
+  // "API-only routes").
   // QC LIMS — certificate register (QCLB 020 §6.13)
   qcRegister(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/register' + (u?'?'+u:'')); },
   qcRegisterGaps(year)     { return this._req('GET', '/qc/register/gaps?year=' + encodeURIComponent(year)); },
@@ -370,6 +484,9 @@ GF.API = {
   studioQuestionnaire(key) { return this._req('GET', '/qms/studio/questionnaires/' + encodeURIComponent(key)); },
   studioStartWorkflow(b)   { return this._req('POST', '/qms/studio/workflows', b); },
   studioWorkflow(id)       { return this._req('GET', '/qms/studio/workflows/' + encodeURIComponent(id)); },
+  studioPresets()          { return this._req('GET', '/qms/studio/presets'); },
+  studioChat(id, body)     { return this._req('POST', '/qms/studio/workflows/' + encodeURIComponent(id) + '/chat', body); },
+  studioRevise(id, body)   { return this._req('POST', '/qms/studio/workflows/' + encodeURIComponent(id) + '/revise', body); },
   studioDocuments()        { return this._req('GET', '/qms/studio/documents'); },
   studioDocument(did)      { return this._req('GET', '/qms/studio/documents/' + encodeURIComponent(did)); },
   studioBuild(body)        { return this._req('POST', '/qms/studio/build', body); },
@@ -378,6 +495,12 @@ GF.API = {
   approvalsPending()       { return this._req('GET', '/approvals/pending'); },
   facilityAddRoom(b)       { return this._req('POST', '/facility/rooms', b); },
   facilityPatchRoom(id,b)  { return this._req('PATCH', '/facility/rooms/' + id, b); },
+  // The as-built layout register (tasks 0068): the building as the architect
+  // drew it, 191 rooms keyed by the code printed on the ground-floor sheet.
+  facilityLayout(q)        { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/facility/layout' + (u?'?'+u:'')); },
+  facilityLayoutRoom(id)   { return this._req('GET', '/facility/layout/' + id); },
+  facilityLayoutPatch(id,b){ return this._req('PATCH', '/facility/layout/' + id, b); },
+  facilityLayoutImport(b)  { return this._req('POST', '/facility/layout/import', b || {}); },
   activity(q)          { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/activity' + (u?'?'+u:'')); },
   deleteUser(id)   { return this._req('DELETE', '/auth/users/' + id); },
   listDeletedUsers() { return this._req('GET', '/auth/users/deleted'); },
@@ -385,13 +508,16 @@ GF.API = {
 
   departments() { return this._req('GET', '/departments'); },
   createDepartment(b) { return this._req('POST', '/departments', b); },
+  // ADMIN edit of a department's names and head (tasks.py DepartmentPatch);
+  // `head_user_id: null` clears the head. The head is what collab.py routes a
+  // handoff to (DECISIONS A-3).
+  departmentPatch(id, b) { return this._req('PATCH', '/departments/' + id, b); },
   weeks()       { return this._req('GET', '/weeks'); },
   tasks(q = {}) {
     const p = new URLSearchParams(q).toString();
     return this._req('GET', '/tasks' + (p ? '?' + p : ''));
   },
   getTask(id)          { return this._req('GET', '/tasks/' + id); },
-  taskTree(q = {})     { const p = new URLSearchParams(q).toString(); return this._req('GET', '/tasks/tree' + (p ? '?' + p : '')); },
   createTask(t)        { return this._req('POST', '/tasks', t); },
   updateTask(id, patch){ return this._req('PATCH', '/tasks/' + id, patch); },
   // TMS T1 — dependency graph (blocker edges) + cross-department handoffs
@@ -400,6 +526,8 @@ GF.API = {
   handoffs(id)                 { return this._req('GET', '/tasks/' + id + '/handoffs'); },
   proposeHandoff(id, toDeptId, note) { return this._req('POST', '/tasks/' + id + '/handoffs', { to_dept_id: toDeptId, note: note || null }); },
   resolveHandoff(handoffId, status)  { return this._req('POST', '/handoffs/' + handoffId + '/resolve', { status }); },
+  // Proposed handoffs the caller may accept or reject (R2-FE-09).
+  pendingHandoffs()                  { return this._req('GET', '/handoffs/pending'); },
   addProgress(id, p)   { return this._req('POST', '/tasks/' + id + '/progress', p); },
   ai(fn, payload)      { return this._req('POST', '/ai/' + fn, payload || {}); },
   bilingual(body)      { return this._req('POST', '/intake/bilingual', body); },
@@ -416,9 +544,15 @@ GF.API = {
   addLink(taskId, body)    { return this._req('POST',   '/tasks/' + taskId + '/links', body); },
   deleteLink(taskId, id)   { return this._req('DELETE', '/tasks/' + taskId + '/links/' + id); },
 
-  audit(q = {}) {
+  // One page of the merged audit trail: { rows, next }. `next` is the opaque
+  // per-chain (created_at, id) keyset the server hands back in X-Next-Cursor
+  // (backend/app/api/audit.py); pass it as `cursor` for the following page.
+  // The bare `before` timestamp the view used to send is lossy at a page
+  // boundary inside one transaction's rows and is legacy only (A-7).
+  async auditPage(q = {}) {
     const p = new URLSearchParams(q).toString();
-    return this._req('GET', '/audit' + (p ? '?' + p : ''));
+    const r = await this._reqFull('GET', '/audit' + (p ? '?' + p : ''));
+    return { rows: r.data, next: r.headers.get('X-Next-Cursor') || null };
   },
   auditTables() { return this._req('GET', '/audit/tables'); },
   auditVerify() { return this._req('GET', '/audit/verify'); },
@@ -441,7 +575,6 @@ GF.API = {
   },
   compileDocument(body)     { return this._req('POST', '/reports/documents/compile', body); },
   previewDocument(body)     { return this._req('POST', '/reports/documents/preview', body); },
-  patchDocument(id, content){ return this._req('PATCH', '/reports/documents/' + id, { content }); },
   patchDocumentSection(id, key, patch) { return this._req('PATCH', '/reports/documents/' + id + '/sections/' + encodeURIComponent(key), patch); },
   lockDocument(id)          { return this._req('POST', '/reports/documents/' + id + '/lock'); },
 

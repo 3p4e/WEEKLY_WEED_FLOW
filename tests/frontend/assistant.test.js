@@ -34,8 +34,11 @@ test('provider() is "none" with no window.claude and no aiBase/aiProvider set', 
 
 test('provider() never returns "gateway", even when aiProvider/aiBase are explicitly set to select it', () => {
   const h = setup({ gf_ai_provider: 'gateway', gf_ai_base: 'https://example.test' });
-  assert.equal(h.GF.state.aiProvider, 'gateway');
-  assert.equal(h.GF.state.aiBase, 'https://example.test');
+  // Stronger than before: the configuration cannot even be expressed any
+  // more — core.js no longer reads gf_ai_provider / gf_ai_base into state
+  // (review 2026-09-27, FE-21 removed the dead fields).
+  assert.equal('aiProvider' in h.GF.state, false);
+  assert.equal('aiBase' in h.GF.state, false);
   // The old code would have returned 'gateway' here — the whole point of the
   // fix is that this configuration can no longer select the dead branch.
   assert.equal(h.GF.assistant.provider(), 'none');

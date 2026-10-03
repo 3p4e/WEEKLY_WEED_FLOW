@@ -1,9 +1,11 @@
 """Offline validation of the tt.* provisioning matrix — pure data, no HTTP.
 
-Pins the invariants docs/TEST-ACCOUNTS.md promises: 7 canonical departments
-(codes exactly matching web/gf/demo.js), ~25 unique tt.* accounts, 1 manager
-+ 2 operators per department, executives/QP department-less, every role a
-valid CREATABLE role (never ADMIN).
+Pins the invariants docs/TEST-ACCOUNTS.md promises: the canonical TOP-LEVEL
+departments (codes exactly matching app/demo_org.py), 1 manager + 2 operators
+per department, executives/QP department-less, every role a valid CREATABLE
+role (never ADMIN). Sub-departments (Cloning and Nursery under Cultivation)
+have no manager role of their own — the cultivation manager runs them — so
+they get no account trio.
 """
 import re
 import sys
@@ -14,24 +16,33 @@ from provision_test_accounts import DEPARTMENTS, DEPT_KEY, MATRIX  # noqa: E402
 
 from app.roles import CREATABLE_ROLES, MANAGER_ROLES  # noqa: E402
 
-CANONICAL = ["cultivation", "production", "qc", "quality_assurance", "logistics", "security", "tooling"]
+CANONICAL = ["cultivation", "irrigation", "production", "qc", "quality_assurance",
+             "logistics", "security", "tooling"]
 
 
-def test_seven_canonical_departments_match_demo_org():
+def test_top_level_departments_match_demo_org():
     assert [d["code"] for d in DEPARTMENTS] == CANONICAL
-    # The live demo seeds these same canonical departments server-side
-    # (app/demo_org.py replaced the old client-side demo.js facility mock).
+    # The live demo seeds these same departments server-side (app/demo_org.py),
+    # plus the sub-departments, which provisioning deliberately skips.
     from app.demo_org import _DEPARTMENTS
-    assert [code for code, _en, _mk in _DEPARTMENTS] == CANONICAL
-    # every department carries both language names
+    top = [code for code, _en, _mk, parent in _DEPARTMENTS if parent is None]
+    assert top == CANONICAL
+    # A sub-department hangs off a TOP-LEVEL parent that precedes it in the
+    # tuple — the seeder resolves parent_id from what it has already inserted.
+    seen = set()
+    for code, en, mk, parent in _DEPARTMENTS:
+        assert en and mk, code
+        if parent is not None:
+            assert parent in seen and parent in CANONICAL, (code, parent)
+        seen.add(code)
+    assert {c for c, _e, _m, p in _DEPARTMENTS if p == "cultivation"} == {"cloning", "nursery"}
     assert all(d["name"] and d["name_mk"] for d in DEPARTMENTS)
-    assert all(en and mk for _c, en, mk in _DEPARTMENTS)
 
 
 def test_matrix_shape():
     usernames = [r["username"] for r in MATRIX]
     assert len(usernames) == len(set(usernames)), "duplicate usernames"
-    assert len(MATRIX) == 4 + 7 * 3  # execs+QP + (mgr+2 ops) per dept
+    assert len(MATRIX) == 4 + 8 * 3  # execs+QP + (mgr+2 ops) per top-level dept
     assert all(u.startswith("tt.") for u in usernames)
     assert all(re.fullmatch(r"[a-z0-9.]{3,64}", u) for u in usernames)
     assert all(r["full_name"].startswith("[TEST] ") for r in MATRIX)

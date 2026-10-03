@@ -25,7 +25,7 @@ const PRE = `
 `;
 
 function load() {
-  return loadGF({ files: ['data.js', 'core.js', 'qcecoa-view.js'], preScript: PRE });
+  return loadGF({ files: ['data.js', 'core.js', 'datepicker.js', 'codefield.js', 'qcecoa-view.js'], preScript: PRE });
 }
 
 const DOC = { id: 'd1', doc_number: 'ECOA-0001', batch_id: 'B1', source_institution: 'Lab X',
@@ -88,4 +88,44 @@ test('the same gates apply on a REVIEWED document, not only EXTRACTED', () => {
   const clean = [{ id: 'e2', raw_label: 'CBD', grade_status: 'graded', parameter_id: 'p1', complies: true }];
   assert.ok(renderDocDetail(h, reviewedDoc, clean, { outcome: 'ACCEPTED' }).includes(promoteBtn(reviewedDoc.id)),
     'REVIEWED + all gates clear still offers Promote');
+});
+
+/* ── QR-01 (review 2026-09-27): the transcription screen sends TEXT; the
+   server reads the number under the laboratory's decimal separator. ──── */
+
+test('a pasted line travels as raw text only — "0,6" is never parseFloat-ed to 0', async () => {
+  const h = load();
+  const w = h.window;
+  renderDocDetail(h, DOC, [], {});
+  w.document.getElementById = (id) => (id === 'qec-extract'
+    ? { value: 'Lead | 0,6 | mg/kg\nTotal THC | 22,61 | % | PASS' } : null);
+  let items = null;
+  w.GF.API.qcSubmitExtractions = async (id, it) => { items = it; return { count: 2, unmapped: 0 }; };
+  w.GF.API.qcCoaDocs = async () => [];
+  w.GF.API.qcCoaDoc = async () => ({ document: DOC, extractions: [] });
+  w.GF.WWF.loadQcEcoa = async () => {};
+  w.GF.toast = () => {};
+  await w.GF.WWF.qcEcoaSubmitExtractions('d1');
+  assert.deepEqual(JSON.parse(JSON.stringify(items)), [
+    { raw_label: 'Lead', raw_value: '0,6', unit: 'mg/kg' },
+    { raw_label: 'Total THC', raw_value: '22,61', unit: '%', lab_verdict: 'PASS' }]);
+});
+
+test('an edited value is sent as the transcribed text; a cleared one clears it', async () => {
+  const h = load();
+  const w = h.window;
+  renderDocDetail(h, DOC, [], {});
+  const fields = { 'qec-ex-val-e1': '22,61', 'qec-ex-unit-e1': '%', 'qec-ex-param-e1': '' };
+  w.document.getElementById = (id) => (id in fields ? { value: fields[id] } : null);
+  const sent = [];
+  w.GF.API.qcPatchExtraction = async (d, e, b) => { sent.push(b); return {}; };
+  w.GF.WWF.loadQcEcoa = async () => {};
+  w.GF.API.qcCoaDoc = async () => ({ document: DOC, extractions: [] });
+  w.GF.toast = () => {};
+  await w.GF.WWF.qcEcoaSaveEx('d1', 'e1');
+  fields['qec-ex-val-e1'] = '';
+  await w.GF.WWF.qcEcoaSaveEx('d1', 'e1');
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [{ raw_value: '22,61', unit: '%' }, { raw_value: '', unit: '%' }]);
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'web', 'gf', 'qcecoa-view.js'), 'utf8');
+  assert.doesNotMatch(src, /parseFloat\(/);
 });

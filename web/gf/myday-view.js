@@ -17,7 +17,7 @@
       .filter(t => t.owner === me || (t.helpers || []).includes(me));
   };
   const isToday = (t) =>
-    (t.days || []).includes(GF.todayDay) || (t.due && t.due === GF.todayISO());
+    (t.days || []).includes(GF.todayDay) || (t.due && t.due === GF.facilityToday());
   // A done task only belongs in the "completed today" group if it genuinely
   // completed today. The old fallback (`completed_date ? … : true`) treated a
   // MISSING completed_date as an automatic match for today, so a task that
@@ -28,7 +28,7 @@
   // completed_date now excludes the task from today's done bucket entirely,
   // the same "no date → not today" convention isToday() above already uses
   // for `t.due`.
-  const doneToday = (t) => t.status === 'done' && t.completed_date === GF.todayISO();
+  const doneToday = (t) => t.status === 'done' && t.completed_date === GF.facilityToday();
 
   const prPill = (t) => (t.pr === 'critical' || t.pr === 'high')
     ? `<span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>` : '';
@@ -43,7 +43,7 @@
         <div class="md-t">${GF.esc(t.title)}</div>
         <div class="md-m">
           <span class="dn" style="color:${d.color}">${GF.esc(GF.depAbbr(t.dept))}</span>
-          ${t.due ? `<span class="md-due${t.due < GF.todayISO() && t.status !== 'done' ? ' overdue' : ''}">${GF.icon('calendar', 'icon')}${GF.esc(t.due)}</span>` : ''}
+          ${t.due ? `<span class="md-due${t.due < GF.facilityToday() && t.status !== 'done' ? ' overdue' : ''}">${GF.icon('calendar', 'icon')}${GF.esc(t.due)}</span>` : ''}
           ${prPill(t)}
           ${GF.progress(t) > 0 ? `<span class="tp-val">${GF.progress(t)}%</span>` : ''}
         </div>
@@ -86,8 +86,17 @@
     const fullName = meP.name || (GF.API.user || {}).full_name || (GF.API.user || {}).username || '';
     const first = GF.esc(String(fullName).trim().split(/\s+/)[0] || '');
     const hello = first ? `${greet}, ${first}` : greet;
-    const dstr = new Date().toLocaleDateString(GF.state.lang === 'mk' ? 'mk-MK' : 'en-US',
-      { weekday: 'long', month: 'long', day: 'numeric' });
+    // The greeting names the FACILITY's day — the reader's browser may be in
+    // another zone, and My Day's "today" tasks are matched on the facility day.
+    let dstr;
+    try {
+      const tz = GF.facilityTZ ? GF.facilityTZ() : '';
+      dstr = new Intl.DateTimeFormat(GF.state.lang === 'mk' ? 'mk-MK' : 'en-US',
+        { ...(tz ? { timeZone: tz } : {}), weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
+    } catch (e) {
+      dstr = new Date().toLocaleDateString(GF.state.lang === 'mk' ? 'mk-MK' : 'en-US',
+        { weekday: 'long', month: 'long', day: 'numeric' });
+    }
     const deck = open.length === 1
       ? AL('1 task on deck', '1 задача на ред')
       : `${open.length} ${AL('tasks on deck', 'задачи на ред')}`;
@@ -112,7 +121,7 @@
     const wk = (GF.calendar.weeks || [])[GF.calendar.todayId];
     let strip = '';
     if (wk && wk.start) {
-      const todayIso = GF.todayISO();
+      const todayIso = GF.facilityToday();
       const cells = GF.DAYS.map((d, i) => {
         const dt = new Date(wk.start); dt.setDate(wk.start.getDate() + i);
         const iso = GF.localDateStr(dt);

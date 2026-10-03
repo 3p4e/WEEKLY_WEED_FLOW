@@ -37,6 +37,7 @@ GF.ICONS = {
   plus:'M10 4v12M4 10h12', mic:'M10 3a2.2 2.2 0 012.2 2.2v4.6a2.2 2.2 0 01-4.4 0V5.2A2.2 2.2 0 0110 3zM5 9.5a5 5 0 0010 0M10 14.5V17M7.5 17h5',
   chevL:'M12 5l-5 5 5 5', chevR:'M8 5l5 5-5 5', chevD:'M5 8l5 5 5-5', chevU:'M5 12l5-5 5 5',
   check:'M4 10.5l4 4 8-9', clock:'M10 5.5V10l3 1.8M10 3a7 7 0 100 14 7 7 0 000-14z',
+  calendar:'M4 5.5h12v11H4zM4 9h12M7.5 3.5v3M12.5 3.5v3',
   user:'M10 10a3 3 0 100-6 3 3 0 000 6zM4.5 17a5.5 5.5 0 0111 0', flag:'M5 3v14M5 3.5h9l-2 3 2 3H5',
   leaf:'M4 16c8 0 12-4 12-12C8 4 4 8 4 16zM4 16c1.5-4 3.5-6 6-7.5', grid:'M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z',
   timeline:'M3 6h9M3 11h13M3 16h6M14 4v4M9 9v4M16 14v4', chat:'M4 5h12v8H9l-3 3v-3H4z',
@@ -74,9 +75,10 @@ GF.icon = (n, cls = 'icon', stroke) => `<svg class="${cls}" viewBox="0 0 20 20"$
 // ── i18n ──
 GF.state = {
   lang: localStorage.getItem('gf_lang') || 'en',
-  user: localStorage.getItem('gf_user') || 'marko',
-  aiBase: localStorage.getItem('gf_ai_base') || '',
-  aiProvider: localStorage.getItem('gf_ai_provider') || 'builtin',
+  // The session user; integrate.js sets it from the login on loadAndRender.
+  // The old 'marko' seed default, and the aiBase / aiProvider fields, were
+  // demo-era state that nothing read any more (review 2026-09-27, FE-21).
+  user: localStorage.getItem('gf_user') || '',
   view: localStorage.getItem('gf_view') || 'mywork',
   selWeek: 0, selDay: 'All', deptFilter: null, tagFilter: null, search: '',
   tasks: [], expanded: new Set(), teleOpen: false,
@@ -99,6 +101,7 @@ GF.ROLES = {
   wh_mgr:  { en: 'Warehouse Manager',      mk: 'Менаџер за магацин' },
   se_mgr:  { en: 'Security Manager',       mk: 'Менаџер за обезбедување' },
   cu_mgr:  { en: 'Cultivation Manager',    mk: 'Менаџер за одгледување' },
+  ir_mgr:  { en: 'Irrigation Manager',     mk: 'Менаџер за наводнување' },
   mu_mgr:  { en: 'Maintenance Manager',    mk: 'Менаџер за одржување' },
   qp:      { en: 'Qualified Person',       mk: 'Квалификувано лице' },
   operator:{ en: 'Operator',               mk: 'Оператор' },
@@ -123,7 +126,7 @@ GF.QC_HOQC = ['ADMIN', 'QC_MGR', 'QP'];
 const _FULL = { create: true, editAny: true, deleteAny: true, status: 'any', team: true };
 GF.PERMS = {
   admin: _FULL, owner: _FULL, ceo: _FULL, coo: _FULL,
-  qa_mgr: _FULL, qc_mgr: _FULL, pr_mgr: _FULL, wh_mgr: _FULL, se_mgr: _FULL, cu_mgr: _FULL, mu_mgr: _FULL, qp: _FULL,
+  qa_mgr: _FULL, qc_mgr: _FULL, pr_mgr: _FULL, wh_mgr: _FULL, se_mgr: _FULL, cu_mgr: _FULL, ir_mgr: _FULL, mu_mgr: _FULL, qp: _FULL,
   operator: { create: true, editAny: false, deleteAny: false, status: 'own', team: false },
 };
 GF.curRole = () => (GF.PEOPLE[GF.state.user] || {}).role || 'operator';
@@ -248,7 +251,19 @@ GF.calendar = { weeks: [], todayId: 0 };
   }
   GF.state.selWeek = GF.calendar.todayId;
 })();
-GF.todayDay = GF.DAYS[(new Date().getDay() + 6) % 7];
+// The facility's day of the week, read live: a tab left open across
+// midnight, or a reader in another zone, gets the facility's answer rather
+// than a value frozen at load in the browser's zone (review 2026-09-27,
+// FE-07). A getter keeps every `GF.todayDay` read site unchanged.
+// GF.facilityToday is defined further down; the getter only runs on read.
+Object.defineProperty(GF, 'todayDay', {
+  configurable: true, enumerable: true,
+  get() {
+    const iso = GF.facilityToday ? GF.facilityToday() : GF.localDateStr(new Date());
+    const d = new Date(iso + 'T00:00:00');
+    return GF.DAYS[((isNaN(d.getTime()) ? new Date() : d).getDay() + 6) % 7];
+  },
+});
 // Format a Date using its LOCAL (browser/facility) calendar day — unlike
 // `d.toISOString()`, which always converts to UTC first: for any positive
 // UTC offset (e.g. Europe/Skopje), converting a local midnight back through
@@ -260,6 +275,132 @@ GF.localDateStr = (d) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 GF.todayISO = () => GF.localDateStr(new Date());
+
+// The FACILITY's today — the only "what day is it" answer this app may use
+// for record data. The browser's local day is the READER's day: a manager
+// checking a batch from another country, or anyone working the nightly
+// window where Europe/Skopje and UTC sit on different dates, gets a
+// different answer than the database does. The backend already treats this
+// as settled (worktime.facility_today, SITE_TODAY_SQL, and a test suite that
+// bans CURRENT_DATE app-wide); the browser simply had no way to ask.
+//
+// The zone arrives on /auth/me (GF.API.user.facility_tz) and is applied with
+// Intl, so a tab left open across midnight keeps answering correctly rather
+// than freezing on the value it was handed at login. Three fallbacks, in
+// order: the zone; the server's own facility_today from that same response;
+// then the browser's local day — which is what the whole app used before
+// this existed, so the worst case is the old behaviour, never an error.
+GF.facilityTZ = () => (GF.API && GF.API.user && GF.API.user.facility_tz) || '';
+// An instant typed as a facility wall-clock day + time ("2026-09-27", "07:30")
+// → ISO-8601 with the facility zone's offset for that day, so the server
+// stores the moment the floor meant, whatever zone the browser is in.
+// null when the zone or the offset cannot be resolved: the caller then omits
+// the field and the server stamps its own "now" (the behaviour before).
+GF.facilityInstant = (day, hhmm) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '') || !/^\d{2}:\d{2}$/.test(hhmm || '')) return null;
+  const tz = GF.facilityTZ();
+  if (!tz) return null;
+  try {
+    const probe = new Date(day + 'T' + hhmm + ':00Z');
+    const name = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' })
+      .formatToParts(probe).find(p => p.type === 'timeZoneName');
+    const m = name && /GMT(?:([+-])(\d{2}):?(\d{2}))?$/.exec(name.value);
+    if (!m) return null;
+    const off = m[1] ? `${m[1]}${m[2]}:${m[3]}` : '+00:00';
+    return `${day}T${hhmm}:00${off}`;
+  } catch (e) { return null; }
+};
+// The facility's wall-clock time now, "HH:MM" (browser clock when no zone).
+GF.facilityTimeNow = () => {
+  const tz = GF.facilityTZ();
+  try {
+    return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false,
+      ...(tz ? { timeZone: tz } : {}) }).format(new Date());
+  } catch (e) { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+};
+GF.facilityToday = () => {
+  const tz = GF.facilityTZ();
+  if (tz) {
+    try {
+      // en-CA renders ISO-8601 (YYYY-MM-DD) — the format the whole app and
+      // every date input already speak.
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date());
+    } catch (e) { /* unknown zone on this engine — fall through */ }
+  }
+  const served = GF.API && GF.API.user && GF.API.user.facility_today;
+  if (served && /^\d{4}-\d{2}-\d{2}$/.test(served)) return served;
+  return GF.todayISO();
+};
+
+// The ONE way to print an instant. The backend serialises timestamptz as ISO
+// 8601 in UTC; printing that string as-is showed every clock 1–2 h early in
+// Skopje (review 2026-09-27, FE-05), worst on the re-entry line. Renders in
+// the facility zone; a stamp without an offset is taken as UTC, not local.
+// `opts.date=false` prints the time only; `opts.seconds=true` adds seconds.
+GF.fmtDateTime = (ts, opts) => {
+  if (ts == null || ts === '') return '';
+  const s = String(ts);
+  const o = opts || {};
+  // A bare calendar day (a report_date, a due date) has no instant: it is
+  // printed as it is, and has no time. Appending 'Z' and formatting it in
+  // the facility zone printed "2026-07-30 02:00" for a date-only certificate
+  // result (review 2026-09-27, R2-FE-16) — fmtDate already took this branch.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return o.date === false ? '' : s;
+  const withZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(s) ? s : s + 'Z';
+  const d = new Date(withZone);
+  if (isNaN(d.getTime())) return s;
+  const tz = GF.facilityTZ();
+  const spec = {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+    ...(o.date === false ? {} : { year: 'numeric', month: '2-digit', day: '2-digit' }),
+    ...(o.seconds ? { second: '2-digit' } : {}),
+  };
+  if (tz) spec.timeZone = tz;
+  try {
+    // en-CA keeps ISO order (YYYY-MM-DD, HH:MM); the comma en-CA inserts
+    // between date and time is dropped so the output reads like the ISO
+    // stamps the app printed before.
+    return new Intl.DateTimeFormat('en-CA', spec).format(d).replace(',', '');
+  } catch (e) {
+    return s.slice(0, 16).replace('T', ' ');
+  }
+};
+GF.fmtTime = (ts) => GF.fmtDateTime(ts, { date: false });
+// The facility's calendar DAY of an instant (YYYY-MM-DD). `iso.slice(0, 10)`
+// on a UTC stamp gives the UTC day, which is the previous day for anything
+// that happened between facility midnight and 02:00 — that is how the inbox
+// grouped a 00:30 item under "Yesterday". Same fallbacks as facilityToday.
+GF.fmtDate = (ts) => {
+  if (ts == null || ts === '') return '';
+  const s = String(ts);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;   // already a bare date
+  const withZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(s) ? s : s + 'Z';
+  const d = new Date(withZone);
+  if (isNaN(d.getTime())) return s.slice(0, 10);
+  const tz = GF.facilityTZ();
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      ...(tz ? { timeZone: tz } : {}), year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(d);
+  } catch (e) {
+    return GF.localDateStr(d);
+  }
+};
+// Whole days from a calendar day to the facility's today — the ONE "days
+// in phase" rule. The Facility and Cultivation boards each had their own
+// (one from Date.now() and rounded, one from the facility day) and showed
+// "1 d" and "0 d" for the same batch after noon (review 2026-09-27, FE-17).
+// Both views should read this. Null for a missing or malformed day.
+GF.daysSince = (day) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(day || ''));
+  if (!m) return null;
+  const t = /^(\d{4})-(\d{2})-(\d{2})$/.exec(GF.facilityToday());
+  if (!t) return null;
+  const a = Date.UTC(+m[1], +m[2] - 1, +m[3]), b = Date.UTC(+t[1], +t[2] - 1, +t[3]);
+  return Math.round((b - a) / 86400000);
+};
 
 // ── Storage ──
 // integrate.js (loaded last) overrides both methods before this is ever
@@ -523,7 +664,6 @@ GF.setView = (v) => {
   try { localStorage.setItem('gf_view', v); } catch (e) {}
   if (GF.render && GF.render.all) GF.render.all();
 };
-GF.setUser = (u) => { GF.state.user = u; localStorage.setItem('gf_user', u); GF.render.all(); };
 GF.selectWeek = (id) => { GF.state.selWeek = Math.max(0, Math.min(GF.calendar.weeks.length - 1, id)); GF.render.all(); };
 GF.selectDay = (d) => { GF.state.selDay = d; GF.render.panels(); GF.render.dayPills(); };
 GF.filterDept = (id) => { GF.state.deptFilter = GF.state.deptFilter === id ? null : id; GF.render.all(); };

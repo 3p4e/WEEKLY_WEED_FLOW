@@ -120,7 +120,7 @@ GF.WWF.xrStatusChips = (status, opts) => {
   const chip = (label, s, deptId, updated) => {
     const c = XR_STATUS_STYLE[s] || XR_STATUS_STYLE.missing;
     const click = compact ? '' : ` onclick="GF.WWF.xrToggle('${GF.esc(deptId)}')" style="cursor:pointer"`;
-    return `<span class="xr-chip"${click} title="${GF.esc(label)} — ${xrStatusLbl(s)}${updated ? ' · ' + GF.esc(updated.slice(0, 16).replace('T', ' ')) : ''}">
+    return `<span class="xr-chip"${click} title="${GF.esc(label)} — ${xrStatusLbl(s)}${updated ? ' · ' + GF.esc(GF.fmtDateTime(updated)) : ''}">
       <span class="xr-chip-in" style="background:${c.bg};color:${c.fg};border:1px solid ${c.bd}">
         <span class="dot" style="background:currentColor"></span>${GF.esc(label)}</span></span>`;
   };
@@ -231,7 +231,7 @@ const xrSection = (label, deptId, statusEntry) => {
     ${GF.icon(open ? 'chevD' : 'chevR', 'icon')}
     <b>${GF.esc(label)}</b>
     <span class="xr-chip-in" style="background:${c0.bg};color:${c0.fg};border:1px solid ${c0.bd}">${xrStatusLbl(s)}</span>
-    ${statusEntry && statusEntry.updated_at ? `<span class="sub">${GF.esc(statusEntry.updated_at.slice(0, 16).replace('T', ' '))}</span>` : ''}
+    ${statusEntry && statusEntry.updated_at ? `<span class="sub">${GF.esc(GF.fmtDateTime(statusEntry.updated_at))}</span>` : ''}
     <div class="spacer"></div>
   </div>`;
   let body = '';
@@ -286,9 +286,9 @@ GF.views.execreport = function () {
           ${st.status ? ' · ' + GF.esc(st.status.week_start) : ''}</div></div>
       <div class="spacer"></div>
       ${kindBtn('report', GF.t('report'))}${kindBtn('plan', GF.t('plan'))}
-      <input type="date" value="${GF.esc(st.refDate)}" onchange="GF.WWF.xrSetRef(this.value)"
-        title="${AL('Pick any date — its week is shown', 'Изберете датум — се прикажува неговата недела')}"
-        style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--ink)">
+      <span class="xr-datefield" title="${AL('Pick any date — its week is shown', 'Изберете датум — се прикажува неговата недела')}"
+        >${GF.dateField('xr-ref', { value: st.refDate, clearable: false,
+           onPick: (v) => { if (v) GF.WWF.xrSetRef(v); } })}</span>
       <button class="btn btn-sm" onclick="GF.WWF.xrLoad(true)">${GF.icon('forward', 'icon')}${AL('Refresh', 'Освежи')}</button>
     </div>`;
 

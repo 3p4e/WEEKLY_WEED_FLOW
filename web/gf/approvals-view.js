@@ -13,7 +13,27 @@
    Manager rail group; guard = every role above base USER. */
 
 (function () {
-  GF.WWF._apv = { data: null, docs: null, coqs: null, loading: false, error: null, qTab: 'pending' };
+  GF.WWF._apv = { data: null, docs: null, coqs: null, handoffs: [], loading: false, error: null, qTab: 'pending' };
+
+  // Cross-department handoffs waiting on THIS user. The receiving
+  // department's manager is the person a proposal is addressed to, and the
+  // task itself still sits in the source department — so it is on no board
+  // of theirs (review 2026-09-27, FE-06 / BC-04). GET /handoffs/pending lists
+  // the proposals the server lets this caller accept or reject, read from the
+  // handoffs themselves: the list used to be rebuilt from `handoff`
+  // notifications, so a proposal vanished once its notification was marked
+  // Done (review 2026-09-27b, R2-FE-09). handoffRights still decides which
+  // buttons render, from the same rule the server applies.
+  const loadHandoffs = async () => {
+    if (!GF.API.pendingHandoffs || !GF.WWF.handoffRights) return [];
+    const rows = (await GF.API.pendingHandoffs()) || [];
+    const out = [];
+    rows.forEach(h => {
+      const r = GF.WWF.handoffRights(h);
+      if (r.accept || r.reject) out.push({ ...h, title: h.task_title || '', rights: r });
+    });
+    return out;
+  };
 
   GF.WWF.loadApprovals = async () => {
     const st = GF.WWF._apv;
@@ -25,7 +45,7 @@
     // already applied — and unlike the polled views, nothing here self-corrects.
     const seq = (st.lseq = (st.lseq || 0) + 1);
     try {
-      const [pending, docs, coqs] = await Promise.all([
+      const [pending, docs, coqs, handoffs] = await Promise.all([
         GF.API.approvalsPending(),
         GF.API.documentStatus ? GF.API.documentStatus({ kind: 'report' }).catch(() => null) : null,
         // QC review/approve/release folds into the unified queue when the LIMS
@@ -33,9 +53,10 @@
         // VOIDED→sent back). Absent / role-forbidden → null, and those rows just
         // don't render — never fabricated.
         GF.API.qcCoqs ? GF.API.qcCoqs().catch(() => null) : null,
+        loadHandoffs().catch(() => []),
       ]);
       if (seq !== st.lseq) return;   // superseded by a newer load — its state already reflects reality
-      st.data = pending; st.docs = docs; st.coqs = coqs;
+      st.data = pending; st.docs = docs; st.coqs = coqs; st.handoffs = handoffs || [];
     } catch (e) {
       if (seq !== st.lseq) return;
       st.error = e.message;
@@ -191,13 +212,27 @@
     const coqUnwired = st.coqs == null;
     const qTabBtn = (key, en, mk) =>
       `<button type="button" class="mwq-tab${qtab === key ? ' on' : ''}" onclick="GF.WWF.apvTab('${key}')">${AL(en, mk)}<span class="mwq-c">${qc[key]}</span></button>`;
+    const handoffs = st.handoffs || [];
+    const dname = (id) => GF.WWF._deptName ? GF.WWF._deptName(id) : (id || '—');
+    const handoffRow = (h) => `
+        <div class="apv-row" data-handoff="${GF.esc(h.id)}">
+          <span class="fs-dot" style="background:var(--blue)"></span>
+          <div class="apv-b"><div class="apv-t">${GF.esc(h.title || AL('Task', 'Задача'))}</div>
+            <div class="apv-sub">${GF.esc(dname(h.from_dept_id))} → ${GF.esc(dname(h.to_dept_id))}${h.note ? ' — ' + GF.esc(h.note) : ''}
+              · ${AL('proposed by', 'предложено од')} ${GF.esc(person(h.requested_by))}${h.created_at ? ' · ' + GF.esc(ago(h.created_at)) : ''}</div></div>
+          ${h.rights && h.rights.accept ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();GF.WWF.apvHandoff('${GF.esc(h.id)}','accepted')">✓ ${AL('Accept', 'Прифати')}</button>` : ''}
+          ${h.rights && h.rights.reject ? `<button class="btn btn-sm" onclick="event.stopPropagation();GF.WWF.apvHandoff('${GF.esc(h.id)}','rejected')">${AL('Reject', 'Одбиј')}</button>` : ''}
+        </div>`;
     return head + `
       <div class="dash-kpis">
         ${kpi(mine.length, AL('Yours to acknowledge', 'Ваши за потврда'), mine.length ? 'var(--orange)' : 'var(--green)')}
+        ${kpi(handoffs.length, AL('Handoffs to decide', 'Префрлања за одлука'), handoffs.length ? 'var(--blue)' : 'var(--green)')}
         ${kpi(team.length, AL('Team pending', 'Тим во исчекување'), team.length ? 'var(--amber)' : 'var(--green)')}
         ${kpi(drafts.length, AL('Drafts awaiting lock', 'Нацрти за заклучување'), drafts.length ? 'var(--blue)' : 'var(--green)')}
         ${kpi(stuck.length, GF.t('stuck'), stuck.length ? 'var(--red)' : 'var(--green)')}
       </div>
+      ${sec(AL('Handoffs to your department', 'Префрлања до вашиот оддел'), handoffs.length,
+            handoffs.map(handoffRow).join('') || empty())}
       <div class="mwq panel">
         <div class="mwq-head">
           <span class="mwq-ttl">${AL('Sign-off queue', 'Редица за потпис')}</span>
@@ -226,7 +261,7 @@
         <div class="apv-row" onclick="GF.setView('report')">
           <span class="fs-dot" style="background:var(--amber)"></span>
           <div class="apv-b"><div class="apv-t">${GF.esc(GF.state.lang === 'mk' && d.name_mk ? d.name_mk : (d.name || AL('Org-wide', 'Целата организација')))}</div>
-            <div class="apv-sub">${AL('draft — awaiting lock', 'нацрт — чека заклучување')}${d.updated_at ? ' · ' + GF.esc(d.updated_at.slice(0, 16).replace('T', ' ')) : ''}</div></div>
+            <div class="apv-sub">${AL('draft — awaiting lock', 'нацрт — чека заклучување')}${d.updated_at ? ' · ' + GF.esc(GF.fmtDateTime(d.updated_at)) : ''}</div></div>
         </div>`).join('') || empty())}
       ${/* t.id below: same GF.esc()-in-onclick pattern reviewed above ackRow() —
            server-generated task UUID, judged safe for the same reason. */''}
@@ -238,12 +273,23 @@
         </div>`).join('') || empty())}`;
   };
 
+  // Accept / reject from the handoffs list. task-extras.js's resolveHandoff
+  // (when loaded) also re-homes the task locally and refreshes any open card;
+  // the approvals list is reloaded either way so the row disappears.
+  GF.WWF.apvHandoff = async (handoffId, status) => {
+    try {
+      if (GF.WWF.resolveHandoff) await GF.WWF.resolveHandoff(handoffId, status);
+      else { await GF.API.resolveHandoff(handoffId, status); GF.toast(AL('Handoff updated ✓', 'Префрлањето е ажурирано ✓'), 'success'); }
+    } catch (e) { GF.toast(AL('Resolve failed: ', 'Неуспешно решавање: ') + e.message, 'error'); }
+    GF.WWF.loadApprovals();
+  };
+
   GF.WWF._registerFullPageView({
     key: 'approvals', icon: 'check',
     label: () => AL('Approvals', 'Одобрувања'),
     insertBefore: 'coord',   // Manager rail group (mockup nav.js)
     guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
-    badge: () => { const d = GF.WWF._apv.data; return !!(d && (d.mine || []).length); },
+    badge: () => { const st = GF.WWF._apv; const d = st.data; return !!((d && (d.mine || []).length) || (st.handoffs || []).length); },
   });
 
   // Prefetch once at boot so the nav badge above can light up for a user with

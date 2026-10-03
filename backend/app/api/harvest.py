@@ -11,21 +11,28 @@ cultivation.py) because a harvest and a spray record ARE cultivation records —
 they simply live in their own module, since together they carry one interlocking
 control that is easier to get wrong when split across files.
 
-Access model, same shape as cultivation.py and waste.py:
-  read     — every role above base USER (ELEVATED_ROLES);
-  record   — the dry weights, closing the lot, and IPM applications: cultivation
-             crew (CU_MGR) + executives + ADMIN;
-  the cut  — the same set PLUS QA authority (QA_MGR), for the reason below;
-  override — releasing a harvest that a pre-harvest interval blocks: QA authority
-             (QA_MGR) + executives + ADMIN, and never the recorder acting alone.
+Access model (owner's model of where the work changes hands, 2026-09-05):
+  read      — every role above base USER (ELEVATED_ROLES);
+  IPM       — applications are a cultivation-floor record: cultivation crew
+              (CU_MGR) + executives + ADMIN (_RECORDERS);
+  the cut   — cultivation records it, then hands over: _RECORDERS PLUS QA
+              authority (QA_MGR), for the reason below (_CUTTERS);
+  after it  — the dry weights and closing the lot belong to PRODUCTION
+              (PR_MGR) + executives + ADMIN (_POST_HARVEST). The cut is the
+              handoff: cultivation runs the plant from seed, import or clone up
+              to and including the cut; production takes the lot from the dry
+              room onward. Before this, cultivation held both sides and
+              PR_MGR appeared in no gate anywhere in the codebase;
+  override  — releasing a harvest that a pre-harvest interval blocks: QA
+              authority (QA_MGR) + executives + ADMIN, never the recorder alone.
 
 WHY QA CAN RECORD A CUT BUT NOT A DRY WEIGHT. The PHI override is expressed ON
 the harvest row (that is what makes it evidence rather than a note), so whoever
 releases the block has to be the one who writes the record carrying the release —
 otherwise the recorder would be signing someone else's decision. That gives
 QA_MGR exactly one extra write: creating a harvest. Recording the yield and
-closing the lot stay with the cultivation crew, so the widened surface is the
-minimum the control needs and not a general QA write into cultivation.
+closing the lot are production's, so the widened surface is the minimum the
+control needs and not a general QA write into the floor's records.
 
 THE FIVE GATES
 
@@ -39,7 +46,10 @@ THE FIVE GATES
      recorded on the harvest row (migration 0051's `harvests_phi_override_check`
      makes the three override columns arrive together or not at all). A recorder
      cannot wave away their own block — if they could, the gate would be
-     decoration.
+     decoration. Nor can they date their way past it: `harvested_on` may not lie
+     after the site's today (422), and cultivation.py refuses a room move dated
+     before the batch's latest phase event, so the room this gate resolves on
+     the application date cannot be rewritten afterwards.
 
   2. HEADCOUNT. Plants harvested plus plants declared destroyed may not exceed
      the batch's plant count, summed across EVERY harvest and EVERY waste
@@ -88,11 +98,11 @@ from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.config import settings
 from app.db import rls
 from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
+from app.worktime import SITE_TODAY_SQL, SITE_TZ, site_today
 
 router = APIRouter(prefix="/cultivation", tags=["cultivation"])
 
@@ -104,6 +114,10 @@ _PHI_OVERRIDERS = (ADMIN, *EXECUTIVE_ROLES, "QA_MGR")
 # being created (see the module header). Ordering is irrelevant to the guard but
 # dict.fromkeys keeps the tuple stable and duplicate-free as either set changes.
 _CUTTERS = tuple(dict.fromkeys((*_RECORDERS, *_PHI_OVERRIDERS)))
+# From the cut onward the lot is production's: the dry weights and the close.
+# Deliberately NOT a superset of _RECORDERS — the cultivation manager who cut
+# the plant does not also dry and close it; that is the handoff.
+_POST_HARVEST = (ADMIN, *EXECUTIVE_ROLES, "PR_MGR")
 
 # Must stay in step with the CHECK constraints in migration 0051.
 _IPM_CATEGORIES = ("biological", "botanical", "chemical", "mechanical", "other")
@@ -121,29 +135,12 @@ _TERMINAL_PHASES = ("harvested", "destroyed")
 _LOSS_PLAUSIBLE_MIN_PCT = 60.0
 _LOSS_PLAUSIBLE_MAX_PCT = 92.0
 
-# The zone a calendar-day interval is counted in. A pre-harvest interval is N
-# CALENDAR DAYS AT THE SITE, so the application timestamp is rendered in the
-# facility zone explicitly rather than left to whatever TimeZone the reading
-# session happens to carry. Leaving it to the session is precisely the bug
-# migration 0050 was written to fix in the audit chain.
-def _site_tz() -> str:
-    return settings.snapshot_tz or "UTC"
-
-
-async def _site_today(c) -> date:
-    """Today's date AT THE SITE, resolved by Postgres.
-
-    Not `date.today()`: that renders under the *container's* zone (UTC), while
-    every PHI comparison in this module renders `applied_at` under the site zone.
-    Mixing the two means that for a couple of hours each evening "today" and the
-    interval it is compared against disagree by a day — which is a gate that
-    opens early, i.e. wrong in the permissive direction.
-
-    Resolved in SQL rather than with `zoneinfo` so the zone database doing the
-    conversion is the SAME one doing it inside `_PHI_BLOCK_SQL`. Two tzdata
-    copies that could drift apart is exactly the class of bug migration 0050
-    exists because of."""
-    return await c.fetchval("SELECT (now() AT TIME ZONE $1)::date", _site_tz())
+# The zone a calendar-day interval is counted in is worktime.SITE_TZ, bound as
+# a parameter. A pre-harvest interval is N CALENDAR DAYS AT THE SITE, so the
+# application timestamp is rendered in the facility zone explicitly rather than
+# left to whatever TimeZone the reading session happens to carry. Leaving it to
+# the session is precisely the bug migration 0050 was written to fix in the
+# audit chain. "Today" is worktime.site_today(c), resolved by the same tzdata.
 
 
 class IpmIn(BaseModel):
@@ -313,7 +310,7 @@ async def list_ipm(user: dict = Depends(require_role(*ELEVATED_ROLES)),
             " WHERE ($1::uuid IS NULL OR a.batch_id=$1)"
             "   AND ($2::uuid IS NULL OR a.room_id=$2)"
             " ORDER BY a.applied_at DESC LIMIT $4",
-            batch_id, room_id, _site_tz(), limit)
+            batch_id, room_id, SITE_TZ, limit)
     now = datetime.now(timezone.utc)
     return {"applications": [{
         "id": str(r["id"]),
@@ -408,7 +405,7 @@ ORDER BY ((a.applied_at AT TIME ZONE $3)::date + a.phi_days) DESC
 
 
 async def _phi_blocks(c, batch, on: date):
-    return await c.fetch(_PHI_BLOCK_SQL, batch["id"], batch["room_id"], _site_tz(), on)
+    return await c.fetch(_PHI_BLOCK_SQL, batch["id"], batch["room_id"], SITE_TZ, on)
 
 
 def _block_out(r) -> dict:
@@ -436,7 +433,7 @@ async def harvest_clearance(batch_id: str,
     this endpoint is the explanation, never the gate."""
     async with rls(user) as c:
         b = await _batch_or_422(c, batch_id)
-        when = on or await _site_today(c)
+        when = on or await site_today(c)
         blocks = await _phi_blocks(c, b, when)
         # Re-entry is a separate control with a separate clock (hours, not days)
         # and it restricts PEOPLE rather than product. It is reported alongside
@@ -451,7 +448,23 @@ async def harvest_clearance(batch_id: str,
             "   AND (a.applied_at + make_interval(hours => a.rei_hours)) > now()"
             " ORDER BY (a.applied_at + make_interval(hours => a.rei_hours)) DESC",
             b["id"], b["room_id"])
+    # The trichome record the owner's rule makes the real decider of a cut
+    # (0066). Reported beside the interval blocks and NEVER counted into
+    # `clear`: a pre-harvest interval is a control, a maturation reading is an
+    # observation, and conflating them would either invent a gate nobody asked
+    # for or quietly weaken one that exists.
+    async with rls(user) as c:
+        # The latest check as of the site's today: a check dated ahead (rows
+        # that predate the bound trichome.py now enforces) is not "latest".
+        tc = await c.fetchrow(
+            "SELECT checked_on, verdict, pct_amber, instrument FROM trichome_checks"  # nosec B608
+            f" WHERE batch_id=$1 AND checked_on <= {SITE_TODAY_SQL}"
+            " ORDER BY checked_on DESC, created_at DESC LIMIT 1", b["id"])
     return {
+        "latest_trichome": None if tc is None else {
+            "checked_on": tc["checked_on"].isoformat(), "verdict": tc["verdict"],
+            "pct_amber": float(tc["pct_amber"]) if tc["pct_amber"] is not None else None,
+            "instrument": tc["instrument"]},
         "batch_id": str(b["id"]), "batch_code": b["code"],
         "cultivar_code": b["cultivar_code"], "room_name": b["room_name"],
         "phase": b["phase"], "on": when.isoformat(),
@@ -552,7 +565,21 @@ async def create_harvest(body: HarvestIn, user: dict = Depends(require_role(*_CU
         elif b["room_id"] is not None:
             room_id = str(b["room_id"])
 
-        when = body.harvested_on or await _site_today(c)
+        # THE HARVEST DATE IS BOUNDED BY THE SITE'S TODAY. Gate 1 below is
+        # evaluated ON the harvest date, and the recorder supplies that date —
+        # so a future date was a way past the gate: post the "clears on" date
+        # while cutting today, and the block list is empty with no QA release
+        # (review CS-01). A cut cannot be recorded before it happened, so the
+        # date is refused rather than clamped. A backdated cut is still
+        # evaluated on its own date, which is the stricter reading: the plants
+        # came off on that day, and the interval had or had not elapsed then.
+        today = await site_today(c)
+        if body.harvested_on is not None and body.harvested_on > today:
+            raise HTTPException(
+                422, f"harvested_on {body.harvested_on.isoformat()} is after today"
+                     f" ({today.isoformat()}) — a cut is recorded when it happens, not"
+                     " dated ahead of a pre-harvest interval")
+        when = body.harvested_on or today
 
         # Gate 2 — the headcount invariant, across BOTH registers. Either one
         # alone can be satisfied while the two together are impossible.
@@ -643,7 +670,7 @@ async def create_harvest(body: HarvestIn, user: dict = Depends(require_role(*_CU
 
 @router.post("/harvests/{harvest_id}/dry")
 async def record_dry(harvest_id: str, body: DryIn,
-                     user: dict = Depends(require_role(*_RECORDERS))):
+                     user: dict = Depends(require_role(*_POST_HARVEST))):
     """Record what came out of the dry room. Gate 3 lives here.
 
     Re-recordable while the lot is open, because correcting a mis-keyed weight
@@ -667,13 +694,13 @@ async def record_dry(harvest_id: str, body: DryIn,
         row = await c.fetchrow(
             # Site-zone date, not CURRENT_DATE: CURRENT_DATE renders under the
             # session's TimeZone, so the same lot dried at 01:00 local would be
-            # dated the previous day. Same reasoning as _site_today().
+            # dated the previous day. Same reasoning as worktime.site_today().
             "UPDATE harvests SET status='dried',"
             " dried_on=COALESCE($1::date, (now() AT TIME ZONE $2)::date),"
             " dry_flower_g=$3, dry_trim_g=$4, dry_waste_g=$5,"
             " note=COALESCE($6, note), updated_by=$7, updated_at=now()"
             " WHERE id=$8 RETURNING *",
-            body.dried_on, _site_tz(), body.dry_flower_g, body.dry_trim_g,
+            body.dried_on, SITE_TZ, body.dry_flower_g, body.dry_trim_g,
             body.dry_waste_g, body.note, user["id"], harvest_id)
         loss = _loss_pct(wet, total)
         await safe_emit(c, user, verb="harvest_dried", object_type="harvest",
@@ -687,7 +714,7 @@ async def record_dry(harvest_id: str, body: DryIn,
 
 @router.post("/harvests/{harvest_id}/close")
 async def close_harvest(harvest_id: str, body: CloseIn,
-                        user: dict = Depends(require_role(*_RECORDERS))):
+                        user: dict = Depends(require_role(*_POST_HARVEST))):
     """Gate 4: a lot cannot be closed before its yield is recorded. A closed
     record with no yield in it looks finished, which is worse than an open one."""
     async with rls(user) as c:

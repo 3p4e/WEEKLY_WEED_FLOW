@@ -382,8 +382,13 @@
           <b class="mono">${GF.esc(st.parent.sample_id)}</b>
           <button class="btn btn-sm" onclick="GF.WWF.qcSampleClearParent()">✕</button></div>` : ''}
         <div class="qcs-form">
-          <input id="qsm-batch" placeholder="${AL('Batch id', 'Серија')}" value="${dv('batch', st.parent && st.parent.batch_id)}"
-            oninput="GF.WWF.qcSampleDraft('batch', this.value);GF.WWF.qcSampleParentCheck(this)">
+          ${GF.batchCodeField('qsm-batch', {
+            // The strain is the batch number's constant head (INS-12); the
+            // chooser fills in as soon as the cultivar list is known.
+            cultivars: GF.batchCodeCultivars(() => { if (GF.state.view === 'qcsample') GF.render.all(); }),
+            value: dr.batch != null ? dr.batch : ((st.parent && st.parent.batch_id) || ''),
+            placeholder: AL('Batch id', 'Серија'), selPlaceholder: AL('strain…', 'сорта…'), selTitle: AL('Strain', 'Сорта'),
+            oninput: "GF.WWF.qcSampleDraft('batch', this.value);GF.WWF.qcSampleParentCheck(this)" })}
           <input id="qsm-mat" placeholder="${AL('Material code', 'Код на материјал')}" value="${dv('mat', st.parent && st.parent.material_code)}"
             oninput="GF.WWF.qcSampleDraft('mat', this.value);GF.WWF.qcSampleParentCheck(this)">
           <input id="qsm-type" placeholder="${AL('Type', 'Тип')}" value="${dv('type')}" oninput="GF.WWF.qcSampleDraft('type', this.value)">
@@ -391,7 +396,9 @@
           <input id="qsm-qty" type="number" min="0" step="any" placeholder="${AL('Qty', 'Кол.')}" style="width:72px" value="${dv('qty')}" oninput="GF.WWF.qcSampleDraft('qty', this.value)">
           <input id="qsm-unit" placeholder="${AL('unit', 'ед')}" style="width:56px" value="${dv('unit')}" oninput="GF.WWF.qcSampleDraft('unit', this.value)">
           <select id="qsm-kind" onchange="GF.WWF.qcSampleDraft('kind', this.value)"><option value="">${AL('sample type…', 'тип на мостра…')}</option>${Object.keys(KIND).map(k => `<option value="${k}" ${dr.kind === k ? 'selected' : ''}>${k} · ${GF.esc(kindLabel(k))}</option>`).join('')}</select>
-          <input id="qsm-retexp" type="date" title="${AL('Retention expiry', 'Истек на резерва')}" value="${dv('retexp')}" oninput="GF.WWF.qcSampleDraft('retexp', this.value)">
+          ${GF.dateField('qsm-retexp', { value: dv('retexp'),
+            placeholder: AL('Retention expiry', 'Истек на резерва'),
+            onPick: (v) => GF.WWF.qcSampleDraft('retexp', v) })}
           ${GF.selectField('qsm-plan', { value: '', title: AL('Sampling plan', 'План за земање мостри'),
             searchable: true, placeholder: AL('No plan', 'Без план'), options: planOptions })}
           <input id="qsm-notes" placeholder="${AL('Notes (optional)', 'Белешки (опц.)')}" value="${dv('notes')}" oninput="GF.WWF.qcSampleDraft('notes', this.value)">

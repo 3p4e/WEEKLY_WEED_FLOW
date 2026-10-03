@@ -7,9 +7,14 @@ docs/CULTIVATION-DESIGN-2026-07.md §5b.
 
 Access model:
   read      — every role above USER (ELEVATED_ROLES);
-  cleaning  — record a step or a bleach-bucket reading: cultivation crew
-              (CU_MGR) + executives + ADMIN, the same writers as facility/
-              cultivation, since this is who is physically doing the work;
+  cleaning  — record a step or a bleach-bucket reading: the crew physically
+              doing the work — cultivation (CU_MGR) for its rooms, and
+              production (PR_MGR) for the post-harvest rooms it runs (`dry`,
+              the room kind DEPARTMENT-MODEL-2026-09 gives production; a
+              production manager is refused on any other kind) — plus
+              executives + ADMIN. Production was missing (review 2026-09-27,
+              BC-12): the dry room's decontamination needed the cultivation
+              manager's signature;
   swabs     — recording a swab and its result is a QA function per the plan
               ("QA ... takes swabs"): QA_MGR + executives + ADMIN;
   release   — "A room is released by the QA Manager, in writing ... Nobody
@@ -29,9 +34,20 @@ THE TWO GATES THE PLAN INSISTS ON, ENFORCED HERE, NOT LEFT TO DISCIPLINE:
   2. Release requires every step signed AND every swab for the room negative.
      A pending or positive swab blocks it outright — "no room is released on
      a pending result."
+
+EVERY WRITE THAT DEPENDS ON THE CYCLE'S STATE LOCKS THE CYCLE ROW. Release,
+fail, a step, a swab and a swab result are all check-then-act over several
+statements; under READ COMMITTED a release racing a new pending swab (or a
+swab re-patched to positive) released a room with a non-negative swab on
+file — the exact case gate 2 exists for — and release racing fail let both
+succeed with the last writer's status winning. `_cycle_or_404(lock=True)`
+takes `SELECT … FOR UPDATE OF dc`, the swab paths lock their parent cycle,
+and each terminal UPDATE carries `AND status=<expected>` and answers 409 on
+zero rows (review 2026-09-27, BC-06).
 """
 from datetime import datetime, timezone
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -39,11 +55,26 @@ from app.db import rls
 from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
+from app.worktime import SITE_TODAY_SQL
 
 router = APIRouter(prefix="/decon", tags=["decon"])
 
-_CLEAN_WRITERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR")
+_CLEAN_WRITERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR", "PR_MGR")
 _QA_WRITERS = (ADMIN, *EXECUTIVE_ROLES, "QA_MGR")
+# The room kinds a production manager runs (DEPARTMENT-MODEL-2026-09, "Rooms":
+# PR_MGR → `dry`). Cultivation and the org-wide roles are not kind-restricted
+# here — they were not before, and this change adds production, it does not
+# fence the crews that already had the record.
+_PRODUCTION_ROOM_KINDS = ("dry",)
+
+
+def assert_room_authority(user: dict, room_kind: str | None) -> None:
+    """A production manager records decontamination and biosecurity only for
+    the rooms production runs. Shared with biosecurity.py."""
+    if user["role"] == "PR_MGR" and room_kind not in _PRODUCTION_ROOM_KINDS:
+        raise HTTPException(
+            403, "the production manager records only post-harvest rooms"
+                 f" ({', '.join(_PRODUCTION_ROOM_KINDS)})")
 
 # Order matters — this list IS the sequence the plan specifies (§12).
 _STEPS = ("dry_clean", "detergent_wash", "rinse1_whitecloth", "bleach", "rinse2")
@@ -121,22 +152,40 @@ class ToolLogIn(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
-async def _room_or_422(c, room_id: str):
+async def _room_or_422(c, room_id: str, user: dict | None = None):
+    """The active room, or 422. With `user`, also the writer's room authority
+    (a production manager and a non-dry room is a 403)."""
     uuid_or_422(room_id, "Unknown or inactive room")
-    room = await c.fetchrow("SELECT id, name FROM rooms WHERE id=$1 AND is_active", room_id)
+    room = await c.fetchrow("SELECT id, name, kind FROM rooms WHERE id=$1 AND is_active", room_id)
     if room is None:
         raise HTTPException(422, "Unknown or inactive room")
+    if user is not None:
+        assert_room_authority(user, room["kind"])
     return room
 
 
-async def _cycle_or_404(c, cycle_id: str):
+async def _cycle_or_404(c, cycle_id: str, *, lock: bool = False):
+    """The cycle with its room. `lock=True` takes the cycle row FOR UPDATE (of
+    the cycle only, not the joined room) so the status read here is the one
+    the caller's write acts on — see the module docstring."""
     uuid_or_404(cycle_id, "Cycle not found")
     row = await c.fetchrow(
-        "SELECT dc.*, r.name AS room_name FROM decon_room_cycles dc"
-        " JOIN rooms r ON r.id = dc.room_id WHERE dc.id=$1", cycle_id)
+        "SELECT dc.*, r.name AS room_name, r.kind AS room_kind FROM decon_room_cycles dc"
+        " JOIN rooms r ON r.id = dc.room_id WHERE dc.id=$1"
+        + (" FOR UPDATE OF dc" if lock else ""), cycle_id)
     if row is None:
         raise HTTPException(404, "Cycle not found")
     return row
+
+
+def _same_room_or_422(cycle, room_id: str) -> None:
+    """A child record (swab, bleach reading, tool check) names a room AND a
+    cycle; the cycle must be that room's. A swab posted with room A and room
+    B's cycle id fell out of BOTH rooms' release gates (_swab_summary filters
+    on room and cycle), so a positive result could be orphaned (review
+    2026-09-27, BC-25)."""
+    if str(cycle["room_id"]) != str(room_id):
+        raise HTTPException(422, "cycle_id belongs to a different room than room_id")
 
 
 def _cycle_out(row, latest_by_step: dict, swab_summary: dict) -> dict:
@@ -196,11 +245,11 @@ async def list_cycles(user: dict = Depends(require_role(*ELEVATED_ROLES)),
 @router.post("/cycles", status_code=201)
 async def create_cycle(body: CycleIn, user: dict = Depends(require_role(*_CLEAN_WRITERS))):
     async with rls(user) as c:
-        room = await _room_or_422(c, body.room_id)
-        # Pre-check rather than relying on the unique index's error: an
-        # asyncpg UniqueViolationError would surface as a raw 500, not a clean
-        # 409, and this race window (create/create) is not one real crews hit
-        # concurrently for the SAME room.
+        room = await _room_or_422(c, body.room_id, user)
+        # Pre-checked so the common case is a clean 409 with a sentence; the
+        # partial unique index (decon_room_cycles_open_idx) is the actual
+        # control, and the loser of a create/create race gets the same 409
+        # from the except below rather than a raw 500 (BC-26).
         open_cyc = await c.fetchrow(
             "SELECT id FROM decon_room_cycles WHERE org_id=$1 AND room_id=$2"
             " AND campaign=$3 AND status IN ('in_progress','awaiting_verification')",
@@ -208,10 +257,19 @@ async def create_cycle(body: CycleIn, user: dict = Depends(require_role(*_CLEAN_
         if open_cyc is not None:
             raise HTTPException(
                 409, f"an open cycle already exists for this room in campaign {body.campaign!r}")
-        row = await c.fetchrow(
-            "INSERT INTO decon_room_cycles(org_id, room_id, campaign, note,"
-            " created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$5) RETURNING *",
-            user["org_id"], body.room_id, body.campaign, body.note, user["id"])
+        try:
+            # started_on is the FACILITY's date. The column defaults to
+            # CURRENT_DATE, which renders under the database's UTC zone, so a
+            # cycle started between facility midnight and UTC midnight was
+            # dated the previous day (review 2026-09-27, BC-15).
+            row = await c.fetchrow(
+                "INSERT INTO decon_room_cycles(org_id, room_id, campaign, note,"
+                f" started_on, created_by, updated_by) VALUES ($1,$2,$3,$4,{SITE_TODAY_SQL},$5,$5)"
+                " RETURNING *",
+                user["org_id"], body.room_id, body.campaign, body.note, user["id"])
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(
+                409, f"an open cycle already exists for this room in campaign {body.campaign!r}")
         await safe_emit(c, user, verb="decon_cycle_started", object_type="decon_room_cycle",
                         object_id=row["id"], recipients=[],
                         params={"room": room["name"], "campaign": body.campaign})
@@ -240,7 +298,11 @@ async def record_step(cycle_id: str, body: StepIn,
     if body.step not in _STEPS:
         raise HTTPException(422, f"step must be one of: {', '.join(_STEPS)}")
     async with rls(user) as c:
-        cyc = await _cycle_or_404(c, cycle_id)
+        # Locked: the order check, the signoff INSERT and the possible move
+        # to awaiting_verification must see one committed state — two
+        # concurrent steps, or a step racing fail_cycle, otherwise interleave.
+        cyc = await _cycle_or_404(c, cycle_id, lock=True)
+        assert_room_authority(user, cyc["room_kind"])
         if cyc["status"] not in ("in_progress",):
             raise HTTPException(409, f"cycle is {cyc['status']}; no further steps accepted")
         latest = await _latest_steps(c, cycle_id)
@@ -301,9 +363,9 @@ async def list_bleach_log(user: dict = Depends(require_role(*ELEVATED_ROLES)),
 @router.post("/bleach-log", status_code=201)
 async def record_bleach(body: BleachIn, user: dict = Depends(require_role(*_CLEAN_WRITERS))):
     async with rls(user) as c:
-        room = await _room_or_422(c, body.room_id)
+        room = await _room_or_422(c, body.room_id, user)
         if body.cycle_id is not None:
-            await _cycle_or_404(c, body.cycle_id)
+            _same_room_or_422(await _cycle_or_404(c, body.cycle_id), body.room_id)
         row = await c.fetchrow(
             "INSERT INTO decon_bleach_log(org_id, room_id, cycle_id, ppm_strip_reading,"
             " mixed_by, note) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
@@ -352,17 +414,24 @@ async def record_swab(body: SwabIn, user: dict = Depends(require_role(*_QA_WRITE
     async with rls(user) as c:
         await _room_or_422(c, body.room_id)
         if body.cycle_id is not None:
-            await _cycle_or_404(c, body.cycle_id)
+            # Locked: a new (pending) swab racing release_room must either
+            # land before the release reads the swab summary — and block it —
+            # or wait until the release has committed and be recorded against
+            # a released cycle, never slip in between.
+            _same_room_or_422(await _cycle_or_404(c, body.cycle_id, lock=True), body.room_id)
         dup = await c.fetchrow(
             "SELECT id FROM decon_swabs WHERE org_id=$1 AND swab_code=$2",
             user["org_id"], body.swab_code)
         if dup is not None:
             raise HTTPException(409, f"swab code {body.swab_code} already exists")
-        row = await c.fetchrow(
-            "INSERT INTO decon_swabs(org_id, room_id, cycle_id, swab_code, location_desc,"
-            " taken_by, lab_name) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
-            user["org_id"], body.room_id, body.cycle_id, body.swab_code,
-            body.location_desc, user["id"], body.lab_name)
+        try:
+            row = await c.fetchrow(
+                "INSERT INTO decon_swabs(org_id, room_id, cycle_id, swab_code, location_desc,"
+                " taken_by, lab_name) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+                user["org_id"], body.room_id, body.cycle_id, body.swab_code,
+                body.location_desc, user["id"], body.lab_name)
+        except asyncpg.UniqueViolationError:  # decon_swabs_org_id_swab_code_key, racing the pre-check
+            raise HTTPException(409, f"swab code {body.swab_code} already exists")
     return {"id": str(row["id"]), "swab_code": row["swab_code"], "result": row["result"],
             "taken_at": row["taken_at"].isoformat()}
 
@@ -389,8 +458,12 @@ async def record_swab_result(swab_id: str, body: SwabResultIn,
         if cur is None:
             raise HTTPException(404, "Swab not found")
         if cur["cycle_id"] is not None:
+            # Locked: a result re-patched to positive while release_room is
+            # mid-flight must wait for the release to commit (and then be
+            # refused as frozen) or land before it reads the summary (and
+            # block it) — never both succeed.
             cyc_status = await c.fetchval(
-                "SELECT status FROM decon_room_cycles WHERE id=$1", cur["cycle_id"])
+                "SELECT status FROM decon_room_cycles WHERE id=$1 FOR UPDATE", cur["cycle_id"])
             if cyc_status == "released":
                 raise HTTPException(
                     409, "cycle is released — the room batch record is frozen;"
@@ -425,7 +498,7 @@ async def release_room(cycle_id: str, body: ReleaseIn,
     white-cloth gate passed — see record_step), and every swab taken for this
     room/cycle must be 'negative'. Any 'pending' or 'positive' swab blocks it."""
     async with rls(user) as c:
-        cyc = await _cycle_or_404(c, cycle_id)
+        cyc = await _cycle_or_404(c, cycle_id, lock=True)
         if cyc["status"] != "awaiting_verification":
             raise HTTPException(
                 409, f"cycle is {cyc['status']}, not awaiting_verification — "
@@ -442,7 +515,10 @@ async def release_room(cycle_id: str, body: ReleaseIn,
         row = await c.fetchrow(
             "UPDATE decon_room_cycles SET status='released', released_by=$1,"
             " released_at=now(), release_note=$2, updated_by=$1, updated_at=now()"
-            " WHERE id=$3 RETURNING *", user["id"], body.release_note, cycle_id)
+            " WHERE id=$3 AND status='awaiting_verification' RETURNING *",
+            user["id"], body.release_note, cycle_id)
+        if row is None:
+            raise HTTPException(409, "cycle is no longer awaiting_verification; it was changed by a concurrent request")
         await safe_emit(c, user, verb="decon_room_released", object_type="decon_room_cycle",
                         object_id=cycle_id, recipients=[],
                         params={"room": cyc["room_name"], "campaign": cyc["campaign"]})
@@ -475,7 +551,7 @@ async def fail_cycle(cycle_id: str, body: CycleFailIn,
     if not body.reason or not body.reason.strip():
         raise HTTPException(422, "a failed cycle must state a reason")
     async with rls(user) as c:
-        cyc = await _cycle_or_404(c, cycle_id)
+        cyc = await _cycle_or_404(c, cycle_id, lock=True)
         if cyc["status"] not in ("in_progress", "awaiting_verification"):
             raise HTTPException(
                 409, f"cycle is {cyc['status']}; only an open cycle "
@@ -484,8 +560,11 @@ async def fail_cycle(cycle_id: str, body: CycleFailIn,
                else f"{cyc['note']} | FAILED: {body.reason}")
         row = await c.fetchrow(
             "UPDATE decon_room_cycles SET status='failed', note=$1,"
-            " updated_by=$2, updated_at=now() WHERE id=$3 RETURNING *",
+            " updated_by=$2, updated_at=now() WHERE id=$3"
+            " AND status IN ('in_progress','awaiting_verification') RETURNING *",
             note, user["id"], cycle_id)
+        if row is None:
+            raise HTTPException(409, "cycle is no longer open; it was changed by a concurrent request")
         await safe_emit(c, user, verb="decon_cycle_failed", object_type="decon_room_cycle",
                         object_id=cycle_id, recipients=[],
                         params={"room": cyc["room_name"], "campaign": cyc["campaign"],
@@ -531,12 +610,15 @@ async def create_positive_control(body: PositiveControlIn,
             user["org_id"], body.control_code)
         if dup is not None:
             raise HTTPException(409, f"control code {body.control_code} already exists")
-        row = await c.fetchrow(
-            "INSERT INTO decon_positive_controls(org_id, control_code, room_id, material,"
-            " source_desc, taken_by, storage_location, note)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
-            user["org_id"], body.control_code, body.room_id, body.material,
-            body.source_desc, user["id"], body.storage_location, body.note)
+        try:
+            row = await c.fetchrow(
+                "INSERT INTO decon_positive_controls(org_id, control_code, room_id, material,"
+                " source_desc, taken_by, storage_location, note)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+                user["org_id"], body.control_code, body.room_id, body.material,
+                body.source_desc, user["id"], body.storage_location, body.note)
+        except asyncpg.UniqueViolationError:  # racing the pre-check (BC-26)
+            raise HTTPException(409, f"control code {body.control_code} already exists")
     return {"id": str(row["id"]), "control_code": row["control_code"],
             "material": row["material"], "taken_at": row["taken_at"].isoformat()}
 
@@ -571,9 +653,9 @@ async def record_tool_check(body: ToolLogIn,
     A refused entry means the crew simply does not log it, and an unlogged weak
     bucket is invisible; a logged one is a finding someone can act on."""
     async with rls(user) as c:
-        room = await _room_or_422(c, body.room_id)
+        room = await _room_or_422(c, body.room_id, user)
         if body.cycle_id is not None:
-            await _cycle_or_404(c, body.cycle_id)
+            _same_room_or_422(await _cycle_or_404(c, body.cycle_id), body.room_id)
         row = await c.fetchrow(
             "INSERT INTO decon_tool_log(org_id, room_id, cycle_id, tool_set,"
             " ppm_strip_reading, soak_minutes, checked_by, note)"
@@ -734,7 +816,9 @@ async def record_corridor_cleaning(body: CorridorCleaningIn,
         raise HTTPException(
             422, "a cleaning triggered by a waste movement must cite the manifest it followed")
     async with rls(user) as c:
-        room = await _room_or_422(c, body.room_id)
+        # Corridors are `other` rooms — a production manager's dry-room
+        # authority does not extend to them; the cultivation crew's does.
+        room = await _room_or_422(c, body.room_id, user)
         if body.manifest_id is not None:
             uuid_or_422(body.manifest_id, "Unknown manifest")
             m = await c.fetchrow(

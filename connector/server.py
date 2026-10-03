@@ -18,7 +18,7 @@ import os
 import time
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 IMPORT_URL = os.environ.get(
@@ -46,22 +46,47 @@ mcp.settings.streamable_http_path = MCP_PATH
 
 # Tiny in-process rate limit — this tool is called a handful of times a day
 # by one person; anything hot is abuse of the (secret) URL.
+#
+# Keyed PER CLIENT ADDRESS, not one global bucket: with one bucket, anyone
+# who learned the secret path could burn the whole window and lock the owner
+# out for five minutes (review 2026-09-27, DI-22). The address is the first
+# X-Forwarded-For hop, which Traefik sets from the real peer; the connector
+# is reachable only through Traefik, so the header is trustworthy here. A
+# request with no address (a health probe, a unit test) shares one bucket.
 _WINDOW_S, _MAX_CALLS = 300, 30
-_calls: list[float] = []
+_MAX_BUCKETS = 1024
+_calls: dict[str, list[float]] = {}
 
 
-def _rate_ok() -> bool:
+def _client_key(ctx: Context | None) -> str:
+    try:
+        req = ctx.request_context.request if ctx is not None else None
+    except (AttributeError, ValueError):
+        req = None
+    if req is None:
+        return "-"
+    fwd = (req.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if fwd:
+        return fwd
+    return req.client.host if req.client else "-"
+
+
+def _rate_ok(key: str = "-") -> bool:
     now = time.monotonic()
-    while _calls and now - _calls[0] > _WINDOW_S:
-        _calls.pop(0)
-    if len(_calls) >= _MAX_CALLS:
+    log = _calls.setdefault(key, [])
+    while log and now - log[0] > _WINDOW_S:
+        log.pop(0)
+    if len(log) >= _MAX_CALLS:
         return False
-    _calls.append(now)
+    log.append(now)
+    if len(_calls) > _MAX_BUCKETS:  # bounded memory: drop idle buckets
+        for k in [k for k, v in _calls.items() if not v or now - v[-1] > _WINDOW_S]:
+            _calls.pop(k, None)
     return True
 
 
 @mcp.tool()
-async def submit_capture(capture_json: str) -> str:
+async def submit_capture(capture_json: str, ctx: Context | None = None) -> str:
     """Send a WWF task capture to Weekly Weed Flow.
 
     Pass the COMPLETE capture object produced by the Master Task-Capture
@@ -70,7 +95,7 @@ async def submit_capture(capture_json: str) -> str:
     work sessions were added, and any skipped entries with reasons.
     Importing the same capture twice is safe (tasks merge by external_ref).
     """
-    if not _rate_ok():
+    if not _rate_ok(_client_key(ctx)):
         return "Rate limit exceeded — try again in a few minutes."
     try:
         payload = json.loads(capture_json)

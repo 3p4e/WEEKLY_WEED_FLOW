@@ -10,9 +10,16 @@ alongside cultivation.py (identity/lifecycle) and harvest.py (yield + IPM),
 because a feed IS a cultivation record; it simply lives in its own module the
 way harvest does.
 
-Access model, same shape as harvest.py:
+Access model:
   read    — every role above base USER (ELEVATED_ROLES);
-  record  — cultivation crew (CU_MGR) + executives + ADMIN (_RECORDERS).
+  record  — the IRRIGATION department (IR_MGR) + executives + ADMIN
+            (_RECORDERS). Irrigation runs the fertigation plant and its
+            distribution to every room as a department of its own (owner,
+            2026-09-05), so the feed record is its record. Cultivation reads
+            it. The routes stay under /cultivation because a feed is still a
+            record about a cultivation room, not because cultivation writes it
+            — until users migration 0012 there was no irrigation role to own
+            this at all, and CU_MGR held the pen by default.
 
 There is no gate here and no override: unlike a spray, a feed carries no
 re-entry or pre-harvest interval, so nothing downstream blocks on it and there
@@ -30,29 +37,18 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.config import settings
 from app.db import rls
 from app.deps import require_role, uuid_or_422
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
+from app.worktime import site_today
 
 router = APIRouter(prefix="/cultivation", tags=["cultivation"])
 
-_RECORDERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR")
+_RECORDERS = (ADMIN, *EXECUTIVE_ROLES, "IR_MGR")
 
 # Must stay in step with irrigation_events_method_check in migration 0052.
 _METHODS = ("drip", "hand", "flood", "boom", "other")
-
-
-def _site_tz() -> str:
-    return settings.snapshot_tz or "UTC"
-
-
-async def _site_today(c) -> date:
-    """Today AT THE SITE, resolved by Postgres — the same discipline as
-    harvest.py's `_site_today`. Not `date.today()`, which renders under the
-    container's UTC zone and would misfile an evening feed by a day."""
-    return await c.fetchval("SELECT (now() AT TIME ZONE $1)::date", _site_tz())
 
 
 async def _room_or_422(c, room_id: str):
@@ -142,7 +138,7 @@ async def create_irrigation(body: FeedIn, user: dict = Depends(require_role(*_RE
         if body.batch_id is not None:
             await _batch_or_422(c, body.batch_id)
         # "today" at the site, resolved by Postgres — never the container's UTC.
-        applied_on = body.applied_on or await _site_today(c)
+        applied_on = body.applied_on or await site_today(c)
         row = await c.fetchrow(
             "INSERT INTO irrigation_events(org_id, room_id, batch_id, applied_on,"
             " method, water_volume_l, feed_ec, feed_ph, runoff_ec, runoff_ph,"

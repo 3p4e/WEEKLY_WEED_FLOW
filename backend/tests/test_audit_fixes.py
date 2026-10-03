@@ -101,8 +101,12 @@ async def test_pdf_export_survives_hostile_color_and_missing_metric_keys(client,
                     "color": '"/><script>x</script>', "title": "x", "sop": "PP-01", "hours": 2}]
     # a v1-shape metrics bucket: hostile color + missing hours/prev4/tasks/... keys
     c.setdefault("metrics", {})["per_sop"] = [{"sop": "PP-01", "color": "javascript:alert(1)"}]
-    r = await client.patch(f"/reports/documents/{doc['id']}", json={"content": c}, headers=admin_headers)
-    assert r.status_code == 200, r.text
+    # No API writes whole content any more (PATCH /reports/documents/{id} is
+    # gone, BC-07); hostile or v1-shape content can only be what an old
+    # compile stored, so plant it the way history did.
+    from app.db import tasks_admin_pool
+    await tasks_admin_pool().execute(
+        "UPDATE weekly_documents SET content=$2 WHERE id=$1", doc["id"], c)
     r = await client.get(f"/reports/documents/{doc['id']}/export.pdf", headers=admin_headers)
     assert r.status_code == 200, r.text  # no KeyError 500
     assert r.headers["content-type"].startswith("application/pdf")

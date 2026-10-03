@@ -89,7 +89,7 @@ test('the view registers under the waste key with a read gate above base USER', 
   const h = load();
   const spec = h.window.__reg;
   assert.equal(spec.key, 'waste');
-  assert.equal(spec.insertBefore, 'mywork',
+  assert.equal(spec.insertBefore, 'floor-end',
     'anchored on a key render.sidebar itself emits, so nav order does not depend on script order');
   h.window.GF.API.user = { role: 'USER' };
   assert.equal(spec.guard(), false, 'base USER must not see the destruction register');
@@ -576,5 +576,25 @@ test('a reader calling a write handler directly is refused', async () => {
   assert.ok(!w.__modals.includes('wa-line-modal'));
   await w.GF.WWF.wasteLineRemove('m1', 'l1');
   assert.equal(w.__lineDel, undefined, 'hiding the button is not the gate — the handler checks too');
+  h.close();
+});
+
+/* ── Production (PR_MGR) records waste manifests ──────────────────────────
+   waste.py _RECORDERS admits PR_MGR (owner 2026-09-05: everything from the
+   harvest onward is production's; DECISIONS A-2) with no room-kind rule.
+   The view hid every record action from them (review 2026-09-27, R2-FE-03 /
+   R2-BC-01).
+   ──────────────────────────────────────────────────────────────────────── */
+
+test('PR_MGR is offered New manifest, seal and disposal — never the QA witness', () => {
+  const h = load('PR_MGR');
+  let html = renderManifests(h, [MAN({ status: 'draft' })]);
+  assert.match(html, /wasteManifestForm\(\)/);
+  assert.match(html, /wasteSealForm\('m1'\)/);
+  html = renderManifests(h, [MAN({ status: 'sealed', sealed_at: '2026-07-31T09:00:00Z', gross_weight_kg: 2100 })]);
+  assert.doesNotMatch(html, /wasteWitnessForm/, 'the two-person rule: production does not witness its own destruction');
+  html = renderManifests(h, [MAN({ status: 'witnessed', sealed_at: '2026-07-31T09:00:00Z', gross_weight_kg: 2100,
+                                   witnessed_at: '2026-07-31T10:00:00Z' })]);
+  assert.match(html, /wasteDisposeForm\('m1'\)/);
   h.close();
 });

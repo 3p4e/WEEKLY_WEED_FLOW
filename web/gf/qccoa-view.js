@@ -31,6 +31,10 @@
   const canWrite = () => GF.QC_WRITERS.includes((GF.API.user || {}).role);
   const canQP = () => GF.QC_QP.includes((GF.API.user || {}).role);
   const canCoq = () => _COQ.includes((GF.API.user || {}).role);
+  // Voiding a certificate or a CoQ is a Head-of-QC act (_HOQC on the server:
+  // ADMIN, QC_MGR, QP) — the QP may void, though the QP does not issue a CoQ
+  // (review 2026-09-27 R2-FE-10; canCoq() still gates review/generate/render).
+  const canVoid = () => GF.QC_HOQC.includes((GF.API.user || {}).role);
 
   const ST = {
     DRAFT: { en: 'Draft', mk: 'Нацрт', c: 'var(--orange)' },
@@ -251,21 +255,41 @@
     } catch (e) { GF.toast(e.message, 'error'); }
   };
 
+  // QR-13 / QC-03: nothing on this form is parseFloat-ed. A number box must
+  // hold a plain point decimal ("22.61") — a comma, a unit or "< LOQ" is
+  // refused here rather than truncated to 22 or 0 — and the typed number is
+  // sent as TEXT (result_value) as well, so the server reconciles it under
+  // the in-house '.' separator instead of trusting a client-side number.
+  const DEC = /^[+-]?\d+(\.\d+)?$/;
   GF.WWF.qcCoaAddResult = async (id) => {
     const mk = (i) => (document.getElementById(i) || {}).value || '';
-    const num = (i) => { const v = mk(i).trim(); return v === '' ? null : parseFloat(v); };
+    const num = (i, label) => {
+      const v = mk(i).trim();
+      if (v === '') return null;
+      if (!DEC.test(v)) {
+        throw new Error(label + ': ' + AL('use a point as the decimal mark (22.61)',
+                                          'користете точка како децимален знак (22.61)'));
+      }
+      return Number(v);
+    };
     const pid = mk('qcr-param');
     const param = pid ? (GF.WWF._qccoa.specParams || []).find(p => p.id === pid) : null;
     const test_name = (param ? param.test_name_en : mk('qcr-name').trim());
     if (!test_name) return GF.toast(AL('Test name required', 'Потребно е име на тест'), 'error');
-    const body = { test_name, result_value: mk('qcr-val').trim() || null,
-                   result_numeric: num('qcr-num'), unit: mk('qcr-unit').trim() || null,
-                   lab_verdict: mk('qcr-labv').trim() || null };
-    if (param) {
-      body.parameter_id = pid;               // server snapshots the param's limits
-    } else {
-      body.lower_limit = num('qcr-lo'); body.upper_limit = num('qcr-hi');
-    }
+    let body;
+    try {
+      const numText = mk('qcr-num').trim();
+      const numeric = num('qcr-num', AL('Numeric', 'Број'));
+      const text = mk('qcr-val').trim();
+      body = { test_name, result_value: text || numText || null,
+               result_numeric: numeric, unit: mk('qcr-unit').trim() || null,
+               lab_verdict: mk('qcr-labv').trim() || null };
+      if (param) {
+        body.parameter_id = pid;               // server snapshots the param's limits
+      } else {
+        body.lower_limit = num('qcr-lo', AL('Min', 'Мин')); body.upper_limit = num('qcr-hi', AL('Max', 'Макс'));
+      }
+    } catch (e) { return GF.toast(e.message, 'error'); }
     try {
       await GF.API.qcAddResult(id, body);
       GF.WWF._qccoa.detail = await GF.API.qcCoa(id);
@@ -345,7 +369,7 @@
       <div class="qms-dgrid" style="margin:2px 0">
         <span class="chip-opt" style="border-color:var(--accent);color:var(--accent)">${GF.esc(s.meaning)}</span>
         <b>${GF.esc(s.signer_name)}${s.signer_role ? ` <span class="ana-note">${GF.esc(s.signer_role)}</span>` : ''}</b>
-        <span class="ana-note mono">${GF.esc((s.signed_at || '').replace('T', ' ').slice(0, 16))}</span>
+        <span class="ana-note mono">${GF.esc(GF.fmtDateTime(s.signed_at))}</span>
         ${s.statement ? `<span class="ana-note">“${GF.esc(s.statement)}”</span>` : '<span></span>'}
       </div>`).join('');
     // A VOIDED/SUPERSEDED certificate is a closed record — no further
@@ -392,7 +416,9 @@
     const vColor = dec === 'PASS' ? 'var(--green)' : (dec === 'FAIL' ? 'var(--red)' : 'var(--ink-3)');
     const vText = dec === 'PASS' ? AL('Conforms', 'Соодветно')
       : (dec === 'FAIL' ? AL('Does not conform', 'Несоодветно') : AL('Undecided', 'Неодлучено'));
-    const issued = (c.coq_generated_at || c.report_date || c.updated_at || '').replace('T', ' ').slice(0, 16);
+    // the facility clock (R2-FE-02); report_date is a calendar day and prints as one
+    const issued = c.coq_generated_at ? GF.fmtDateTime(c.coq_generated_at)
+      : (c.report_date || (c.updated_at ? GF.fmtDateTime(c.updated_at) : ''));
     const wm = GF.esc(AL(stM.en || c.status || 'DRAFT', stM.mk || c.status || 'DRAFT'));
     const specRef = specRefFor(c);
     const labLine = d.laboratory
@@ -423,7 +449,7 @@
       <div class="mwcoq-sig">
         <div class="mwcoq-sig__l">${GF.esc(s.meaning || '')}</div>
         <div class="mwcoq-sig__nm">${GF.esc(s.signer_name || '—')}</div>
-        <div class="mwcoq-sig__meta">${GF.esc(s.signer_role || '')}${s.signed_at ? ' · ' + GF.esc(s.signed_at.replace('T', ' ').slice(0, 16)) : ''}</div>
+        <div class="mwcoq-sig__meta">${GF.esc(s.signer_role || '')}${s.signed_at ? ' · ' + GF.esc(GF.fmtDateTime(s.signed_at)) : ''}</div>
       </div>`).join('');
     const anLang = c.issue_language
       ? GF.esc(c.issue_language) + (c.issue_language === 'EN-MK'
@@ -531,7 +557,7 @@
         ${c.status !== 'DRAFT' && c.status !== 'RELEASED' && c.status !== 'SUPERSEDED' && c.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','PASS')">${AL('Mark PASS', 'Означи PASS')}</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','FAIL')">${AL('Mark FAIL', 'Означи FAIL')}</button>` : ''}
         ${c.status === 'RELEASED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaRevise('${c.id}')">${AL('Revise (supersede)', 'Ревидирај (замени)')}</button>` : ''}
-        ${canCoq() && c.status !== 'SUPERSEDED' && c.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaVoid('${c.id}')" title="${AL('Wrong batch / wrong sample — §6.6', 'Погрешна серија / примерок — §6.6')}">${AL('Void', 'Поништи')}</button>` : ''}
+        ${canVoid() && c.status !== 'SUPERSEDED' && c.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaVoid('${c.id}')" title="${AL('Wrong batch / wrong sample — §6.6', 'Погрешна серија / примерок — §6.6')}">${AL('Void', 'Поништи')}</button>` : ''}
         ${c.issue_language === 'EN-MK' && !c.translation_verified_at && c.status !== 'SUPERSEDED' && c.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaVerifyTranslation('${c.id}')" title="${AL('Second reviewer confirms the MK translation vs the EN source — §6.7', 'Втор прегледувач го потврдува МК преводот наспроти EN изворот — §6.7')}">${AL('Verify translation', 'Верификувај превод')}</button>` : ''}
       </div>` : ''}
       ${c.status === 'VOIDED' && c.void_reason ? `<div class="ana-note" style="color:var(--red-fg,var(--red));margin-top:6px">${AL('Voided', 'Поништено')} — ${GF.esc(c.void_reason)}</div>` : ''}
@@ -551,8 +577,11 @@
   // Certificate of Quality renders. All optional; blank stays blank on the CoQ.
   const coqMetaPanel = (c) => {
     const t = (k, def) => GF.esc(c[k] || def || '');
-    const inp = (id, k, ph, type) =>
-      `<input id="qcm-${id}" type="${type || 'text'}" placeholder="${ph}" value="${t(k)}">`;
+    const inp = (id, k, ph, type) => (type === 'date'
+      // Dates go through the picker (facility today, not the reader's) — the
+      // hidden-input contract keeps `GF.$('qcm-mfg').value` reading the same.
+      ? GF.dateField(`qcm-${id}`, { value: c[k] || '', placeholder: ph || AL('Pick a date', 'Избери датум') })
+      : `<input id="qcm-${id}" type="${type || 'text'}" placeholder="${ph}" value="${t(k)}">`);
     return `<details class="qms-meta" style="margin-top:10px">
       <summary class="ana-pt" style="cursor:pointer">${AL('CoQ metadata', 'CoQ метаподатоци')}</summary>
       <div class="qcs-form" style="margin-top:8px">
@@ -604,15 +633,36 @@
   // an input TO the QP batch-release decision). Coexists with the per-
   // certificate CoQ render above.
   GF.WWF._qccoq = { list: null, sel: null, detail: null, loading: false, error: null,
-                    cultivars: null };
+                    cultivars: null, products: null, batchDraft: '' };
+
+  // The CoQ's own Annex 11 e-signatures (QC-12 / INV-01), read beside the
+  // detail through api.js's qcCoqSignatures / qcCoqSign. A failed read shows
+  // an empty list — the detail itself still renders.
+  const coqSigs = async (id) => {
+    try { return await GF.API.qcCoqSignatures(id); } catch (e) { return []; }
+  };
+  const coqSign = (id, body) => GF.API.qcCoqSign(id, body);
 
   GF.WWF.loadQcCoqs = async () => {
     const st = GF.WWF._qccoq;
     st.loading = true; st.error = null;
     try {
-      st.list = await GF.API.qcCoqs({});
-      // cultivar picker data for the compile form — a compiled CoQ freezes the
-      // cultivar's APPROVED potency ladder, so the picker is how grading starts
+      // The out-of-grade follow-up (INS2-01): a bare list leaves the product
+      // verdict unresolved, so the CoQs still owing their formal OOS are asked
+      // for separately (GET /qc/coq?regrade_oos_pending=true) and marked.
+      const [list, owed] = await Promise.all([
+        GF.API.qcCoqs({}),
+        GF.API.qcCoqs({ regrade_oos_pending: 'true' }).catch(() => []),
+      ]);
+      const owedIds = new Set((owed || []).map(q => q.id));
+      st.list = (list || []).map(q => (owedIds.has(q.id) ? Object.assign({}, q, { regrade_oos_pending: true }) : q));
+      // picker data for the compile form: the APPROVED products of the
+      // official catalogue (a CoQ names the product it certifies against;
+      // the cultivar follows from it), and — for strains with no product yet —
+      // the cultivars, whose APPROVED ladder the CoQ then freezes (legacy).
+      if (st.products === null) {
+        st.products = await GF.API.qcProducts({ status: 'APPROVED' }).catch(() => []);
+      }
       if (st.cultivars === null) {
         st.cultivars = (await GF.API.cultivars().catch(() => ({ cultivars: [] }))).cultivars || [];
       }
@@ -624,7 +674,9 @@
   const _creload = async (id) => {
     await GF.WWF.loadQcCoqs();
     if (GF.WWF._qccoq.sel === id) {
-      GF.WWF._qccoq.detail = await GF.API.qcCoqOne(id).catch(() => null);
+      const d = await GF.API.qcCoqOne(id).catch(() => null);
+      if (d) d.signatures = await coqSigs(id);
+      GF.WWF._qccoq.detail = d;
       GF.render.all();
     }
   };
@@ -632,9 +684,40 @@
     const st = GF.WWF._qccoq;
     if (st.sel === id) { st.sel = null; st.detail = null; GF.render.all(); return; }
     st.sel = id; st.detail = null; GF.render.all();
-    try { const d = await GF.API.qcCoqOne(id); if (st.sel === id) st.detail = d; }
+    try {
+      const d = await GF.API.qcCoqOne(id);
+      d.signatures = await coqSigs(id);
+      if (st.sel === id) st.detail = d;
+    }
     catch (e) { if (st.sel === id) GF.toast(e.message, 'error'); }
     if (st.sel === id && GF.state.view === 'qccoa') GF.render.all();
+  };
+  // Annex 11 e-signature on the CoQ (INV-01): COMPILED by the compiler of
+  // record, APPROVED by the HoQC who reviewed it — the server checks both.
+  GF.WWF.qcCoqSign = async (id) => {
+    const mk = (i) => (document.getElementById(i) || {}).value || '';
+    const password = mk('qcqsig-pw');
+    if (!password) return GF.toast(AL('Enter your password to sign', 'Внесете лозинка за потпис'), 'error');
+    const body = { meaning: mk('qcqsig-meaning') || 'COMPILED', password,
+                   statement: mk('qcqsig-stmt').trim() || null };
+    try {
+      const sg = await coqSign(id, body);
+      GF.toast(AL('Signed', 'Потпишано') + ': ' + sg.meaning);
+    } catch (e) {
+      return GF.toast(e.status === 401 ? AL('Re-authentication failed', 'Неуспешна автентикација') : e.message, 'error');
+    }
+    await _creload(id);
+  };
+  // The batch typed on the compile form narrows the product picker to that
+  // strain's products (INS2-12) and the source list to that batch's usable
+  // certificates — updated in place so the field keeps its focus.
+  GF.WWF.qcCoqBatchInput = (v) => {
+    const cq = GF.WWF._qccoq;
+    cq.batchDraft = v || '';
+    const ps = GF.$('qcq-productid');
+    if (ps) { const cur = ps.value; ps.innerHTML = prodOptions(cq.products || [], cq.batchDraft); ps.value = cur; }
+    const ss = GF.$('qcq-sources');
+    if (ss) ss.innerHTML = sourceOptions(cq.batchDraft);
   };
   GF.WWF.qcCoqCompile = async () => {
     const g = (i) => (document.getElementById(i) || {}).value || '';
@@ -646,8 +729,25 @@
     const pn = g('qcq-product').trim(); if (pn) body.product_name = pn;
     const bs = g('qcq-size').trim(); if (bs) body.batch_size = bs;
     const md = g('qcq-mfg'); if (md) body.manufacture_date = md;
-    // freeze the cultivar's APPROVED potency ladder at compile (Phase B)
-    const cv = g('qcq-cultivar'); if (cv) body.cultivar_id = cv;
+    // The product the lot is certified against (official catalogue): the
+    // cultivar is derived from it server-side. Without a product, a cultivar
+    // alone freezes its APPROVED potency ladder at compile (legacy, Phase B).
+    const pid = g('qcq-productid');
+    if (pid) body.product_id = pid;
+    else { const cv = g('qcq-cultivar'); if (cv) body.cultivar_id = cv; }
+    // QC-15 / B-8: the testing period this CoQ certifies, and — optionally —
+    // exactly which certificates it aggregates (a re-test period names its
+    // own; left empty, the server takes every usable certificate of the batch).
+    const purpose = g('qcq-purpose') || 'INITIAL';
+    body.purpose = purpose;
+    const tp = g('qcq-timepoint').trim();
+    if (purpose === 'RETEST' && !tp) {
+      return GF.toast(AL('A re-test CoQ names its timepoint (e.g. 6M)', 'Ретест CoQ ја наведува временската точка (пр. 6M)'), 'error');
+    }
+    if (tp) body.timepoint = tp;
+    const srcSel = document.getElementById('qcq-sources');
+    const srcIds = srcSel ? [...srcSel.selectedOptions].map(o => o.value).filter(Boolean) : [];
+    if (srcIds.length) body.source_coa_ids = srcIds;
     try {
       const coq = await GF.API.qcCompileCoq(body);
       GF.toast(AL('CoQ compiled: ', 'CoQ составен: ') + coq.coq_number);
@@ -698,6 +798,34 @@
     const cult = p.cultivar_name
       ? `<span>${AL('Cultivar', 'Сорта')}</span><b>${GF.esc(p.cultivar_name)}${p.cultivar_code ? ` <span class="ana-note mono">${GF.esc(p.cultivar_code)}</span>` : ''}</b>`
       : '';
+    // The official product (kind "product"): the product it certifies against,
+    // its window, and the owner's out-of-grade verdict (2026-09-06) — conforms,
+    // or does not and falls to the product whose window holds the value.
+    if (p.kind === 'product') {
+      const n2 = (v) => (v === null || v === undefined ? '—' : Number(v).toFixed(2));
+      const tot = (p.total_d9_thc !== null && p.total_d9_thc !== undefined)
+        ? ` <span class="ana-note">(Total Δ9-THC ${GF.esc(n2(p.total_d9_thc))} %)</span>` : '';
+      let verdict;
+      if (p.conforms === true) {
+        verdict = `<span class="chip-opt" style="border-color:var(--green);color:var(--green)">✓ ${AL('conforms', 'одговара')}</span>`;
+      } else if (p.conforms === false) {
+        verdict = `<span class="chip-opt" style="border-color:var(--red);color:var(--red)">✗ ${AL('does not conform', 'не одговара')}</span> `
+          + (p.regrade_to
+            ? `<span class="chip-opt qcq-regrade" style="border-color:var(--amber);color:var(--amber)">${AL('REGRADED', 'ПРЕКЛАСИРАНО')} → ${GF.esc(p.regrade_to)}</span>`
+            : `<span class="chip-opt qcq-regrade" style="border-color:var(--amber);color:var(--amber)">${AL('fits no grade', 'не одговара на ниту една класа')}</span>`)
+          // The formal OOS on the batch disposition the out-of-grade rule asks
+          // for (INS2-01): a tracked follow-up, never a gate — say whether it
+          // exists, by number, or is still owed.
+          + (p.regrade_oos
+            ? ` <span class="chip-opt qcq-regrade-oos" style="border-color:var(--green);color:var(--green)">${AL('formal OOS', 'формален OOS')}: ${GF.esc(p.regrade_oos)}</span>`
+            : ` <span class="chip-opt qcq-regrade-oos" style="border-color:var(--amber);color:var(--amber)">${AL('formal OOS on the batch disposition: pending', 'формален OOS за диспозицијата: се чека')}</span>`);
+      } else {
+        verdict = `<span class="ana-note">${AL('Total Δ9-THC not measured', 'вкупен Δ9-THC не е измерен')}</span>`;
+      }
+      return cult
+        + `<span>${AL('Product', 'Производ')}</span><b class="mono">${GF.esc(p.product_code)} <span class="ana-note">· ${AL('nominal', 'номинал')} ${GF.esc(n2(p.nominal))} % · ${GF.esc(n2(p.window_min))}–${GF.esc(n2(p.window_max))} % · ${GF.esc(p.doc_code || '')} ${GF.esc(p.doc_version || '')}</span></b>`
+        + `<span>${AL('Grade', 'Оцена')}</span><b>${verdict}${tot}</b>`;
+    }
     let grade = '';
     if (p.disposition) {
       const tot = (p.total_d9_thc !== null && p.total_d9_thc !== undefined)
@@ -710,6 +838,43 @@
     return cult + grade;
   };
 
+  // QC-15 / QR-04: which testing period a CoQ certifies.
+  const periodText = (q) => (q.purpose === 'RETEST'
+    ? `${AL('Re-test', 'Ретест')} ${GF.esc(q.timepoint || '')}`.trim()
+    : AL('Initial release', 'Првично пуштање'));
+  const periodChip = (q) => (q.purpose === 'RETEST'
+    ? `<span class="chip-opt qcq-period" style="border-color:var(--violet);color:var(--violet)">${periodText(q)}</span>` : '');
+
+  // The CoQ's own e-signatures (INV-01): the list, and a signing form for the
+  // role of record — COMPILED for the compiler (any live CoQ), APPROVED for
+  // the reviewer once APPROVED. The server enforces both; this only decides
+  // who sees the form.
+  const coqSignPanel = (d) => {
+    const q = d.coq;
+    const me = String((GF.API.user || {}).id || '');
+    const sigs = (d.signatures || []).map(s => `
+      <div class="qms-dgrid" style="margin:2px 0">
+        <span class="chip-opt" style="border-color:var(--accent);color:var(--accent)">${GF.esc(s.meaning)}</span>
+        <b>${GF.esc(s.signer_name)}${s.signer_role ? ` <span class="ana-note">${GF.esc(s.signer_role)}</span>` : ''}</b>
+        <span class="ana-note mono">${GF.esc(GF.fmtDateTime(s.signed_at))}</span>
+        ${s.statement ? `<span class="ana-note">“${GF.esc(s.statement)}”</span>` : '<span></span>'}
+      </div>`).join('');
+    const done = new Set((d.signatures || []).filter(s => String(s.signer_id) === me).map(s => s.meaning));
+    const offer = [];
+    if (me && q.status !== 'VOIDED' && q.compiled_by && String(q.compiled_by) === me && !done.has('COMPILED')) offer.push('COMPILED');
+    if (me && q.status === 'APPROVED' && q.reviewed_by && String(q.reviewed_by) === me && !done.has('APPROVED')) offer.push('APPROVED');
+    const form = (canWrite() && offer.length) ? `
+      <div class="qms-dl" style="margin-top:6px;align-items:center;gap:6px;flex-wrap:wrap">
+        <select id="qcqsig-meaning">${offer.map(m => `<option value="${m}">${m}</option>`).join('')}</select>
+        <input id="qcqsig-stmt" placeholder="${AL('meaning / note (optional)', 'значење / белешка (опц.)')}" style="min-width:150px">
+        <input id="qcqsig-pw" type="password" placeholder="${AL('your password', 'вашата лозинка')}" style="width:130px">
+        <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoqSign('${q.id}')">${AL('Sign', 'Потпиши')}</button>
+        <span class="ana-note">${AL('Re-authenticate to sign (Annex 11).', 'Повторна автентикација за потпис (Анекс 11).')}</span>
+      </div>` : '';
+    return `<div style="margin-top:12px" class="ana-pt">${AL('Electronic signatures', 'Електронски потписи')}</div>
+      ${sigs || `<div class="ana-note">${AL('No signatures yet', 'Сè уште нема потписи')}</div>`}${form}`;
+  };
+
   const coqDetail = (d) => {
     const q = d.coq;
     const srcs = (d.sources || []).map(s =>
@@ -718,6 +883,7 @@
       <div class="qms-dgrid">
         <span>CoQ</span><b class="mono">${GF.esc(q.coq_number)}</b>
         <span>${AL('Batch', 'Серија')}</span><b>${GF.esc(q.batch_id)}</b>
+        <span>${AL('Testing period', 'Период на тестирање')}</span><b>${periodText(q)}</b>
         <span>${AL('Status', 'Статус')}</span><b>${stChip(q.status)}</b>
         <span>${AL('Conforms', 'Задоволува')}</span><b>${compliesChip(q.overall_conform)}</b>
         ${coqPotencyRows(d.potency)}
@@ -736,11 +902,45 @@
         ${q.status === 'APPROVED' && q.overall_conform === true ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoqRender('${q.id}')">${AL('Generate CoQ document', 'Генерирај CoQ документ')}</button>` : ''}
         ${q.coq_document_id ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(q.coq_document_id)}','docx')">CoQ .docx</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(q.coq_document_id)}','pdf')">CoQ PDF</button>` : ''}
-        ${q.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoqVoid('${q.id}')">${AL('Void', 'Поништи')}</button>` : ''}
       </div>` : ''}
+      ${canVoid() && q.status !== 'VOIDED' ? `<div class="qms-dl" style="margin-top:6px"><button class="btn btn-sm" onclick="GF.WWF.qcCoqVoid('${q.id}')">${AL('Void', 'Поништи')}</button></div>` : ''}
       <div style="margin-top:12px" class="ana-pt">${AL('Aggregated results (one row per spec parameter)', 'Агрегирани резултати (еден ред по параметар)')}</div>
       ${coqLineRows(d)}
+      ${coqSignPanel(d)}
     </div>`;
+  };
+
+  // The strain a typed batch belongs to, by the batch number's head: the
+  // longest product cultivar code the value starts with, followed by a digit
+  // or nothing (GP0926 → GP; GPX0926 → GPX, never GP). '' when unrecognised.
+  const batchHead = (batch, products) => {
+    const b = String(batch || '').toUpperCase();
+    if (!b) return '';
+    const codes = [...new Set((products || []).map(p => String(p.cultivar_code || '').toUpperCase()).filter(Boolean))]
+      .sort((x, y) => y.length - x.length);
+    return codes.find(c => b === c || (b.indexOf(c) === 0 && /[0-9]/.test(b.charAt(c.length)))) || '';
+  };
+  const n2 = (v) => (v === null || v === undefined ? '—' : Number(v).toFixed(2));
+  // INS2-12: the compile form offers only the products of the batch's strain
+  // once the batch is typed (the server refuses a product of another strain
+  // for a registered batch); an unrecognised batch id shows every product.
+  const prodOptions = (products, batch) => {
+    const head = batchHead(batch, products);
+    const list = head ? products.filter(p => String(p.cultivar_code || '').toUpperCase() === head) : products;
+    return `<option value="">${AL('Product (grades the batch)…', 'Производ (ја оценува серијата)…')}</option>`
+      + list.map(p =>
+        `<option value="${GF.esc(p.id)}">${GF.esc(p.product_code)} · ${GF.esc(p.cultivar_name || p.cultivar_code || '')} · ${GF.esc(n2(p.window_min))}–${GF.esc(n2(p.window_max))} % · ${GF.esc(p.doc_version || '')}</option>`).join('');
+  };
+  // The usable source certificates (APPROVED/RELEASED iCoA/eCoA) of the typed
+  // batch, for an explicit selection (QC-15); every usable certificate of the
+  // org until a batch is typed. Nothing selected = the server's default set.
+  const sourceOptions = (batch) => {
+    const b = String(batch || '').trim().toUpperCase();
+    const all = (GF.WWF._qccoa.coas || []).filter(c =>
+      (c.status === 'APPROVED' || c.status === 'RELEASED') && (c.cert_type === 'ICOA' || c.cert_type === 'ECOA'));
+    const list = b ? all.filter(c => String(c.batch_id || '').toUpperCase() === b) : all;
+    return list.map(c =>
+      `<option value="${GF.esc(c.id)}">${GF.esc(c.coa_number)} · ${GF.esc(c.batch_id || '')} · ${GF.esc(c.cert_type || '')}</option>`).join('');
   };
 
   const coqPanel = () => {
@@ -753,22 +953,37 @@
     const specOpts = (st.specs || []).map(s =>
       `<option value="${s.id}">${GF.esc(s.spec_id)} · ${GF.esc(s.material_code)}</option>`).join('');
     const cvOpts = (cq.cultivars || []).filter(v => v.is_active !== false).map(v =>
-      `<option value="${v.id}">${GF.esc(v.code)} · ${GF.esc(v.name)}</option>`).join('');
+      `<option value="${GF.esc(v.id)}">${GF.esc(v.code)} · ${GF.esc(v.name)}</option>`).join('');
     const compile = canWrite() ? `
       <div class="qcs-form" style="margin-bottom:10px">
-        <input id="qcq-batch" placeholder="${AL('Batch id', 'Серија')}">
+        ${GF.batchCodeField('qcq-batch', {
+          // The strain is the batch number's constant head (INS-12 / INS2-05);
+          // typing it narrows the product picker and the source list.
+          cultivars: GF.batchCodeCultivars(() => { if (GF.state.view === 'qccoa') GF.render.all(); }),
+          value: cq.batchDraft || '',
+          placeholder: AL('Batch id', 'Серија'), selPlaceholder: AL('strain…', 'сорта…'), selTitle: AL('Strain', 'Сорта'),
+          oninput: 'GF.WWF.qcCoqBatchInput(this.value)' })}
         <select id="qcq-spec"><option value="">${AL('Specification…', 'Спецификација…')}</option>${specOpts}</select>
-        <select id="qcq-cultivar" title="${AL('Freezes the APPROVED potency ladder of the cultivar on this CoQ — the batch grades against it', 'Ја замрзнува ОДОБРЕНАТА скала на сортата на овој CoQ — серијата се оценува според неа')}"><option value="">${AL('Cultivar (grades the batch)…', 'Сорта (ја оценува серијата)…')}</option>${cvOpts}</select>
+        <select id="qcq-productid" title="${AL('The official product the lot is certified against — its window grades the batch; the cultivar follows from it. Only the batch strain\'s products are offered.', 'Официјалниот производ според кој се сертифицира серијата — неговиот опсег ја оценува; сортата произлегува од него. Само производите на сортата на серијата.')}">${prodOptions(cq.products || [], cq.batchDraft)}</select>
+        <select id="qcq-cultivar" title="${AL('Only for a strain with no approved product: freezes the cultivar\'s APPROVED potency ladder on this CoQ (legacy)', 'Само за сорта без одобрен производ: ја замрзнува ОДОБРЕНАТА скала на сортата (застарено)')}"><option value="">${AL('Cultivar (legacy ladder)…', 'Сорта (застарена скала)…')}</option>${cvOpts}</select>
         <input id="qcq-product" placeholder="${AL('Product name (opt.)', 'Име на производ (опц.)')}">
         <input id="qcq-size" placeholder="${AL('Batch size (opt.)', 'Големина (опц.)')}">
-        <label class="ana-note">${AL('Mfg.', 'Произв.')} <input id="qcq-mfg" type="date"></label>
+        <label class="ana-note">${AL('Mfg.', 'Произв.')} ${GF.dateField('qcq-mfg', {})}</label>
+        <select id="qcq-purpose" title="${AL('Initial release, or a later re-test period of the same batch (QC-15) — both can be live at once', 'Првично пуштање или подоцнежен ретест период на истата серија (QC-15) — двата може да важат истовремено')}">
+          <option value="INITIAL">${AL('Initial release', 'Првично пуштање')}</option>
+          <option value="RETEST">${AL('Re-test', 'Ретест')}</option>
+        </select>
+        <input id="qcq-timepoint" placeholder="${AL('Timepoint (6M) — re-test only', 'Временска точка (6M) — само ретест')}" style="width:150px">
+        <label class="ana-note">${AL('Sources (optional)', 'Извори (опц.)')}
+          <select id="qcq-sources" multiple size="3" title="${AL('Which certificates this CoQ aggregates — a re-test period names its own; leave empty to take every usable certificate of the batch', 'Кои сертификати ги агрегира овој CoQ — ретест периодот ги именува своите; празно = сите употребливи сертификати на серијата')}">${sourceOptions(cq.batchDraft)}</select>
+        </label>
         <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoqCompile()" title="${AL('Consolidates every approved/released iCoA + eCoA result for the batch against the specification', 'Ги консолидира сите одобрени/ослободени iCoA + eCoA резултати за серијата според спецификацијата')}">${AL('Compile CoQ', 'Состави CoQ')}</button>
       </div>` : '';
     const rows = (cq.list || []).map(q => `
       <div class="qms-row ${cq.sel === q.id ? 'on' : ''}" onclick="GF.WWF.qcCoqPick('${q.id}')">
         <span class="mono qms-code">${GF.esc(q.coq_number)}</span>
         <span class="qms-title">${GF.esc(q.batch_id)}${q.spec_reference ? ` <span class="ana-note">${GF.esc(q.spec_reference)}</span>` : ''}</span>
-        ${compliesChip(q.overall_conform)}${stChip(q.status)}
+        ${periodChip(q)}${q.regrade_oos_pending === true ? `<span class="chip-opt" style="border-color:var(--amber);color:var(--amber)">${AL('OOS pending', 'OOS се чека')}</span>` : ''}${compliesChip(q.overall_conform)}${stChip(q.status)}
       </div>
       ${cq.sel === q.id ? (cq.detail ? coqDetail(cq.detail) : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`) : ''}`).join('');
     return `<div class="panel ana-panel" style="margin-top:12px">
@@ -808,7 +1023,10 @@
       <div class="panel ana-panel" style="margin-bottom:12px">
         <div class="ana-pt" style="margin-bottom:8px">${AL('New certificate', 'Нов сертификат')}</div>
         <div class="qcs-form">
-          <input id="qco-batch" placeholder="${AL('Batch id', 'Серија')}">
+          ${GF.batchCodeField('qco-batch', {
+            // The strain is the batch number's constant head (INS-12 / INS2-05).
+            cultivars: GF.batchCodeCultivars(() => { if (GF.state.view === 'qccoa') GF.render.all(); }),
+            placeholder: AL('Batch id', 'Серија'), selPlaceholder: AL('strain…', 'сорта…'), selTitle: AL('Strain', 'Сорта') })}
           <select id="qco-spec"><option value="">${AL('Specification…', 'Спецификација…')}</option>${specOpts}</select>
           <select id="qco-type">${CERT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
           <select id="qco-sample"><option value="">${AL('Link sample (optional)', 'Поврзи примерок (опц.)')}</option>${sampleOpts}</select>

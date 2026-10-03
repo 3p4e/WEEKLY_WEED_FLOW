@@ -32,8 +32,11 @@ test('tasks module: roles=null, correct keys', () => {
   const { GF, close } = loadModules();
   const mod = GF.moduleById('tasks');
   assert.equal(mod.roles, null);
+  // `approvals` moved here from `audit` (review 2026-09-27, R2-FE-01): the
+  // handoffs list is addressed to every manager role, and the audit module
+  // admits only QA/QC/QP.
   const expectedKeys = ['depthome','mywork','board','timeline','calendar','myday','team',
-    'coord','dash','report','inbox','search','import','intake'];
+    'coord','approvals','dash','report','inbox','search','import','intake'];
   assert.deepEqual(toJS(mod.keys), expectedKeys);
   close();
 });
@@ -43,22 +46,27 @@ test('qc module: correct roles and keys', () => {
   const mod = GF.moduleById('qc');
   assert.deepEqual(toJS(mod.roles), ['QC_MGR','QA_MGR','QP']);
   assert.deepEqual(toJS(mod.keys), ['qccoa','qcregister','qcsample','qclab','qcspec','qcpotency','qcleaves',
-    'qccustody','qcecoa','qcoos','qcgenealogy','qmsstudio','qmsregistry','qmsknow']);
+    'qccustody','qcecoa','qcoos','qcgenealogy','qmsstudio']);
   close();
 });
 
 test('cultivation module: correct roles and keys', () => {
   const { GF, close } = loadModules();
   const mod = GF.moduleById('cultivation');
-  assert.deepEqual(toJS(mod.roles), ['CU_MGR','PR_MGR','WH_MGR','MU_MGR']);
-  assert.deepEqual(toJS(mod.keys), ['cultivation','facility','harvest']);
+  // QA_MGR: harvest.py lets QA record a cut to release a pre-harvest-interval
+  // block — the only role that can — so hiding the harvest view from them made
+  // that power unreachable. IR_MGR: the irrigation view is theirs.
+  assert.deepEqual(toJS(mod.roles), ['CU_MGR','PR_MGR','IR_MGR','WH_MGR','MU_MGR','QA_MGR']);
+  assert.deepEqual(toJS(mod.keys), ['cultivation','facility','harvest','irrigation']);
   close();
 });
 
 test('biosecurity module: correct roles and keys', () => {
   const { GF, close } = loadModules();
   const mod = GF.moduleById('biosecurity');
-  assert.deepEqual(toJS(mod.roles), ['CU_MGR','QA_MGR','SE_MGR']);
+  // PR_MGR: waste.py / decon.py / biosecurity.py admit production for the
+  // post-harvest (`dry`) rooms it runs (DECISIONS A-2; R2-FE-03).
+  assert.deepEqual(toJS(mod.roles), ['CU_MGR','PR_MGR','QA_MGR','SE_MGR']);
   assert.deepEqual(toJS(mod.keys), ['decon','waste']);
   close();
 });
@@ -67,7 +75,7 @@ test('audit module: correct roles and keys', () => {
   const { GF, close } = loadModules();
   const mod = GF.moduleById('audit');
   assert.deepEqual(toJS(mod.roles), ['QA_MGR','QC_MGR','QP']);
-  assert.deepEqual(toJS(mod.keys), ['audit','auditprep','approvals']);
+  assert.deepEqual(toJS(mod.keys), ['audit','auditprep']);
   close();
 });
 
@@ -114,7 +122,18 @@ const ACCESS_TABLE = [
   ['QA_MGR', 'biosecurity', true],
   ['QA_MGR', 'audit',       true],
   ['QA_MGR', 'analytics',   true],
-  ['QA_MGR', 'cultivation', false],
+  // QA_MGR reaches cultivation: harvest.py lets QA record a cut to release a
+  // pre-harvest-interval block — the ONLY role that can — and the module
+  // list used to hide the harvest view from them.
+  ['QA_MGR', 'cultivation', true],
+
+  ['IR_MGR', 'tasks',       true],
+  ['IR_MGR', 'cultivation', true],   // the irrigation view lives in this module
+  ['IR_MGR', 'qc',          false],
+  ['IR_MGR', 'analytics',   true],
+
+  ['PR_MGR', 'cultivation', true],   // harvest: dry weights and the close are production's
+  ['PR_MGR', 'biosecurity', true],   // waste manifests, dry-room decon and gowning (A-2)
 
   ['OWNER',  'tasks',       true],
   ['OWNER',  'qc',          true],

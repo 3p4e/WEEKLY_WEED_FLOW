@@ -1,12 +1,20 @@
 from app.db import rls
-from app.worktime import SITE_YEAR_SQL
+from app.worktime import SITE_TZ_SQL, SITE_YEAR_SQL
 from app.deps import require_role
 from app.roles import ELEVATED_ROLES
 from datetime import datetime
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .common import _QC_REGISTRAR, _QP_ROLES, _WRITERS, _uuid_or_404, _uuid_or_422, router
+from .common import (_QC_REGISTRAR, _QP_ROLES, _WRITERS, _uuid_or_404, _uuid_or_422,
+                     mint_series_number, router)
+from .leaves import _assert_leaf_open
+
+
+# The two-digit FACILITY year for the MLL control number NNN/YY_RQS (review
+# 2026-09-27 QC-21: the ordinal used the facility year while the control
+# number took to_char(now(),'YY') under the database's UTC zone).
+SITE_YY_SQL = f"to_char(now() AT TIME ZONE {SITE_TZ_SQL},'YY')"
 
 
 _RQS_STATUSES = ("OPEN", "REGISTERED", "IN_PROGRESS", "COMPLETED", "CANCELLED")
@@ -48,6 +56,16 @@ _RQS_MANDATORY = ("batch_id", "num_samples", "required_tests", "storage_location
 
 
 _RQS_REGISTERED = ("REGISTERED", "IN_PROGRESS", "COMPLETED")
+
+
+# §6.1.4 request content — editable ONLY while the RQS is an OPEN draft
+# (review 2026-09-27 QC-23): after registration the §6.1.6 completeness gate
+# has been passed on these values and the MLL control number issued against
+# them, so blanking or rewriting them afterwards undid the gate after the
+# fact. Assignment / sample linkage / notes / cancellation remain workflow
+# fields; release_related keeps its own QP-only lowering rule.
+_RQS_DRAFT_ONLY = ("num_samples", "required_tests", "priority", "priority_justification",
+                   "storage_location", "material_status", "specification_id", "spec_reference")
 
 
 def _iso(v):
@@ -346,6 +364,18 @@ async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_r
         # being set, else the value already on the record.
         def eff(col):
             return patch[col] if col in patch else cur[col]
+        # QC-23: a terminal RQS is a closed record (note only); a registered one
+        # keeps its §6.1.4 content as registered.
+        _assert_leaf_open(patch, cur["status"], "COMPLETED", "Sampling request")
+        _assert_leaf_open(patch, cur["status"], "CANCELLED", "Sampling request")
+        if cur["status"] != "OPEN":
+            locked = sorted(k for k in _RQS_DRAFT_ONLY
+                            if k in patch and _changed_value(cur[k], patch[k]))
+            if locked:
+                raise HTTPException(
+                    409, f"the sampling request is {cur['status']} — {', '.join(locked)} were"
+                         " registered into the MLL as they stand (§6.1.6) and may no longer be"
+                         " changed; cancel and re-raise the request instead")
         # §6.1.2 segregation of duties — the release-related flag is what forces
         # QP registration, so a non-QP writer must not be able to LOWER it (which
         # would demote the request out of the QP's remit). Raising it is fine.
@@ -394,8 +424,8 @@ async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_r
                     raise HTTPException(422, "RQS is incomplete — cannot register (§6.1.6):"
                                              f" missing {', '.join(missing)}")
                 # §6.1.1/§6.1.6 — assign the QC Internal Control Number NNN/YY_RQS
-                # in the MLL (per-year, advisory-locked, gap-free).
-                yy = await c.fetchval("SELECT to_char(now(),'YY')")
+                # in the MLL (per-year, advisory-locked, gap-free; facility year).
+                yy = await c.fetchval(f"SELECT {SITE_YY_SQL}")  # nosec B608 — trusted constant
                 await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))",
                                 f"rqsctl:{user['org_id']}:{yy}")
                 cseq = await c.fetchval(
@@ -439,6 +469,18 @@ async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_r
     return _rqs_out(dict(row))
 
 
+def _changed_value(before, after) -> bool:
+    """A PATCH that echoes the stored value is not a change (uuids and lists
+    compare by content, dates by their ISO form)."""
+    def _s(v):
+        if v is None:
+            return None
+        if isinstance(v, (list, dict)):
+            return v
+        return v.isoformat() if hasattr(v, "isoformat") else str(v)
+    return _s(before) != _s(after)
+
+
 @router.get("/field-records")
 async def list_sfr(status: str | None = None, user: dict = Depends(require_role(*ELEVATED_ROLES))):
     clauses, args = [], []
@@ -480,19 +522,21 @@ async def create_sfr(body: SfrIn, user: dict = Depends(require_role(*_WRITERS)))
                 raise HTTPException(422, "Unknown sample")
             await _assert_sample_unclaimed(
                 c, "qc_sample_field_records", "sfr_number", body.sample_id)
+        # per-(org, year) register series, never the old cross-tenant sequence (QC-28)
+        sfr_number = await mint_series_number(
+            c, user["org_id"], "qc_sample_field_records", "sfr_number", "PP-SFR")
         row = await c.fetchrow(
             "INSERT INTO qc_sample_field_records(org_id, sfr_number, rqs_id, sampling_location,"
             " sampling_coordinates, barrel_numbers, num_containers, destination_facility,"
             " destination_location, planned_departure, planned_arrival, sampled_by_id, escort_id,"
             " sample_id, sampling_equipment, notes, created_by, updated_by)"
-            f" VALUES ($1, 'PP-SFR-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
-            "         lpad(nextval('qc_sfr_id_seq')::text, 4, '0'),"
+            " VALUES ($1, $17,"
             "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16) RETURNING *",
             user["org_id"], body.rqs_id, body.sampling_location, body.sampling_coordinates,
             body.barrel_numbers, body.num_containers, body.destination_facility,
             body.destination_location, body.planned_departure, body.planned_arrival,
             body.sampled_by_id, body.escort_id, body.sample_id, body.sampling_equipment,
-            body.notes, user["id"])
+            body.notes, user["id"], sfr_number)
     return _sfr_out(dict(row))
 
 
@@ -505,6 +549,10 @@ async def update_sfr(sfr_id: str, body: SfrPatch, user: dict = Depends(require_r
         cur = await c.fetchrow("SELECT status FROM qc_sample_field_records WHERE id=$1", sfr_id)
         if cur is None:
             raise HTTPException(404, "Field record not found")
+        # QC-23: a COMPLETED (or CANCELLED) field record is the record of what
+        # happened — actual_arrival / received_by cannot be rewritten afterwards.
+        _assert_leaf_open(patch, cur["status"], "COMPLETED", "Field record")
+        _assert_leaf_open(patch, cur["status"], "CANCELLED", "Field record")
         _uuid_or_422(patch.get("received_by_id"), "received_by_id")
         if patch.get("sample_id"):
             if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", patch["sample_id"]) is None:
@@ -580,6 +628,16 @@ async def add_custody(sample_id: str, body: CustodyIn, user: dict = Depends(requ
             if await c.fetchrow("SELECT id FROM qc_sample_field_records WHERE id=$1", body.sfr_id) is None:
                 raise HTTPException(422, "Unknown field record")
         from_user = body.from_user_id or user["id"]
+        # Review 2026-09-27 QC-29: a custody event is recorded by one of its
+        # two parties. from_user_id was whatever the caller sent, so any
+        # writer could record "A handed it to B" with neither A nor B acting,
+        # simply by copying the previous entry's to_user_id. The recorder must
+        # be the giver or the receiver — the act they are attesting is their own.
+        if str(user["id"]) not in {str(from_user), str(body.to_user_id or "")}:
+            raise HTTPException(
+                403, "a custody transfer is recorded by the person handing the sample over"
+                     " (from_user_id) or the person receiving it (to_user_id) — not by a third"
+                     " party on their behalf")
         # Serialize custody writes per-sample: the continuity check below reads
         # the chain's last entry, then the INSERT commits a new one — two
         # concurrent transfers would each see the same pre-insert last entry

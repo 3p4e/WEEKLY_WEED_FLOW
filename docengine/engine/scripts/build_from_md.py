@@ -17,12 +17,10 @@ USING THE pp-document-suite ENGINE, with the skill's INTELLIGENT table layout.
 Markdown convention: PP_UNIFIED_DOCX_GUIDE.md. Usage: python3 scripts/build_from_md.py <src.md> <out.docx>
 """
 import sys, os, re
-# Locate the engine modules (pp_format/pp_report/...). Inside the packaged skill they are siblings
-# of this file; in the ACME_SOP repo layout they live under ../pp-document-suite/scripts. Try both.
+# The engine modules (pp_format/pp_report/...) are siblings of this file — the
+# one and only copy (the ../pp-document-suite fallback that used to be probed
+# here named a directory removed on 2026-09-27; review INV-07).
 _here = os.path.dirname(os.path.abspath(__file__))
-for _cand in (_here, os.path.join(_here, "..", "pp-document-suite", "scripts")):
-    if os.path.exists(os.path.join(_cand, "pp_format.py")):
-        sys.path.insert(0, _cand); break
 sys.path.insert(0, _here)
 import pp_format as pf
 import pp_report as pr

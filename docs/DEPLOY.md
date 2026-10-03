@@ -164,25 +164,90 @@ Runbook, for the record and for any future rebuild:
 
 ## Deploying
 
-Production was provisioned **out-of-band** (containers created directly, behind
-Traefik), so the SSH workflow is **manual-dispatch only** and does not run on
-push to `main`.
+(Rewritten 2026-09-27 — the earlier text here described an SSH/rsync
+workflow and build paths that never existed on this host; review INS2-15.)
 
-### Option A — from this Claude environment (kvm4-runner)
+There is **no SSH and no rsync**. Production is deployed through the
+**kvm4-runner `/shell` API** on the host — an HTTPS service that runs
+commands as root inside the `kvm4-runner` container with the docker socket —
+either by [`deploy.yml`](../.github/workflows/deploy.yml) (manual dispatch;
+owner-only in the GitHub UI, and dispatchable by an agent through
+`ops/agent/gh_api.py` — CLAUDE.md "Agent helpers") or by hand from an agent
+session with the same endpoint (CLAUDE.md "Deploying without Actions", the
+proven tarball route). Nothing runs on push to `main`.
 
-The Claude sandbox only allows **outbound HTTPS through its proxy** (port 22 is
-blocked), so a `kvm4-runner` HTTPS service on the host runs `docker`/`shell`
-commands. Build context lives at `/opt/weekly_weed_flow/backend`, `/root/wwf-gf/web`;
-the standard flow is: write the updated files, `docker build`, then recreate the
-container (`--no-healthcheck`, Traefik labels + networks preserved).
+`deploy.yml` takes a `sha` and a `scope` — `frontend`, `backend+scheduler`,
+`full` (backend + scheduler + frontend) or `docengine` (DocEngine ships on its
+own cadence; "Deploying DocEngine" below). Secrets: `KVM4_RUNNER_URL` and
+`KVM4_RUNNER_TOKEN` (the GitHub secrets; the agent environment holds the same
+values as `RUNNER_URL` / `RUNNER_TOKEN`). The workflow refuses a commit whose
+CI is not green, or whose workflow files and CI entry points differ from the
+default branch's; then, on the host: preflight (the stack's containers,
+`weekly_weed_flow_internal`, compose labels, python3), build the image(s)
+from a tarball of the commit under `/opt/wwf-deploy/build-<sha>`, verify the
+build carries the commit (alembic heads inside the image; DocEngine source
+checksums), snapshot BOTH databases, back up `compose.yaml`, migrate BOTH
+chains BEFORE swapping images, bump the tags and `docker compose up -d
+--no-deps` one service at a time, smoke `/health/ready` (and `/health` inside
+the DocEngine container), write the rollback note. The host stack lives in
+`/opt/stacks/wwf_app` (`compose.yaml`, `app.env`, `docengine.env`).
 
-### Option B — GitHub Actions ([`deploy.yml`](../.github/workflows/deploy.yml))
+By hand, mirror that sequence exactly — CLAUDE.md has the proven commands and
+the gotchas (`/shell` body key, payload cap, classifier). Never `down`, never
+a DB service, never prune volumes.
 
-Manual dispatch only. Add secrets `KVM4_HOST`, `KVM4_USER`, `KVM4_SSH_KEY` (a
-**private** deploy key), create `/opt/wwf/.env` from
-[`.env.example`](../.env.example) once, then run the workflow: it rsyncs the repo
-to `/opt/wwf` (preserving `.env`) and runs `docker compose up -d --build`. Note
-this **converges the live containers onto compose** — dispatch it deliberately.
+## Rollout steps from the 2026-09-27 review (owner)
+
+Each is one-time, on the host, beside the migrations and the DocEngine steps
+listed under "GrowFlow DocEngine" below. `docs/HANDOFF.md` carries the ordered
+list; these are the details.
+
+### Client address trust: Traefik → nginx → uvicorn (R2-BC-03)
+
+The frontend nginx now trusts `X-Forwarded-For` **only from the Traefik
+container's own address**, resolved at start by
+`web/docker-entrypoint.d/05-wwf-realip.sh` from the name in `TRAEFIK_HOST`
+(compose passes it as `WWF_TRAEFIK_HOST`; `.env.example`), and re-resolved
+every 60 s with an nginx reload when it changes. The first fix trusted the
+header by the interface a request arrived on, which every container on
+`traefik_network` also reaches. Before recreating the frontend:
+
+```sh
+docker ps --filter ancestor=traefik --format '{{.Names}}'     # the container's name
+docker network inspect traefik_network -f '{{range .Containers}}{{.Name}} {{.IPv4Address}}
+{{end}}'
+```
+
+Put `TRAEFIK_HOST=<that name>` in the host's frontend environment (or
+`TRAEFIK_CIDRS=<ip>/32` if Traefik has a fixed address there). Then check the
+container's first log lines: `wwf-realip: trusting X-Forwarded-For from:
+<ip>` is right; `wwf-realip: WARNING: could not resolve …` means nothing is
+trusted — the app still works, but every client shares Traefik's address in
+the login rate limiter (BC-01's symptom) until the name is fixed.
+
+### Capture connector network (DI2-14)
+
+`docker-compose.yml` moves `capture-mcp` off `internal`: it joins `capture`
+(`weekly_weed_flow_capture`, `internal: true`), which only the backend also
+joins, and keeps `traefik`. On the host: add the network and the two
+memberships to `compose.yaml`, then `docker compose up -d --no-deps backend`
+and `docker compose up -d --no-deps capture-mcp` (the connector's
+`WWF_IMPORT_URL` resolves the backend by name over the new network). Verify
+from inside the connector that the databases are unreachable:
+`docker exec wwf-capture-mcp python3 -c "import socket;
+socket.create_connection(('wwf-db-tasks',5432),3)"` must fail.
+
+### Password policy floor (R2-BC-08)
+
+The production env file carries the lower `PASSWORD_MIN_LENGTH` the owner set
+by hand on 2026-09-04 for the trial accounts (`DECISIONS-2026-09.md` §3). The
+backend from this review raises anything under 12 back to 12 the moment it
+starts, with a warning in its log — logins keep working, but every
+`change-password` under 12 characters is refused, including the trial
+accounts' first forced change. **Decide before deploying (A-12):** keep the
+trial policy by adding `PASSWORD_POLICY_OVERRIDE=true` to `app.env` beside
+the lower value, or accept the floor and tell the trial accounts. Either way
+the startup log names which applies.
 
 ## Capture connector (wwf-capture-mcp)
 
@@ -192,10 +257,14 @@ straight into `POST /capture/import`. Its security model — explicitly
 user-approved — is: reachable only at a secret random path
 (`CAPTURE_MCP_PATH`, e.g. `/mcp-<16 hex>`) behind Traefik TLS on the wwf
 host; it holds `CAPTURE_IMPORT_TOKEN`, a static credential the backend
-accepts ONLY on `/capture/import`, acting as `CAPTURE_IMPORT_USER`
-(qcm.blani); a small in-process rate limit caps abuse. Worst case if the
-URL leaks: junk task rows (auditable, deletable) — no reads, no other
-routes. Rotate by changing the token + path and recreating the container.
+accepts ONLY on `/capture/import`, acting as `CAPTURE_IMPORT_USER` (the
+account named in the production env — the code has no fallback name, and an
+empty value switches the token path off); a small in-process rate limit
+caps abuse. It sits on its own `capture` network with the backend only
+(never beside the databases — "Capture connector network" above). Worst
+case if the URL leaks: junk task rows (auditable, deletable) — no reads, no
+other routes. Rotate by changing the token + path and recreating the
+container.
 
 Enable it in a Claude client: claude.ai → Settings → Connectors → Add
 custom connector → URL `https://<APP_HOST><CAPTURE_MCP_PATH>/mcp` (no
@@ -309,36 +378,119 @@ is deleted server-side and never reaches the API. **Never published**; its
 only client is the platform backend's `/qms/studio/*` proxy routes (same
 X-API-Key server-side injection pattern as `qms-api`).
 
-Compose service (added to the stack's compose.yaml):
+Compose service — the repo's `docker-compose.yml` defines it (since
+2026-09-27) exactly as the host's `compose.yaml` runs it: its environment
+comes from `docengine.env` beside `compose.yaml` (`DOCENGINE_API_KEY`,
+`DOCENGINE_DATABASE_URL` for the `docengine` role, `LETTA_*`, `RAGFLOW_*`,
+`GOTENBERG_URL` — the keys are listed in `.env.example`), it joins `internal`
+AND the external `ai-net` (`ainet` in the compose file) to reach Letta,
+RAGflow and Gotenberg, and it mounts `docengine_out:/data/docengine-out`.
+(The snippet that used to sit here showed `networks: [internal]` and a
+`host.docker.internal` Letta — the pre-cutover shape; review DI2-12.)
 
 ```yaml
   docengine:
-    image: growflow-docengine:v1
-    environment:
-      DOCENGINE_API_KEY: ${DOCENGINE_API_KEY}
-      DOCENGINE_DATABASE_URL: postgresql://...@wwf-tasks-db:5432/wwf_tasks  # docengine schema
-      LETTA_BASE_URL: http://host.docker.internal:8283
-      LETTA_API_KEY: ${LETTA_API_KEY}
-      GOTENBERG_URL: http://gotenberg:3000
-      # A stateful-agent generation can take minutes; the read timeout covers
-      # ONE agent turn (the pipeline makes ~11 sequential calls per SOP as a
-      # polled background job). Connect stays short so a down server fails fast.
-      LETTA_READ_TIMEOUT: "900"     # optional; default 900s — 300 was too tight
-                                    # and failed two real jobs mid-turn
-      LETTA_CONNECT_TIMEOUT: "15"   # optional; default 15s
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    volumes:
-      - docengine_out:/data/docengine-out
-    networks: [internal]
+    image: growflow-docengine:v26          # the running tag; read it off the host
+    env_file: [docengine.env]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes: [docengine_out:/data/docengine-out]
+    networks: [internal, ainet]            # ainet = the external ai-net
 ```
 
+A stateful-agent generation can take minutes; `LETTA_READ_TIMEOUT` (default
+900 s) covers ONE agent turn — 300 was too tight and failed two real jobs
+mid-turn — and `LETTA_CONNECT_TIMEOUT` (15 s) keeps a down server failing
+fast.
+
 The workflow-state schema lives in the `wwf_tasks` DB under a dedicated
-`docengine` schema, auto-created at startup. This requires the service's DB
-role to hold `CREATE ON DATABASE wwf_tasks` (granted once per stack:
-`GRANT CREATE ON DATABASE wwf_tasks TO app_admin;`). Without it the service
-still boots and serves `/health`, `/questionnaires`, and direct `/build`, but
-`/workflows` answers 503 "DocEngine storage unavailable".
+`docengine` schema. The tables are created and (additively) altered by the
+service at startup. Without a working `DOCENGINE_DATABASE_URL` the service
+still boots and serves `/health` and `/questionnaires`, but `/workflows`,
+`/build` and `/documents` all answer 503 "DocEngine storage unavailable"
+(a build that is registered nowhere is not a controlled document).
+
+### DocEngine database role (rollout step for the owner, from 2026-09-27)
+
+Production still connects DocEngine as **`app_admin`** — BYPASSRLS and DML on
+every table of every organisation — for a service whose inputs are LLM
+output, retrieved corpus text and author-supplied markdown (review
+2026-09-27, DI-09). The code needs nothing beyond its own schema. The
+dedicated role is defined in `docengine/sql/docengine_role.sql`; it owns
+schema `docengine`, is `NOBYPASSRLS`, and has no privilege on `public` or
+`app` (proven on the test cluster: DDL on its own schema works, `SELECT`
+on any public table is refused). Rollout, one time, on the host:
+
+```sh
+# 1. create the role and hand the schema over (idempotent; re-run is safe)
+docker exec -i wwf-db-tasks psql -U postgres -d wwf_tasks -v ON_ERROR_STOP=1 \
+  -v pw='<openssl rand -hex 24>' -f - < docengine/sql/docengine_role.sql
+# 2. rotate the DSN in /opt/stacks/wwf_app/docengine.env
+#    DOCENGINE_DATABASE_URL=postgresql://docengine:<that password>@wwf-db-tasks:5432/wwf_tasks
+# 3. recreate the one service, then check /health reports db:true
+docker compose up -d --no-deps docengine
+# 4. (optional, after a clean week) REVOKE CREATE ON DATABASE wwf_tasks FROM app_admin;
+```
+
+Steps 1–3 are **one operation**. After step 1 the schema belongs to
+`docengine`, and the service's startup DDL needs the owner: a DocEngine
+restarted as `app_admin` between steps 1 and 3 fails at `db.init()` with
+"permission denied for schema docengine" (the running container is
+unaffected until it restarts). CI runs the whole DocEngine suite as this
+role, so the service is proven to work under it before it reaches the host.
+
+### Organisation scope backfill (rollout step for the owner, from 2026-09-27)
+
+Every DocEngine job and document is now scoped to an organisation
+(`org_id`, review DI-13): the backend sends the signed-in user's org id as
+`X-Org-Id` on every call and DocEngine filters every read by it. Rows
+registered before this change carry `org_id = NULL` and are **reachable
+through no organisation** until backfilled — fail closed, never "whoever
+asks first". With one real organisation, once, on the host:
+
+```sh
+docker exec -i wwf-db-tasks psql -U postgres -d wwf_tasks -v ON_ERROR_STOP=1 -c "
+  UPDATE docengine.documents SET org_id = '<the real organisation uuid>' WHERE org_id IS NULL;
+  UPDATE docengine.jobs      SET org_id = '<the real organisation uuid>' WHERE org_id IS NULL;"
+```
+
+The organisation id is `organizations.id` in `wwf_users` (the demo org, slug
+`demo`, must NOT be used: the demo's anonymous ADMIN token would then see the
+real registry). Ship the backend that sends `X-Org-Id` (`app/docengine.py`
+`de_forward(..., org_id=user["org_id"])` from every `/qms/studio/*` route and
+the COQ builder) in the same deploy as this DocEngine, or Studio answers
+400 "X-Org-Id required" until it lands.
+
+### Registry identity (rollout step for the owner, from 2026-09-27)
+
+Every controlled document is now one row per `(org_id, code, version)`
+(partial unique index `de_docs_identity`, `/build` artefacts excepted —
+review DI2-03). The service creates the index at startup **only if the
+registry holds no duplicates**; otherwise it boots anyway, logs an error, and
+`/health` reports `registry_identity_unique: false`. Check before the
+DocEngine deploy and resolve by hand (rename the version of the later row, or
+delete a row that was a mistake — the `.docx` in `docengine_out` stays):
+
+```sh
+docker exec -i wwf-db-tasks psql -U postgres -d wwf_tasks -c "
+  SELECT org_id, code, version, count(*) FROM docengine.documents
+  WHERE source <> 'build' GROUP BY 1,2,3 HAVING count(*) > 1;"
+```
+
+A revision now takes its version from the LATEST registered version of the
+code, so revising the same source twice lands at 1.1 then 1.2, never two
+1.1s.
+
+### Deploying DocEngine
+
+`deploy.yml` has a `docengine` scope since 2026-09-27: it builds the image
+from `docengine/` at the dispatched SHA, checksums the sources inside the
+image against the checkout, snapshots both databases (the service runs
+additive DDL at startup), bumps the one image line, recreates the one
+service and probes `/health` from inside the container for `ok:true` and
+`db:true`. `docker-compose.yml` now defines the service (with its healthcheck
+and the `docengine_out` volume) so CI validates what runs; the host's
+`compose.yaml` keeps its `docengine.env` and `ainet` network exactly as
+documented in `docs/LETTA-CUTOVER-PHASE1-2026-08-22.md`.
 
 Backend env (app.env): `DOCENGINE_URL=http://docengine:8000` and
 `DOCENGINE_API_KEY=<same secret as the service's DOCENGINE_API_KEY>`. An
@@ -351,16 +503,18 @@ mirrors them): reading questionnaires/documents = any elevated role; STARTING
 a workflow or a direct build (authoring a controlled document) = `ADMIN`,
 `OWNER`, `QP`, `QA_MGR` only.
 
-### Status & prod promotion (owner-gated)
+### Status & prod promotion — historical (written 2026-07-19)
 
-Deployed to **wwf_mass (test) only**, same governance as QMS Studio Phase 1:
-production promotion only after the owner's tests + explicit approval.
-Promotion mirrors the qms-api steps above (add the compose service + two env
-vars, `docker compose up -d docengine && docker compose up -d --no-deps
-backend frontend` with already-verified tags, then verify a full
-questionnaire→SOP round trip produces a PASS .docx with the house header,
-citations from the real DB1/DB3 sources, and that the authoring gate holds
-for a non-QA/QP manager account).
+This paragraph described the first DocEngine build, when it ran on the
+**wwf_mass** test stack only. wwf_mass was decommissioned on 2026-07-29 (see
+the top of this file) and DocEngine has run in production since the
+2026-07-19 promotion; the running image is whatever the host reports
+(`docker inspect -f '{{.Config.Image}}' wwf-docengine` — `v26` as of
+2026-09-07, `docs/DEPLOY-2026-09-07-docengine-v26.md`). Promotion today is
+the `docengine` scope of `deploy.yml` ("Deploying DocEngine" above), and the
+acceptance check is unchanged: a full questionnaire→SOP round trip produces
+a PASS .docx with the house header, citations from the real DB1/DB3 sources,
+and the authoring gate holds for a non-QA/QP manager account.
 
 ## Task-Management System v2 (TMS T1–T3, unification Phase 1 priority #1)
 

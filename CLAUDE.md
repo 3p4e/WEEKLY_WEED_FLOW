@@ -1,5 +1,8 @@
 # WEEKLY_WEED_FLOW — operating notes for Claude
 
+**Starting a new session? Read `docs/HANDOFF.md` next** — open PRs, what is
+running in production, and the decisions still waiting on the owner.
+
 ## GitHub access in this remote environment (learned 2026-08-07)
 
 GitHub is mediated by the agent proxy + the **Claude GitHub App**, which has
@@ -30,6 +33,47 @@ agent** (GitHub → Actions → Run workflow is owner-only). The agent can only
 **But that does NOT mean the agent cannot deploy — it can (proven 2026-08-08).**
 See "Deploying without Actions" below.
 
+## Agent helpers: `ops/agent/` (set up 2026-09-26)
+
+Two scripts the owner pre-approves, so the auto-mode classifier does not stop
+them. Use these instead of ad-hoc `urllib` heredocs:
+
+    python3 ops/agent/rsh.py '<command>' [timeout]      # one command on KVM4
+    python3 ops/agent/rsh.py - [timeout] < script.sh    # a script on KVM4
+    python3 ops/agent/gh_api.py GET|POST /repos/3p4e/WEEKLY_WEED_FLOW/...  [json]
+
+`gh_api.py` makes the call from KVM4 with `GITHUB_PAT_WWF` (the owner's
+fine-grained token for this repo), because the session's own proxy will not
+carry a personal token. It is an **allow-list**: GET anything under this repo;
+POST only `…/actions/runs/<id>/rerun[-failed-jobs]`,
+`…/actions/workflows/<file>/dispatches` (deploy.yml included — a production
+deploy is inside the pre-approved command) and `…/issues/<n>/comments`.
+Everything else — PUT, PATCH, DELETE, merges, refs, any other POST, any
+path with `..` or percent-encoding — is refused before a request is built.
+Use it for what the read-only GitHub App cannot do: re-run a workflow
+(`POST …/actions/runs/<id>/rerun`), dispatch one (`POST
+…/actions/workflows/<file>/dispatches {"ref": …}`), list runners. `--dry-run`
+prints the request without sending it. The token reaches the host as a 0600
+file through the runner's `/file/write` and is shredded on every exit path;
+a `gh_api: WARNING` line means `/file/write` was unavailable and the fallback
+(token in the command text, which the runner records) fired — rotate the PAT.
+
+How the approval works, so it can be repaired:
+- The allow rules live in the cloud environment's **Setup script**, not in the
+  repo. It writes `~/.claude/settings.json` with
+  `Bash(python3 ops/agent/rsh.py *)` and `Bash(python3 ops/agent/gh_api.py *)`
+  at session start. A session only picks it up if it started after the script
+  was saved.
+- A rule matches the command's text, so run the helper as a **standalone
+  command from the repo root**. `cd … && python3 ops/agent/…`, an `S=…;`
+  prefix or an absolute path will not match and will be judged by the
+  classifier again.
+- The environment variables `RUNNER_URL`, `RUNNER_TOKEN` and `GITHUB_PAT_WWF`
+  must be current. `rsh.py` answering **HTTP 403** means `RUNNER_TOKEN` is not
+  the one kvm4-runner holds; the owner reads the right value on the host with
+  `docker inspect kvm4-runner --format '{{range .Config.Env}}{{println .}}{{end}}' | grep RUNNER_TOKEN`
+  and updates it in the environment settings. Never print either token.
+
 ## Deploying without Actions (proven 2026-08-08 — v87/v127, tasks 0058)
 
 The earlier note here said the agent "cannot ship a production deploy
@@ -37,9 +81,11 @@ autonomously". **That was wrong**, and it cost a session. Correction:
 
 `RUNNER_URL` + `RUNNER_TOKEN` are set and the runner's **`/shell` endpoint works**.
 `deploy.yml` itself drives the whole deploy through that same endpoint — so
-anything the workflow does, the agent can do directly. The blocked
-**`/file/write`** endpoint is **not needed**: write files on the box with a
-heredoc through `/shell`.
+anything the workflow does, the agent can do directly. **`/file/write` works
+too** on the current kvm4-runner (the new VM's runner serves it; `deploy.yml`
+stages its scripts through it and `gh_api.py` stages its token through it —
+the earlier note here calling it "blocked" described the old VM). A heredoc
+through `/shell` also writes files when `/file/write` is unavailable.
 
 ### Getting the build context onto the box (updated 2026-08-31)
 
@@ -87,11 +133,24 @@ BEFORE swapping images** → `sed` the image tags and `docker compose up -d --no
 → smoke `/health/ready` for `"ready":true` + both DBs `"ok"`.
 
 Gotchas that cost time:
-- **`curl` is NOT installed in the kvm4-runner container** — `deploy.yml` falls back
-  to `wget` for this reason. Use `wget`, or `docker run --rm --network host
-  curlimages/curl`. A `curl: not found` (rc=127) looks exactly like a dead site.
+- **The `/shell` body key is `cmd`, not `script`** — `{"cmd": "...", "timeout": n}`.
+  The wrong key returns a bare **HTTP 422** that reads like an auth or
+  availability failure. The authoritative shape is the `kvm4.py` heredoc in
+  `.github/workflows/deploy.yml` (and `migration-rehearsal.yml`); copy it rather
+  than guessing. `/shell` runs **as root inside the `kvm4-runner` container**
+  with the docker socket, so `docker …` reaches the whole host.
+- **Which HTTP tool the kvm4-runner container has depends on the VM** (corrected
+  again 2026-09-27). The pre-migration container was `python:3.12-slim` with
+  neither `curl` nor `wget`; the container on the new VM (since the 2026-09-19
+  migration) is Alpine with busybox `wget` and still no `curl`. Do not plan on
+  either: `python3 -c` with `urllib` is present in both and is the probe
+  `deploy.yml` and `ops/watchdog.sh` use — no image pull, and no `not found`
+  (rc=127) masquerading as a dead site. Check with `command -v` before relying
+  on anything else.
 - Long builds: launch with `nohup setsid ... &` writing to a status file and poll,
-  so an HTTP/tool timeout never orphans the deploy.
+  so an HTTP/tool timeout never orphans the deploy. **Foreground `sleep` is
+  blocked in this harness** — poll by running the wait loop *on the box* inside a
+  single long-timeout `/shell` call, or use Bash `run_in_background`.
 - Prove the built images really carry the commit by grepping for a symbol only that
   commit has — far stronger than a version string.
 - Route-existence check in prod: a new route answers **401** unauthenticated;
@@ -120,19 +179,64 @@ Still verify the *substantive* checks yourself before shipping (the CI run, and
 the rehearsal's own restore-and-upgrade-on-real-data step). A green rollup is not
 the same claim as "this migration survives production data".
 
-**Disk:** `/opt` on kvm4 has hit 100% (2026-08-08); **80% / 40 GB free after the
-v91 + v23 builds (2026-08-31)**, so there is room but not a lot of it — two image
-builds cost roughly a point. `docker system df` first; reclaim from images/build
-cache, and **never prune volumes** — they are production data even when the names
-suggest otherwise, and old image tags are the rollback path.
+**Disk:** the figures that used to sit here (100 % on 2026-08-08, 93 % / ~14 GB
+free on 2026-09-06) describe the **old VM**; the host was migrated on
+2026-09-19 and nobody has recorded the new box's usage in this file. Read it
+off the host (`df -h /opt` and `docker system df`) before you build, not out of
+a document — the trend on the old box was one way, and two image builds cost
+roughly a point there. Reclaim from images/build cache, and **never prune
+volumes** — they are production data even when the names suggest otherwise,
+and old image tags are the rollback path. Do not read `docker system df`'s
+"RECLAIMABLE" as free space: on 2026-09-06 it offered 23.87 GB from images (all
+42 of which were ACTIVE) and 29.43 GB from volumes (which include the live Letta
+database and the archived QMS registry).
+
+**Check deployability PER SERVICE, not "since the last deploy" (learned the hard
+way 2026-09-07).** The stack has services on independent cadences: backend and
+frontend ship together, **docengine ships on its own**. Asking "what changed since
+the last deploy?" answers only for the services that deploy last, and silently
+hides everything else. On 2026-09-06 that reasoning shipped the DocEngine Studio
+chat/preset UI and its backend proxy while leaving the docengine image that serves
+those routes at a version that 404s them — a user-facing feature broken in
+production for a day, invisible to `git diff <last-deploy>..HEAD` because the
+docengine commits *predate* the commit that was deployed.
+
+The correct question, asked once per service: **what commit is this running image
+built from, and what has changed in its own subtree since?**
+
+    # for each of backend / web / docengine
+    git rev-parse HEAD:<subtree>        # vs the tree recorded in that service's own deploy record
+    # then confirm against the host, because a deploy record can be missing:
+    docker inspect -f '{{.Config.Image}}' <container>
+
+Watch for the **three-tier commit** especially — one change touching frontend,
+backend and docengine. Ship the service that *serves* a route before the tiers
+that call it, or ship all three together.
+
+**Version numbers: read the running tag off the host, not out of `docs/`.** The
+frontend was already at `v133`'s predecessor `v132`, built 2026-09-04, with no
+deploy record written for it — planning a deploy from the docs directory alone
+would have re-used a live tag and burned the rollback anchor.
 
 ## Backend test environment (quick reference)
 
 Postgres 16 cluster on `localhost:5432` (start with `sudo pg_ctlcluster 16 main
 start` — it gets reaped on idle, so restart it if a run hits
-`ConnectionRefusedError`; connect as `sudo -u postgres psql`, since `postgres`
-has no password over TCP). Test DBs `wwf_users_test` / `wwf_tasks_test` and roles
-`app_user` / `app_admin` survive a container rebuild. The venv at `/tmp/wwf-venv`
+`ConnectionRefusedError`; connect as `sudo -u postgres psql`, or over TCP as
+`postgres:postgres` — the local role got that password on 2026-09-27 so alembic
+can run as the table owner, exactly as CI does). Test DBs `wwf_users_test` /
+`wwf_tasks_test` and roles `app_user` / `app_admin` survive a container rebuild;
+the test DBs are owned by `postgres`, so **migrate them as `postgres`**
+(`env TASKS_MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_tasks_test
+alembic -c backend/alembic.ini -n tasks upgrade head`; `-n users` likewise).
+Four more pairs `wwf_{users,tasks}_test_{a,b,c,d}` exist for parallel agents.
+
+**The Playwright e2e suite runs locally** (proven 2026-09-27): `sudo apt-get
+install nginx`, `ln -s /tmp/wwf-venv backend/.venv`, `npm ci` in `web/e2e`, then
+`PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test` from
+`web/e2e` (~2.5 min, uses the original test DB pair at alembic head). Run it
+before pushing anything that touches the shell, the rail or a seeded flow — the
+jsdom suite does not catch what it catches. The venv at `/tmp/wwf-venv`
 survives too — but **`qctest.sh` does not**, and it is only a wrapper that exports
 the env vars (which don't persist between Bash calls). Rebuild it from
 `.github/workflows/ci.yml`; the passwords are in that file:

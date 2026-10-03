@@ -36,6 +36,11 @@ async def main():
     uconn = await asyncpg.connect(os.environ["USERS_ADMIN_DATABASE_URL"])
     conn = await asyncpg.connect(os.environ["TASKS_ADMIN_DATABASE_URL"])
     try:
+        # Stamp the org on both sessions so the audit trigger attributes every
+        # seeded row to this org rather than writing org_id NULL — which the
+        # audit_read policies open to every organisation (BC-22).
+        for c in (uconn, conn):
+            await c.execute("SELECT set_config('app.org_id', $1, false)", str(org_id))
         await uconn.execute("INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
                             org_id, f"E2E Org {suffix}", f"e2e-{suffix}")
         await uconn.execute(

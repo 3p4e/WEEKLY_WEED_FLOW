@@ -59,3 +59,63 @@ test('doneStep() still renders plain download links for an ordinary document id'
   assert.ok(html.includes("qstuDl('doc-42','docx')"));
   assert.ok(html.includes("qstuDl('doc-42','pdf')"));
 });
+
+
+/* ── "Needs your input": the gaps the agents refused to invent ──────────────
+   The engine's [NEEDS INPUT: …] contract is only half done when the marker is
+   in the .docx — a marker helps whoever is already reading that page. These
+   pin the other half: the list reaches the screen, it is escaped like every
+   other server value, and "nothing outstanding" is stated rather than left to
+   be inferred from an empty panel. */
+
+test('the open questions from the engine are listed with their sections', () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qstu.step = 'done';
+  w.GF.WWF._qstu.job = { id: 'j1', status: 'done', result: {
+    document_id: 'doc-42',
+    needs_input: [
+      { section: '4.0', item: 'cold room code' },
+      { section: '6.0', item: 'incubation temperature' },
+    ],
+  } };
+  const html = w.GF.views.qmsstudio();
+  assert.match(html, /Needs your input/);
+  assert.ok(html.includes('cold room code'), 'the first question must be shown');
+  assert.ok(html.includes('incubation temperature'), 'the second question must be shown');
+  assert.ok(html.includes('4.0') && html.includes('6.0'), 'each question names its section');
+});
+
+test('a needs-input item is escaped — it is server text, not markup', () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qstu.step = 'done';
+  w.GF.WWF._qstu.job = { id: 'j1', status: 'done', result: {
+    document_id: 'doc-42',
+    needs_input: [{ section: '<img src=x onerror=alert(1)>', item: '</div><script>alert(1)</script>' }],
+  } };
+  const html = w.GF.views.qmsstudio();
+  assert.ok(!html.includes('<script>alert(1)</script>'), 'raw markup must not reach the page');
+  assert.ok(!html.includes('<img src=x onerror=alert(1)>'), 'raw markup must not reach the page');
+  assert.ok(html.includes(w.GF.esc('</div><script>alert(1)</script>')));
+});
+
+test('an empty list says so, rather than leaving the reader to infer it', () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qstu.step = 'done';
+  w.GF.WWF._qstu.job = { id: 'j1', status: 'done', result: { document_id: 'doc-42', needs_input: [] } };
+  assert.match(w.GF.views.qmsstudio(), /Nothing outstanding/);
+});
+
+test('a job built before this feature claims nothing either way', () => {
+  // No needs_input key at all: the engine never looked, so neither
+  // "outstanding" nor "nothing outstanding" would be an honest thing to print.
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qstu.step = 'done';
+  w.GF.WWF._qstu.job = { id: 'j1', status: 'done', result: { document_id: 'doc-42' } };
+  const html = w.GF.views.qmsstudio();
+  assert.ok(!/Needs your input/.test(html));
+  assert.ok(!/Nothing outstanding/.test(html));
+});

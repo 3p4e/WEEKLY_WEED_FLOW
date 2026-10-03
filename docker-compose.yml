@@ -9,13 +9,17 @@
 #    frontend  nginx serving the GrowFlow UI (web/) and reverse-proxying
 #              /auth /departments /weeks /tasks /sessions /capture /ai /audit
 #              /reports to the backend; published over HTTPS by Traefik.
-#    db-backup rotating local pg_dump backups of BOTH databases — docs/BACKUP.md
+#    db-backup rotating local pg_dump backups of BOTH databases plus a tarball
+#              of the DocEngine output volume — docs/BACKUP.md
+#    docengine GrowFlow DocEngine (docengine/): the document AI service behind
+#              /qms/studio/* and COQ generation — internal only, registry in
+#              schema `docengine` of wwf_tasks, artefacts in docengine_out
 #    capture-mcp remote MCP connector for claude.ai/Cowork auto-delivery of
 #              task captures (secret path, single-purpose token)
 #
 #  The always-on Letta agent layer (AI functions) runs in its own pre-existing
-#  stack and is reached over host.docker.internal — it is intentionally NOT
-#  defined or managed here.
+#  stack (letta-6ou3) and is reached over the external `ai-net` network — it
+#  is intentionally NOT defined or managed here.
 #
 #  RESOURCE LIMITS — every service now carries mem_limit + cpus. They had
 #  none, so any one container could take the whole host down with it: the
@@ -80,8 +84,16 @@ services:
     env_file: .env
     # Trust X-Forwarded-For ONLY from the frontend nginx's fixed IP (below),
     # never '*' — a wildcard would let any container on this shared network
-    # (incl. the internet-exposed capture-mcp) spoof its source IP and defeat
-    # the login rate-limiter. uvicorn reads FORWARDED_ALLOW_IPS with --proxy-headers.
+    # spoof its source IP and defeat the login rate-limiter. uvicorn reads
+    # FORWARDED_ALLOW_IPS with --proxy-headers.
+    #
+    # The chain is client -> Traefik -> nginx -> uvicorn. nginx resolves the
+    # real client itself (realip, trusting only the Traefik container's
+    # resolved address — web/nginx.conf and web/docker-entrypoint.d/
+    # 05-wwf-realip.sh, review 2026-09-27 BC-01 / R2-BC-03) and forwards
+    # exactly ONE address; uvicorn takes it because it comes from this one
+    # trusted proxy. Traefik itself is deliberately NOT listed here — nginx
+    # is the only peer uvicorn ever sees.
     environment:
       - FORWARDED_ALLOW_IPS=172.16.31.20
     extra_hosts:
@@ -99,7 +111,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    networks: [internal]
+    # `capture` is the connector's only way in (see capture-mcp below).
+    networks: [internal, capture]
     restart: unless-stopped
 
   scheduler:
@@ -135,6 +148,14 @@ services:
     image: wwf-growflow:latest
     container_name: wwf-gf-frontend
     depends_on: [backend]
+    # The Traefik container's name (or alias) on traefik_network: nginx trusts
+    # X-Forwarded-For from the addresses this name resolves to and from
+    # nothing else (web/docker-entrypoint.d/05-wwf-realip.sh). Read it off the
+    # host with `docker ps --filter ancestor=traefik` — see docs/DEPLOY.md
+    # "Client address trust". TRAEFIK_CIDRS pins explicit addresses instead.
+    environment:
+      - WWF_TRAEFIK_HOST=${TRAEFIK_HOST:-traefik}
+      - WWF_TRAEFIK_CIDRS=${TRAEFIK_CIDRS:-}
     # Fixed IP so the backend can trust X-Forwarded-For from exactly this proxy
     # (FORWARDED_ALLOW_IPS above) rather than the whole subnet.
     networks:
@@ -170,8 +191,57 @@ services:
     volumes:
       - ./backend/scripts/db_backup.sh:/usr/local/bin/db_backup.sh:ro
       - weekly_weed_flow_backups:/backups
+      # Read-only view of the DocEngine's produced documents, archived beside
+      # the dumps of the registry that names them (docs/BACKUP.md).
+      - docengine_out:/docengine-out:ro
     entrypoint: ["/bin/sh", "/usr/local/bin/db_backup.sh"]
     networks: [internal]
+    restart: unless-stopped
+
+  # GrowFlow DocEngine — the document AI service (docengine/): questionnaire
+  # -> gf_* Letta fleet -> per-section regulatory check -> §6A audit ->
+  # pp_verify PASS gate -> registry row (schema `docengine` in wwf_tasks,
+  # created by the service at startup under its own role — docs/DEPLOY.md,
+  # "DocEngine database role"). INTERNAL ONLY: the backend's /qms/studio
+  # proxy and the certificate pipeline are its only callers, with X-API-Key
+  # injected server-side. It reaches Letta (letta-6ou3) and Gotenberg over
+  # the external `ai-net` network, exactly as the host's compose.yaml does.
+  # Its environment is docengine.env (DOCENGINE_*, LETTA_*, RAGFLOW_*,
+  # GOTENBERG_URL — see .env.example), kept apart from app.env so the Letta
+  # and RAGflow tenant keys never sit in the backend's environment. The file
+  # is `required: false` only so CI can validate this compose with just
+  # .env present; on the host it must exist, and the healthcheck says so:
+  # without it /health answers db:false and the service reads unhealthy.
+  docengine:
+    build: ./docengine
+    mem_limit: 1g
+    cpus: '1.0'
+    image: growflow-docengine:latest
+    container_name: wwf-docengine
+    depends_on: [db-tasks]
+    env_file:
+      - path: docengine.env
+        required: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose: ["8000"]
+    volumes:
+      - docengine_out:/data/docengine-out
+    # /health is liveness plus the readiness facts beside it. `db` is the
+    # registry pool: without it every workflow answers 503 and a /build
+    # registers nothing, so a process that is up but cannot reach its
+    # registry is NOT healthy. Letta/RAGflow reachability is reported there
+    # too (and by ops/watchdog.sh as a WARN) but does not flip the container
+    # unhealthy — an upstream outage is not a reason to restart this one.
+    # Python rather than curl: the slim image has no curl.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import json,sys,urllib.request; b=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=10)); sys.exit(0 if b.get('ok') and b.get('db') else 1)"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+    networks: [internal, ainet]
     restart: unless-stopped
 
   # Nightly OFFSITE copy of the local dumps — rclone `copy` (never `sync`, so
@@ -201,6 +271,15 @@ services:
   # Reachable only at a secret path behind Traefik TLS; holds a single
   # narrowly-scoped token (valid only on /capture/import). Deployment of
   # this public-but-secret-path service was explicitly user-approved.
+  #
+  # NETWORK PLACEMENT (review 2026-09-27, DI2-14): the one internet-facing
+  # service does NOT sit on `internal` beside the two databases and
+  # DocEngine. It joins `capture`, a network shared with the backend alone,
+  # so the only thing it can open a socket to inside the stack is the
+  # backend (and only /capture/import accepts its token). It keeps
+  # `traefik` because Traefik publishes it. Running unprivileged shrank the
+  # blast radius of a container escape; this shrinks the radius of an
+  # in-process compromise of the MCP server to the one route it exists for.
   capture-mcp:
     build: ./connector
     mem_limit: 512m
@@ -212,7 +291,7 @@ services:
       - WWF_IMPORT_URL=http://weekly_weed_flow-backend-1:8000/capture/import
       - CAPTURE_IMPORT_TOKEN=${CAPTURE_IMPORT_TOKEN:?set in .env}
       - MCP_PATH=${CAPTURE_MCP_PATH:?set in .env}
-    networks: [internal, traefik]
+    networks: [capture, traefik]
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_network"
@@ -230,11 +309,26 @@ networks:
     ipam:
       config:
         - subnet: 172.16.31.0/24
+  # Backend <-> capture connector only (DI2-14). `internal: true` — no route
+  # out of it; the connector reaches the internet through `traefik`, which
+  # Traefik owns, and the databases through nothing.
+  capture:
+    name: weekly_weed_flow_capture
+    internal: true
   traefik:
     name: traefik_network
+    external: true
+  # The Letta stack's network (letta-6ou3, RAGflow, Gotenberg). External:
+  # owned by that stack, joined here by docengine (and on the host by the
+  # backend and scheduler too — docs/LETTA-CUTOVER-PHASE1-2026-08-22.md).
+  ainet:
+    name: ai-net
     external: true
 
 volumes:
   wwf_users_pgdata:
   wwf_tasks_pgdata:
   weekly_weed_flow_backups:
+  # Every controlled document DocEngine produced; the registry rows point
+  # into it. Backed up by db-backup (docs/BACKUP.md). Never prune.
+  docengine_out:

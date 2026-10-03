@@ -1,5 +1,12 @@
 # Test-account matrix (`tt.*`)
 
+> **2026-09-04 (production):** the owner renamed the pre-created accounts to a
+> `<department>_<function>` scheme and set trial credentials by a direct
+> database write, outside this script, with the password rules relaxed "for
+> now". Neither the names nor the relaxation are represented here; both are
+> tracked in `DECISIONS-2026-09.md` §3 until the owner decides to make the
+> scheme standard (and this script is aligned) or to revert it.
+
 A full-role test cast provisioned **on the live deployment** for validating
 the per-department UI and the executive report with real accounts, then
 removed before production use. Provisioning is **API-only** (never direct

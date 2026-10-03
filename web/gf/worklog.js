@@ -90,7 +90,7 @@ GF.WWF._renderWorklog = ({ resetForm = false } = {}) => {
   const keep = resetForm ? null : GF.WWF._WL_FIELDS
     .map((id) => [id, (GF.$(id) || {}).value])
     .filter(([, v]) => v !== undefined);
-  const today = GF.todayISO();
+  const today = GF.facilityToday();
   const me = (GF.API.user || {}).id;
   const elevated = AUDIT_ROLES.includes((GF.API.user || {}).role);
 
@@ -110,7 +110,7 @@ GF.WWF._renderWorklog = ({ resetForm = false } = {}) => {
     list = `<div style="font-size:12px;color:var(--ink-3);padding:6px 0">${AL('No work logged yet.', 'Сè уште нема внесена работа.')}</div>`;
   } else {
     list = st.sessions.map(s => {
-      const when = (s.started_at || '').slice(0, 16).replace('T', ' ');
+      const when = GF.fmtDateTime(s.started_at);
       const who = (GF.PEOPLE[s.user_id] || {}).name || '';
       const del = (s.user_id === me || elevated)
         ? `<button class="mini-btn" style="color:var(--red)" title="${GF.t('delete')}" onclick="GF.WWF.deleteSession('${s.id}')">${GF.icon('trash')}</button>` : '';
@@ -127,7 +127,7 @@ GF.WWF._renderWorklog = ({ resetForm = false } = {}) => {
   body.innerHTML = `
     ${crumbs}
     <div class="row" style="gap:10px">
-      <div class="field" style="flex:1.2"><label>${AL('Date', 'Датум')}</label><input id="wl-date" type="date" value="${today}"></div>
+      <div class="field" style="flex:1.2"><label>${AL('Date', 'Датум')}</label>${GF.dateField('wl-date', { value: today, clearable: false })}</div>
       <div class="field" style="flex:1"><label>${AL('Start', 'Почеток')}</label><input id="wl-start" type="time" value="09:00"></div>
     </div>
     <div class="row" style="gap:10px">

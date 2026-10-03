@@ -13,7 +13,7 @@ and every outbound Letta call is monkeypatched, so no test here ever touches
 the network."""
 import app.api.ai as ai_module
 from app.db import tasks_admin_pool
-from tests.conftest import create_user, login_and_set_password
+from tests.conftest import create_user, login_and_set_password  # noqa: F401
 
 
 async def _user_headers(client, admin_headers, role="USER"):
@@ -477,6 +477,56 @@ async def test_dependency_advisor_scopes_to_task_family_not_whole_corpus(client,
     assert "Family Parent" in prompt
     assert "Family Sibling" in prompt
     assert "Unrelated Outsider Task" not in prompt
+
+
+async def test_dependency_advisor_family_is_scoped_to_the_callers_departments(client, admin_headers, org, monkeypatch):
+    """Review 2026-09-27, BC-17: _family_context checked scope on the ROOT task
+    only. A department-scoped manager who could see the root purely because
+    they were assigned to it was handed its parent and every sibling — work
+    in another department — in the prompt."""
+    import app.api.ai as ai_module
+    from app.db import tasks_admin_pool
+
+    captured = {}
+
+    async def fake_letta_message(agent_id, text):
+        captured["prompt"] = text
+        return "ok"
+
+    monkeypatch.setattr(ai_module, "_letta_message", fake_letta_message)
+    await tasks_admin_pool().execute(
+        "INSERT INTO ai_agent_bindings(org_id, function_key, scope, letta_agent_id, is_active)"
+        " VALUES ($1,'dependency_advisor','org','fake-agent-id',true)", org["org_id"])
+    d_mine, d_other = [str(r["id"]) for r in await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'fam_mine','Mine'),($1,'fam_other','Other')"
+        " RETURNING id", org["org_id"])]
+    mgr, otp = await create_user(client, admin_headers, role="QC_MGR", department_id=d_mine)
+    mh = {"Authorization": f"Bearer {await login_and_set_password(client, mgr['username'], otp)}"}
+
+    parent = (await client.post("/tasks", json={"title": "Other-dept Parent", "department_id": d_other},
+                                headers=admin_headers)).json()
+    await client.post("/tasks", json={"title": "Other-dept Sibling", "parent_id": parent["id"],
+                                      "department_id": d_other}, headers=admin_headers)
+    target = (await client.post("/tasks", json={"title": "Assigned Target", "parent_id": parent["id"],
+                                                "department_id": d_other}, headers=admin_headers)).json()
+    await client.post(f"/tasks/{target['id']}/assignees", json={"user_id": mgr["id"]}, headers=admin_headers)
+
+    r = await client.post("/ai/dependency_advisor",
+                          json={"input": "suggest dependencies", "context": {"task_id": target["id"]}},
+                          headers=mh)
+    assert r.status_code == 200, r.text
+    prompt = captured["prompt"]
+    assert "Assigned Target" in prompt
+    assert "Other-dept Parent" not in prompt and "Other-dept Sibling" not in prompt, \
+        "family members outside the manager's scope must not reach the prompt"
+
+
+async def test_functions_listing_does_not_expose_the_internal_letta_endpoint(client, admin_headers):
+    """Review 2026-09-27, BC-18: /ai/functions returned letta_base_url to every user."""
+    r = await client.get("/ai/functions", headers=admin_headers)
+    assert r.status_code == 200
+    assert "letta_base_url" not in r.json()
+    assert "catalog" in r.json() and "active" in r.json()
 
 
 # ── Role→capability matrix (FUNCTION_ROLES) ─────────────────────────────────
