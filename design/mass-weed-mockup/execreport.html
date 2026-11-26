@@ -157,7 +157,7 @@
 
   @media (max-width:900px){
     .xr-subs,.xr-kpis,.xr-metrics{ grid-template-columns:repeat(2,1fr); }
-    .wrap{ padding:16px 14px 60px; }
+    .wrap{ padding:16px 16px 60px; }
   }
 </style>
 </head>
@@ -169,14 +169,14 @@
   <div class="xr-head">
     <div>
       <div class="xr-head__ttl"><span class="en">Executive Report</span><span class="mk">Извршен извештај</span></div>
-      <div class="xr-head__sub">Purely Plant · <span class="en">Week 28 · Jul 7–13, 2026 · Report</span><span class="mk">Недела 28 · 7–13 јул 2026 · Извештај</span></div>
+      <div class="xr-head__sub">Purely Plant · <span class="en">Week 28 · Jul 6–12, 2026 · Report</span><span class="mk">Недела 28 · 6–12 јули 2026 · Извештај</span></div>
     </div>
     <div class="xr-head__sp"></div>
     <div class="xr-head__acts">
-      <div class="mw-seg" aria-label="Kind"><button class="is-active" type="button"><span class="en">Report</span><span class="mk">Извештај</span></button><button type="button"><span class="en">Plan</span><span class="mk">План</span></button></div>
+      <div class="mw-seg" role="group" aria-label="Kind"><button class="is-active" type="button" aria-pressed="true"><span class="en">Report</span><span class="mk">Извештај</span></button><button type="button" disabled title="Plan view is not part of this build"><span class="en">Plan</span><span class="mk">План</span></button></div>
       <label class="xr-aiswitch"><span class="en">AI</span><span class="mk">ВИ</span>
         <span class="mw-switch"><input type="checkbox" id="aiToggle" checked><span class="slot"></span><span class="knob"></span></span></label>
-      <button class="mw-btn mw-btn--ghost" type="button" style="padding:9px 18px;font-size:13px"><span class="en">PDF</span><span class="mk">ПДФ</span></button>
+      <button id="pdfBtn" class="mw-btn mw-btn--ghost" type="button" style="padding:9px 18px;font-size:13px" title="Print or save as PDF"><span class="en">PDF</span><span class="mk">ПДФ</span></button>
       <a class="mw-btn mw-btn--accent" href="report-standalone.html" style="--mw-acc:#5ec8f0;padding:9px 18px;font-size:13px;text-decoration:none"><span class="en">Interactive HTML</span><span class="mk">Интерактивен HTML</span></a>
       <div class="mw-seg" aria-label="Language"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
       <div class="mw-seg" aria-label="Theme"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
@@ -190,9 +190,9 @@
   <!-- 2 · KPI band -->
   <div class="xr-sectionlabel"><span class="en">Organisation — this week</span><span class="mk">Организација — оваа недела</span></div>
   <div class="xr-kpis">
-    <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">On-time</span><span class="mk">Навреме</span></div><div class="xr-kpi__v green">88%</div><div class="xr-kpi__d"><span class="en">of 142 tasks</span><span class="mk">од 142 задачи</span></div></div>
-    <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">Overdue</span><span class="mk">Задоцнети</span></div><div class="xr-kpi__v red">6</div><div class="xr-kpi__d"><span class="en">across 3 depts</span><span class="mk">во 3 оддели</span></div></div>
-    <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">Logged hours</span><span class="mk">Логирани часови</span></div><div class="xr-kpi__v">1 084</div><div class="xr-kpi__d"><span class="en">+7% vs W27</span><span class="mk">+7% vs Н27</span></div></div>
+    <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">On-time</span><span class="mk">Навреме</span></div><div class="xr-kpi__v green" id="kpiOnTime">—</div><div class="xr-kpi__d" id="kpiOnTimeD"></div></div>
+    <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">Blocked</span><span class="mk">Блокирано</span></div><div class="xr-kpi__v red" id="kpiBlocked">—</div><div class="xr-kpi__d" id="kpiBlockedD"></div></div>
+    <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">Logged hours</span><span class="mk">Логирани часови</span></div><div class="xr-kpi__v" id="kpiHours">—</div><div class="xr-kpi__d" id="kpiHoursD"></div></div>
     <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">Complexity</span><span class="mk">Комплексност</span></div><div class="xr-kpi__v amber">3.4</div><div class="xr-kpi__d"><span class="en">avg / task</span><span class="mk">просек / задача</span></div></div>
   </div>
 
@@ -225,17 +225,17 @@ const ST_LABEL = { missing:['Missing','Недостасува'], draft:['Draft',
 const CONTENT = {
   cultivation:{
     metrics:[['On-time','92%'],['Hours','214'],['Tasks','31'],['Rooms','5']],
-    narr_en:'All five flowering rooms held target VPD through the week. GR-B was harvested Thursday (18.4 kg wet) and handed to Production on schedule. One humidity excursion in GR-B triggered CAPA-14 (see QA).',
-    narr_mk:'Сите пет соби за цветање го одржаа целниот VPD оваа недела. GR-B е обрана во четврток (18,4 kg свежо) и предадена на Производство навреме. Едно отстапување на влажност во GR-B ја активираше КАПА-14 (види ОК).',
+    narr_en:'All five flowering rooms held target VPD through the week. GR-B was harvested Thursday (18.4 kg wet) and handed to Production on schedule. One humidity excursion in GR-B raised CAPA-14; QA has not yet submitted its status.',
+    narr_mk:'Сите пет соби за цветање го одржаа целниот VPD оваа недела. GR-B е обрана во четврток (18,4 kg свежо) и предадена на Производство навреме. Едно отстапување на влажност во GR-B ја активираше КАПА-14; ОК уште нема поднесено статус.',
     ai_en:'Cultivation is trending 4% above the quarter\u2019s on-time baseline; the GR-B excursion is the only open risk and is already contained.',
-    ai_mk:'Одгледувањето е 4% над квартал­ната основа за навременост; отстапувањето во GR-B е единствениот отворен ризик и е веќе задржано.',
+    ai_mk:'Одгледувањето е 4% над кварталната основа за навременост; отстапувањето во GR-B е единствениот отворен ризик и е веќе задржано.',
     tasks:[
       {t_en:'Harvest Flower B — Sour Diesel',t_mk:'Берба Соба Б — Sour Diesel',id:'CU-1039',st:'done',hrs:26,who:['ГП','АС'],notes:[
-        {a:'[TEST] Ana Stoeva',d:'Thu',tx_en:'Wet weight 18.4 kg logged. Moved to Dry/Cure DR-2.',tx_mk:'Свежа тежина 18,4 kg. Преместено во Сушара DR-2.'},
-        {a:'[TEST] Owner',role:'owner',d:'Thu',tx_en:'Good yield. Prioritise this pheno next cycle.',tx_mk:'Добар принос. Приоритизирај го овој фенотип следен циклус.'}
+        {a:'Ana Stoeva',d:'Thu',tx_en:'Wet weight 18.4 kg logged. Moved to Dry/Cure DR-2.',tx_mk:'Свежа тежина 18,4 kg. Преместено во Сушара DR-2.'},
+        {a:'Owner',role:'owner',d:'Thu',tx_en:'Good yield. Prioritise this pheno next cycle.',tx_mk:'Добар принос. Приоритизирај го овој фенотип следен циклус.'}
       ]},
       {t_en:'Defoliate canopy rows 3–5',t_mk:'Дефолијација редови 3–5',id:'CU-1042',st:'working',hrs:9,who:['ДТ'],notes:[
-        {a:'[TEST] Dejan Trpev',d:'Wed',tx_en:'Rows 3–4 complete, row 5 tomorrow.',tx_mk:'Редови 3–4 готови, ред 5 утре.'}
+        {a:'Dejan Trpev',d:'Wed',tx_en:'Rows 3–4 complete, row 5 tomorrow.',tx_mk:'Редови 3–4 готови, ред 5 утре.'}
       ]}
     ]
   },
@@ -247,26 +247,26 @@ const CONTENT = {
     ai_mk:'Протокот е според план освен блокот за мерење на SD; решавањето на калибрацијата ослободува околу 6 часа надолу по текот.',
     tasks:[
       {t_en:'Extraction run — live resin',t_mk:'Екстракција — live resin',id:'PR-877',st:'working',hrs:14,who:['МК'],notes:[
-        {a:'[TEST] Marija Koleva',d:'Tue',tx_en:'780 g recovered, purge started.',tx_mk:'780 g повратено, започна прочистување.'}
+        {a:'Marija Koleva',d:'Tue',tx_en:'780 g recovered, purge started.',tx_mk:'780 g повратено, започна прочистување.'}
       ]},
       {t_en:'Weigh & log output',t_mk:'Мерење и запис',id:'PR-879',st:'stuck',hrs:1,who:['МК'],notes:[
-        {a:'[TEST] Marija Koleva',d:'Wed',tx_en:'Blocked — scale out of calibration. Raised MU-43.',tx_mk:'Блокирано — вагата без калибрација. Подигнато MU-43.'},
-        {a:'[TEST] COO',role:'exec',d:'Wed',tx_en:'Escalated to Maintenance as high priority.',tx_mk:'Ескалирано до Одржување со висок приоритет.'}
+        {a:'Marija Koleva',d:'Wed',tx_en:'Blocked — scale out of calibration. Raised MU-43.',tx_mk:'Блокирано — вагата без калибрација. Подигнато MU-43.'},
+        {a:'COO',role:'exec',d:'Wed',tx_en:'Escalated to Maintenance as high priority.',tx_mk:'Ескалирано до Одржување со висок приоритет.'}
       ]}
     ]
   },
   qc:{
     metrics:[['On-time','79%'],['Hours','96'],['Tasks','14'],['Samples','9']],
-    narr_en:'Potency and micro panels running. One moisture test overdue (SD batch). Pesticide panel for WC-S1 signed off and handed to QA.',
-    narr_mk:'Тестови за потентност и микро во тек. Еден тест за влага задоцни (SD серија). Панел за пестициди за WC-S1 потпишан и предаден на ОК.',
+    narr_en:'Potency and micro panels running. One moisture test overdue (SD batch). Pesticide panel for WC-S1 completed and handed to QA.',
+    narr_mk:'Тестови за потентност и микро во тек. Еден тест за влага задоцни (SD серија). Панел за пестициди за WC-S1 завршен и предаден на ОК.',
     ai_en:'QC is the week\u2019s on-time laggard at 79%; the overdue SD moisture test is the single driver.',
     ai_mk:'ОК е најслаб по навременост оваа недела со 79%; задоцнетиот тест за влага на SD е единствената причина.',
     tasks:[
       {t_en:'Potency — WC-S1',t_mk:'Потентност — WC-S1',id:'QC-311',st:'working',hrs:5,who:['ИВ'],notes:[
-        {a:'[TEST] Ivona Vasi',d:'Thu',tx_en:'HPLC queued, result expected Fri.',tx_mk:'HPLC во ред, резултат во петок.'}
+        {a:'Ivona Vasi',d:'Thu',tx_en:'HPLC queued, result expected Fri.',tx_mk:'HPLC во ред, резултат во петок.'}
       ]},
       {t_en:'Moisture — SD batch',t_mk:'Влага — SD серија',id:'QC-314',st:'postponed',hrs:0,who:['ИВ'],notes:[
-        {a:'[TEST] Ivona Vasi',d:'Wed',tx_en:'Deferred — oven in use for GR-A lot.',tx_mk:'Одложено — печката зафатена за GR-A лот.'}
+        {a:'Ivona Vasi',d:'Wed',tx_en:'Deferred — oven in use for GR-A lot.',tx_mk:'Одложено — печката зафатена за GR-A лот.'}
       ]}
     ]
   },
@@ -278,7 +278,7 @@ const CONTENT = {
     ai_mk:'Магацинот води по навременост со 94%; нема означени ризици.',
     tasks:[
       {t_en:'Pick order — Skopje Dispensary',t_mk:'Подготви — Диспанзер Скопје',id:'WH-208',st:'working',hrs:7,who:['БН'],notes:[
-        {a:'[TEST] Blagoj Nikolov',d:'Thu',tx_en:'240 units staged, awaiting van.',tx_mk:'240 единици подготвени, се чека комбе.'}
+        {a:'Blagoj Nikolov',d:'Thu',tx_en:'240 units staged, awaiting van.',tx_mk:'240 единици подготвени, се чека комбе.'}
       ]}
     ]
   },
@@ -290,7 +290,7 @@ const CONTENT = {
     ai_mk:'Обезбедувањето е номинално; дефектот на сензорот во GR-2 е со ниска сериозност и веќе рутиран.',
     tasks:[
       {t_en:'Vault access audit',t_mk:'Ревизија на трезор',id:'SE-92',st:'working',hrs:4,who:['ЗС'],notes:[
-        {a:'[TEST] Zoran Simov',d:'Tue',tx_en:'Access logs reconciled, no anomalies.',tx_mk:'Дневниците усогласени, без аномалии.'}
+        {a:'Zoran Simov',d:'Tue',tx_en:'Access logs reconciled, no anomalies.',tx_mk:'Дневниците усогласени, без аномалии.'}
       ]}
     ]
   },
@@ -302,14 +302,15 @@ const CONTENT = {
     ai_mk:'Одржувањето ја носи единствената критична ставка: протекување CH-1. Делови стигнуваат во петок; резервно ладење е поставено.',
     tasks:[
       {t_en:'Chiller CH-1 — refrigerant leak',t_mk:'Ладилник CH-1 — протекување',id:'MU-46',st:'stuck',hrs:5,who:['ФА'],notes:[
-        {a:'[TEST] Filip Andov',d:'Wed',tx_en:'Leak isolated, valve kit on order (ETA Fri).',tx_mk:'Протекувањето изолирано, вентил нарачан (петок).'},
-        {a:'[TEST] Owner',role:'owner',d:'Wed',tx_en:'Keep GR-A on backup cooling until resolved. Report daily.',tx_mk:'Држи ја GR-A на резервно ладење додека не се реши. Извести дневно.'}
+        {a:'Filip Andov',d:'Wed',tx_en:'Leak isolated, valve kit on order (ETA Fri).',tx_mk:'Протекувањето изолирано, вентил нарачан (петок).'},
+        {a:'Owner',role:'owner',d:'Wed',tx_en:'Keep GR-A on backup cooling until resolved. Report daily.',tx_mk:'Држи ја GR-A на резервно ладење додека не се реши. Извести дневно.'}
       ]}
     ]
   }
 };
 
-function bil(en,mk){ return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>'; }
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function bil(en,mk){ return '<span class="en">'+esc(en)+'</span><span class="mk">'+esc(mk)+'</span>'; }
 function stLabel(st){ const l=ST_LABEL[st]; return '<span class="xr-stlab st-'+st+'"><span class="xr-sub__dot"></span>'+bil(l[0],l[1])+'</span>'; }
 
 /* submission board */
@@ -323,12 +324,13 @@ function renderSubs(){
     '</button>').join('');
 }
 
-/* deep-link buttons */
+/* deep-link buttons, placed in the task body (not inside <summary>) */
 function links(id){
-  return '<span class="xr-links">'+
-    '<a class="xr-link" href="board.html" title="Open in board" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24">'+IC.board+'</svg></a>'+
-    '<a class="xr-link" href="task-detail.html" title="Worklog" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24">'+IC.clock+'</svg></a>'+
-  '</span>';
+  const q = encodeURIComponent(id);
+  return '<div class="xr-links">'+
+    '<a class="xr-link" href="board.html?task='+q+'" aria-label="'+esc(id)+': open in board" title="Open in board"><svg viewBox="0 0 24 24" aria-hidden="true">'+IC.board+'</svg></a>'+
+    '<a class="xr-link" href="task-detail.html?task='+q+'" aria-label="'+esc(id)+': worklog" title="Worklog"><svg viewBox="0 0 24 24" aria-hidden="true">'+IC.clock+'</svg></a>'+
+  '</div>';
 }
 function note(n){
   const cls = n.role==='owner' ? ' xr-note--owner' : (n.role==='exec' ? ' xr-note--exec' : '');
@@ -337,13 +339,13 @@ function note(n){
 }
 function task(t, acc){
   const notes = (t.notes||[]).map(note).join('');
-  const av = (t.who||[]).map(w=>'<span class="mw-avatar mw-avatar--sm">'+w+'</span>').join('');
+  const av = (t.who||[]).map(w=>'<span class="mw-avatar mw-avatar--sm">'+esc(w)+'</span>').join('');
   return '<details class="xr-trow"><summary>'+
-      '<span class="mw-st mw-st--'+t.st+'">'+t.st+'</span>'+
-      '<span class="xr-trow__ttl">'+bil(t.t_en,t.t_mk)+' <span class="xr-trow__id">'+t.id+'</span></span>'+
-      '<span class="mw-avstack">'+av+'</span>'+ links(t.id)+
+      '<span class="mw-st mw-st--'+esc(t.st)+'">'+esc(t.st)+'</span>'+
+      '<span class="xr-trow__ttl">'+bil(t.t_en,t.t_mk)+' <span class="xr-trow__id">'+esc(t.id)+'</span></span>'+
+      '<span class="mw-avstack">'+av+'</span>'+
     '</summary>'+
-    '<div class="xr-trow__body"><div class="xr-trow__hrs">'+bil('Logged','Логирано')+': '+t.hrs+'h</div>'+notes+'</div>'+
+    '<div class="xr-trow__body">'+links(t.id)+'<div class="xr-trow__hrs">'+bil('Logged','Логирано')+': '+t.hrs+'h</div>'+notes+'</div>'+
   '</details>';
 }
 function section(d){
@@ -377,6 +379,29 @@ function section(d){
 
 renderSubs();
 document.getElementById('sections').innerHTML = DEPTS.map(section).join('');
+
+/* organisation KPIs: derived from the department data above, not typed in */
+function computeKpis(){
+  let tasks=0, hrs=0, onW=0, depts=0, blocked=0, postponed=0;
+  DEPTS.forEach(d=>{
+    if(d.st==='missing') return;
+    const co = CONTENT[d.c], m = Object.fromEntries(co.metrics);
+    const n = parseInt(m['Tasks'],10), h = parseInt(m['Hours'],10), on = parseInt(m['On-time'],10);
+    depts++; tasks+=n; hrs+=h; onW+=on*n;
+    co.tasks.forEach(t=>{ if(t.st==='stuck') blocked++; if(t.st==='postponed') postponed++; });
+  });
+  const total = DEPTS.length;
+  document.getElementById('kpiOnTime').textContent = Math.round(onW/tasks)+'%';
+  document.getElementById('kpiOnTimeD').innerHTML = bil('of '+tasks+' tasks, '+depts+' of '+total+' depts','од '+tasks+' задачи, '+depts+' од '+total+' оддели');
+  document.getElementById('kpiBlocked').textContent = blocked;
+  document.getElementById('kpiBlockedD').innerHTML = bil('+ '+postponed+' postponed','+ '+postponed+' одложено');
+  document.getElementById('kpiHours').textContent = hrs.toLocaleString('en-US');
+  document.getElementById('kpiHoursD').innerHTML = bil(depts+' of '+total+' depts submitted','поднесено од '+depts+' од '+total+' оддели');
+}
+computeKpis();
+
+/* PDF = browser print (save as PDF) */
+document.getElementById('pdfBtn').addEventListener('click', ()=> window.print());
 
 /* submission chip → open + focus section */
 document.getElementById('subs').addEventListener('click', e=>{
