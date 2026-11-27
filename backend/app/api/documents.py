@@ -22,6 +22,7 @@ import re
 import uuid
 from datetime import date, datetime, timedelta
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
 
@@ -664,25 +665,45 @@ async def _upsert_document(c, user: dict, kind: str, fri: date, thu: date,
     """One draft row per scope per week. The two partial unique indexes
     (migration 0010) need matching inference predicates — a plain ON CONFLICT
     (org_id, kind, week_start) no longer matches any constraint and would raise
-    at runtime. Returns None when the existing row is locked (WHERE status
-    ='draft' makes the UPDATE match nothing)."""
-    if dept_id is None:
+    at runtime. Returns None when the existing row is locked.
+
+    Locked is decided HERE, before the write, by reading the row (wd_select is
+    org-scoped and does not hide locked rows). The ON CONFLICT ... WHERE
+    status='draft' clause is kept only as the race guard for a lock that lands
+    between this read and the write. We cannot rely on that clause alone: on
+    some Postgres 16 minors the RLS UPDATE policy is evaluated against the
+    conflicting row before the WHERE clause, so a locked row raises
+    InsufficientPrivilegeError (500) instead of matching nothing (409)."""
+    existing = await c.fetchrow(
+        "SELECT status FROM weekly_documents"
+        " WHERE org_id=$1 AND kind=$2 AND week_start=$3"
+        "   AND department_id IS NOT DISTINCT FROM $4",
+        user["org_id"], kind, fri, dept_id)
+    if existing is not None and existing["status"] != "draft":
+        return None
+    try:
+        if dept_id is None:
+            return await c.fetchrow(
+                "INSERT INTO weekly_documents(org_id, kind, week_start, week_end, content, created_by, department_id)"
+                " VALUES ($1,$2,$3,$4,$5,$6, NULL)"
+                " ON CONFLICT (org_id, kind, week_start) WHERE department_id IS NULL DO UPDATE"
+                "   SET content=EXCLUDED.content, updated_at=now()"
+                "   WHERE weekly_documents.status='draft'"
+                " RETURNING *",
+                user["org_id"], kind, fri, thu, content, user["id"])
         return await c.fetchrow(
             "INSERT INTO weekly_documents(org_id, kind, week_start, week_end, content, created_by, department_id)"
-            " VALUES ($1,$2,$3,$4,$5,$6, NULL)"
-            " ON CONFLICT (org_id, kind, week_start) WHERE department_id IS NULL DO UPDATE"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7)"
+            " ON CONFLICT (org_id, kind, week_start, department_id) WHERE department_id IS NOT NULL DO UPDATE"
             "   SET content=EXCLUDED.content, updated_at=now()"
             "   WHERE weekly_documents.status='draft'"
             " RETURNING *",
-            user["org_id"], kind, fri, thu, content, user["id"])
-    return await c.fetchrow(
-        "INSERT INTO weekly_documents(org_id, kind, week_start, week_end, content, created_by, department_id)"
-        " VALUES ($1,$2,$3,$4,$5,$6,$7)"
-        " ON CONFLICT (org_id, kind, week_start, department_id) WHERE department_id IS NOT NULL DO UPDATE"
-        "   SET content=EXCLUDED.content, updated_at=now()"
-        "   WHERE weekly_documents.status='draft'"
-        " RETURNING *",
-        user["org_id"], kind, fri, thu, content, user["id"], dept_id)
+            user["org_id"], kind, fri, thu, content, user["id"], dept_id)
+    except asyncpg.InsufficientPrivilegeError:
+        # The row was locked between the read above and this write: the RLS
+        # UPDATE policy refused to touch a non-draft row. Same answer as the
+        # pre-check: the week's document is the submitted record.
+        return None
 
 
 class PreviewReq(BaseModel):

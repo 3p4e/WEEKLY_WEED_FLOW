@@ -6,5 +6,5 @@
 # an advisory turns the build red instead of drifting silently.
 # httpx matches backend/ and docengine/ deliberately: one version across the
 # three services.
-mcp==1.28.1
+mcp==1.30.0
 httpx==0.28.1
