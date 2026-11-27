@@ -7,7 +7,7 @@ asyncpg==0.30.0
 bcrypt==4.2.1
 # PyJWT replaced python-jose (archived/unmaintained since 2021); HS256 only,
 # so no [crypto] extra needed.
-PyJWT==2.13.0
+PyJWT==2.15.0
 httpx==0.28.1
 pydantic==2.10.4
 pydantic-settings==2.7.1

@@ -28,7 +28,7 @@ test('analytics view renders trends without hour metrics', async ({ page }) => {
 
   await test.step('open Analytics from the rail', async () => {
     await gotoModule(page, 'analytics');   // Analytics lives in the analytics module
-    await page.locator('[data-nav="analytics"]').click();
+    await page.locator('.nav-item', { hasText: 'Analytics' }).click();
     await expect(page.locator('.ana-tiles .ana-tile')).toHaveCount(4, { timeout: 15_000 });
   });
 

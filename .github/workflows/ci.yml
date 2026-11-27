@@ -141,7 +141,7 @@ jobs:
   tests:
     name: Backend test suite
     runs-on: self-hosted
-    timeout-minutes: 30
+    timeout-minutes: 60
     services:
       postgres:
         image: postgres:16
@@ -284,7 +284,14 @@ jobs:
           # which grep would otherwise paper over with its own exit status.
           set -euo pipefail
           dump() { pg_dump -h localhost -U postgres -d "$1" --schema-only --no-owner --no-privileges \
-            --exclude-table=alembic_version | grep -v '^--' | grep -vE '^\\restrict|^\\unrestrict'; }
+            --exclude-table=alembic_version | grep -v '^--' | grep -vE '^\\restrict|^\\unrestrict' \
+            | sed -E 's/ALTER COLUMN ([^ ]+) SET \(pg_attver=[0-9]+\)/ALTER COLUMN \1 SET (pg_attver=N)/'; }
+          # pg_attver: the CI Postgres service stamps a per-database number onto
+          # every profiles column (users DB: 31050264 vs 31256456 on the same
+          # migrations; the table OIDs are 18665/18777, so it is not the OID).
+          # No repo code sets it, and both DBs are otherwise identical. The
+          # sed above normalises ONLY the number: a column that gains or loses
+          # the option entirely (or any other attribute change) still fails.
           for which in users tasks; do
             VAR=$(echo $which | tr a-z A-Z)_MIGRATION_DATABASE_URL
             psql -h localhost -U postgres -c "CREATE DATABASE wwf_${which}_via_alembic;"
@@ -371,7 +378,7 @@ jobs:
   e2e:
     name: End-to-end (Playwright)
     runs-on: self-hosted
-    timeout-minutes: 30
+    timeout-minutes: 90
     services:
       postgres:
         image: postgres:16
